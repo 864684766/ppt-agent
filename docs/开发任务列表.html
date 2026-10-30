@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜开发任务列表</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:#1b2932;font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:#fff;padding:38px max(24px,calc((100% - 1050px)/2))}header p{color:#cfe3df}h1{font-size:30px;margin:5px 0}main{max-width:1050px;margin:auto;padding:12px 24px 70px}h2{border-bottom:2px solid #d8e1e2;padding-bottom:8px;margin-top:38px;font-size:22px}h3{font-size:18px;margin-bottom:4px}.note{background:#edf6f4;border-left:4px solid #12675f;padding:12px 18px;margin:22px 0}table{border-collapse:collapse;width:100%;background:white}td,th{border:1px solid #d8e1e2;padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}a{color:#12675f}code{background:#e9efee;padding:2px 4px}.scroll{overflow-x:auto}li{margin:6px 0}@media(max-width:650px){main{padding-inline:16px}header{padding:26px 16px}table{min-width:700px}}@media print{body{background:white}header{background:white;color:black;padding:0}header p{color:#555}main{padding:0}}
+</style></head><body><header><p>DEVELOPMENT CHECKLIST · DRAFT 0.1 · 2026-10-30</p><h1>后端开发任务列表</h1><p>按小步骤开发、讲解、验证与讨论</p></header><main>
+<div class="note"><strong>协作方式：</strong>每次只推进一个小任务，先讲目标、涉及技术和完成标准；实现后展示关键代码、运行结果和测试方式，等待讨论后再进入下一项。用户另行要求连续推进时按用户要求执行。所有状态初始为“未开始”。设计、中文注释、版本及测试要求见 <a href="../AGENTS.md">项目开发规则</a>。</div>
+<p>目标环境：Windows 本机、Python 后端。第一阶段必须包含主题对话、大纲编辑、模板上传与缺失反馈、LangGraph 编排、LangChain 模板识别、Harness 模板使用以及 PPTX 生成；数据库与跨重启恢复放到后续。</p>
+<h2>第一阶段：完整后端闭环</h2><div class="scroll"><table><tr><th>任务</th><th>工作内容</th><th>完成标准</th><th>状态</th></tr>
+<tr><td>01 环境与依赖</td><td>检查 Python、虚拟环境、Windows 依赖，确认并锁定兼容版本，建立不含密钥的配置示例。</td><td>查询最新版本并验证兼容性；依赖安装成功后输出实际版本、锁文件与启动方法；不改写现有密钥。</td><td>已完成</td></tr>
+<tr><td>02 FastAPI 基础</td><td>建立应用入口、健康检查和基础错误处理。</td><td>本机可启动；健康检查与 API 文档可访问。</td><td>未开始</td></tr>
+<tr><td>03 模型配置</td><td>对接用户已有百舸模型配置，提供按任务选择模型的配置入口。</td><td>能通过项目配置发起一次测试调用；不重复评判用户已确认的代理基础能力；密钥不进入日志。</td><td>未开始</td></tr>
+<tr><td>04 大纲数据模型</td><td>定义项目、对话、大纲条目、版本及内存状态。</td><td>可表达页类型、标题、要点、顺序和版本；验证不合法输入。</td><td>未开始</td></tr>
+<tr><td>05 大纲对话与编辑</td><td>主题生成大纲；多轮对话修改；接口直接修改、增删、排序、合并与拆分。</td><td>对话和手动操作更新同一份大纲，冲突不静默覆盖；可确认大纲。</td><td>未开始</td></tr>
+<tr><td>06 文件和简洁模板</td><td>上传 PPTX，保存在本地项目目录；制作一个简单内置模板。</td><td>完整和残缺模板均可上传；文件大小与类型检查生效。</td><td>未开始</td></tr>
+<tr><td>07 Python 模板分析</td><td>解析母版、版式、占位符和样例页；验证一种 Windows 预览渲染方式。</td><td>返回结构与预览或明确错误；记录字体和模板兼容问题。</td><td>未开始</td></tr>
+<tr><td>08 MCP 工具服务</td><td>将模板分析等 Python 模块封装为 MCP 工具，LangChain 与 Harness 分别接入。</td><td>两端可发现并调用指定工具；验证 Windows 进程、取消、错误和文件范围。</td><td>未开始</td></tr>
+<tr><td>09 LangChain 模板识别</td><td>结合结构、文本和可用视觉能力，生成角色建议、槽位、依据及缺失项。</td><td>能分析完整和残缺模板；不确定项不会伪装为确定结论。</td><td>未开始</td></tr>
+<tr><td>10 LangGraph 人工反馈</td><td>识别结果返回图状态；用户回答、映射确认或选择补充／AI 补全。</td><td>运行进程内可暂停与继续；确认后的映射可供后续节点读取。</td><td>未开始</td></tr>
+<tr><td>11 Harness 接入</td><td>用 Python SDK 接入百舸模型配置、任务输入和 MCP 工具；验证提问、取消和错误。</td><td>可接收 LangGraph 交付的确认结果并完成受控子任务；如遇兼容问题先记录并解决。</td><td>未开始</td></tr>
+<tr><td>12 PPTX 生成</td><td>Harness 使用确认的大纲和模板映射调用 Python 工具；残缺模板按用户选择补全。</td><td>生成 8–12 页可打开 PPTX，含封面、目录、内容和来源页；主要文本可编辑。</td><td>未开始</td></tr>
+<tr><td>13 闭环验证</td><td>通过 API 执行主题对话、大纲编辑、残缺模板反馈、生成和下载。</td><td>完整与残缺模板至少各验证一次；报告局限和操作步骤。</td><td>未开始</td></tr></table></div>
+<h2>后续增强</h2><ol><li>资料与来源：本地文件、联网搜索及可追溯引用；第一阶段来源不足时明确反馈，不虚构来源。</li><li>技能：导入包含 <code>SKILL.md</code>、脚本与资源的技能包，热加载及锁定版本；评估 PPT Master 的依赖与可复用部分。</li><li>生成后对话修改、版本恢复、页面预览与更完整的视觉检查。</li><li>持久化：数据库、检查点、跨重启恢复、任务队列与多用户部署。</li></ol><div class="note">依赖关系可能要求在某一步提前引入少量基础代码；每次只实现当前任务所需范围。任务 05–12 共同构成第一阶段目标，不能把“大纲对话”或“缺失模板反馈”推迟到后续阶段。</div><p><a href="产品文档.html">产品文档</a> · <a href="技术文档.html">技术文档</a></p></main></body></html>
