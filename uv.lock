@@ -1371,6 +1371,7 @@ dependencies = [
     { name = "langsmith" },
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "python-pptx" },
     { name = "uvicorn" },
 ]
@@ -1392,6 +1393,7 @@ requires-dist = [
     { name = "langsmith", specifier = "==0.14.16" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "pydantic", specifier = "==2.14.2" },
+    { name = "pydantic-settings", specifier = "==2.16.2" },
     { name = "python-pptx", specifier = "==1.0.2" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
