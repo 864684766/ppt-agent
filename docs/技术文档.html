@@ -11,6 +11,8 @@
 ├── api/                   # HTTP 路由、请求响应及接口依赖
 │   ├── __init__.py
 │   ├── health.py           # GET /health 路由及响应模型
+│   ├── chat.py             # POST /ppt-agent/v1/chat 单轮 SSE 流式对话与请求模型
+│   ├── dependencies.py     # FastAPI 依赖注入与网络连接释放
 │   └── router.py           # 显式路由清单及总路由组装
 ├── domain/                # 大纲、模板映射等领域数据模型和业务约束
 │   └── __init__.py
@@ -18,12 +20,13 @@
 │   ├── __init__.py
 │   └── settings.py         # Settings 及按任务选择模型
 ├── integrations/          # 模型、MCP、Harness 等外部系统的连接与协议适配
-│   └── __init__.py
+│   ├── __init__.py
+│   └── llm.py              # ChatClient 协议、LangChain 适配器与客户端工厂
 ├── tools/                 # 模板解析、PPTX 生成、渲染等可独立调用的业务能力
 │   └── __init__.py
 ├── workflows/             # LangGraph 节点、图状态、条件分支和人工介入
 │   └── __init__.py
-├── tests/                 # 随功能逐步添加单元测试与集成测试
+├── tests/                 # 保留测试包骨架；当前对话通过 Postman 手工验证
 │   └── __init__.py
 ├── docs/
 │   ├── 产品文档.html
@@ -40,15 +43,29 @@
 
 本地辅助目录：.venv/ 为虚拟环境，.idea/ 为 IDE 配置，.git/ 为版本管理元数据。</code></pre>
 <div class="scroll"><table><tr><th>职责边界</th><th>约定</th></tr><tr><td>应用入口</td><td><code>main.py</code> 负责创建应用及注册路由，业务逻辑放入对应功能包。已提供 create_app() 和 app，可使用 Uvicorn 启动。</td></tr><tr><td>领域与业务工具</td><td><code>domain/</code> 表达业务数据和规则；<code>tools/</code> 实现可独立测试的业务操作，避免依赖 HTTP 请求和 Agent 会话。</td></tr><tr><td>编排与智能体</td><td><code>workflows/</code> 决定流程和确认边界；<code>agents/</code> 封装各子智能体的任务输入与结果，不直接覆盖已确认业务状态。</td></tr><tr><td>外部集成</td><td><code>integrations/</code> 管理模型、MCP 和 Harness 的连接及适配。MCP 工具接口复用 <code>tools/</code> 的业务实现，不重复实现 PPT 功能。</td></tr><tr><td>Python 包与导入</td><td>各功能目录保留 <code>__init__.py</code>，例如可从根目录导入 <code>api</code> 或 <code>domain</code>。后续命令从项目根目录运行；根目录本身不需要 <code>__init__.py</code>。</td></tr></table></div>
-<p>当前已实现应用入口与健康检查，其余功能包仍为骨架。未来需要新增文件或子包时，随对应任务补充，不提前建立大量空模块。开发时同步维护本节；目录树不展示缓存和生成文件。</p>
+<p>当前已实现应用入口、健康检查和 LangChain 普通对话调试接口；工作流、领域模型及子智能体仍为骨架。未来需要新增文件或子包时，随对应任务补充，不提前建立大量空模块。开发时同步维护本节；目录树不展示缓存和生成文件。</p>
 <h3>启动与接口调试</h3>
 <p>LangSmith 当前按 Agent 组织的工作区使用 Agent ID 与环境寻址，本机使用 <code>LANGSMITH_AGENT_ID</code> 和 <code>LANGSMITH_AGENT_ENVIRONMENT=local</code>，不与旧 <code>LANGSMITH_PROJECT</code> 混用。创建与配置步骤见 <a href="LangSmith配置说明.md">LangSmith 配置说明</a>；追踪运行时尚未接入。</p>
 <p>启动入口通过 <code>config/settings.py</code> 读取 <code>APP_HOST</code> 和 <code>APP_PORT</code>，默认 127.0.0.1:8000；端口范围为 1–65535。系统环境变量优先于根目录 .env，未配置时使用代码默认值；直接用 Uvicorn 命令启动须自行提供其监听参数，项目变量仅由 Python 启动入口读取。</p>
-<p>新增直接依赖 <code>pydantic-settings==2.16.2</code>，锁文件已更新。按任务配置 <code>LLM_OUTLINE_MODEL</code>、<code>LLM_TEMPLATE_ANALYSIS_MODEL</code>、<code>LLM_PPT_GENERATION_MODEL</code>，留空回退 <code>LLM_MODEL</code>；当前共用 <code>LLM_BASE_URL</code> 与 <code>LLM_API_KEY</code>。这里只实现选择规则，模型客户端与 Harness provider 尚未接入；不把模型名称视为视觉能力证明。</p>
+<p>新增直接依赖 <code>pydantic-settings==2.16.2</code>，锁文件已更新。按任务配置 <code>LLM_OUTLINE_MODEL</code>、<code>LLM_TEMPLATE_ANALYSIS_MODEL</code>、<code>LLM_PPT_GENERATION_MODEL</code>，留空回退 <code>LLM_MODEL</code>；当前共用 <code>LLM_BASE_URL</code> 与 <code>LLM_API_KEY</code>。已接入 LangChain ChatOpenAI，普通对话接口仅使用 LLM_MODEL；任务专用模型调用与 Harness provider 尚未接入。不把模型名称视为视觉能力证明。</p>
 <p>直接运行 <code>uv run --locked python main.py</code> 会启动本机 127.0.0.1:8000，可在 PyCharm 中对 main.py 使用 Debug。发布时由进程管理器或容器执行 Uvicorn 命令并管理重启，可配置 <code>--host 0.0.0.0 --port 8000 --workers 1</code>；不使用自动重载。第一阶段内存状态不跨进程共享，保持单 worker。</p>
 <p>路由采用集中组装：各业务模块定义自己的 APIRouter，在 <code>api/router.py</code> 的 <code>ROUTERS</code> 清单中登记，由循环汇总到 <code>api_router</code>；<code>main.py</code> 仅挂载一次总路由。新增模块无需修改应用工厂，同一模块内可定义多个接口。</p>
 <p>在项目根目录运行 <code>uv run --locked uvicorn main:app --host 127.0.0.1 --port 8000</code>。PyCharm 可使用模块 <code>uvicorn</code>、上述参数及项目虚拟环境启动 Debug；断点调试先不启用自动重载。操作步骤见 <a href="接口调试说明.md">接口调试说明</a>。</p>
 <p>2026-10-30 实际启动验证：GET /health 返回 200 和 status=ok，GET /openapi.json 与 /docs 返回 200；未知路径返回默认 404，POST /health 返回默认 405。当前优先用 Postman 和断点验证接口；健康检查只表示服务存活，不代表外部模型或 PPT 生成能力可用。</p>
+<h3>任务 03：模型流式对话（2026-11-02）</h3>
+<p>POST /ppt-agent/v1/chat 接收 {"message":"你好"}，返回 text/event-stream（UTF-8）。保留用户修改的 /ppt-agent/v1 前缀。请求不变，响应从单个 JSON 改为 SSE；不兼容旧 reply 字段。</p>
+<pre><code>Postman → FastAPI 校验及依赖注入 → LangChainChatClient.stream_reply
+        → ChatOpenAI.astream → 模型代理流 → delta 事件 → done 或 error</code></pre>
+<p>每个 delta 的 JSON 数据包含 text，客户端顺序拼接。块大小由模型与网络决定，不保证一块一个 token；不是逐字节切割。不对块 strip，保留 Markdown 空白。正常结束发 done（finish_reason=completed，仅表示流结束，不保证内容未被额度截断）；已知调用错误发 error（code、message）且不发 done。HTTP 响应开始后仍为 200，客户端不能只依赖状态码。未知错误或取消可能直接断流，没有终止事件应视为不完整。</p>
+<p>参数校验失败返回 422；配置缺失或无效返回 503。LangChain astream 以异步生成器逐段产生正文，SSE 由 HTTP 层编码。两个生成器通过 aclosing 确保异常或取消时关闭上游，默认请求作用域 yield 依赖在流结束后释放 httpx 连接。尚无心跳、续传、持久化取消或对话历史。</p>
+<p>配置 LLM_TIMEOUT_SECONDS 默认 60 秒（&gt;0 且 ≤600），用于上游请求读等待，不是整个流总时限；LLM_MAX_TOKENS 默认 1024（1–32768，仍受模型约束）。无自动重试。httpx 0.28.1 为运行依赖，其他版本和锁文件未升级。LangSmith .env 接线、Harness 和任务专用模型业务调用未实现。</p>
+<p>2026-11-02 实际启动 Uvicorn 并调用本机模型：收到 28 个 delta 和 done，首段约 6.43 秒、结束约 7.69 秒。临时脚本验证空白保留、错误分支与提前关闭清理。未实际操作 Postman，未专项验证网络断开和代理缓冲场景，验证进程已停止。</p><p>按用户要求不保留本步骤自动测试文件，采用 Postman / 断点及临时验证。请求、事件样例与限制见 <a href="接口调试说明.md">接口调试说明</a>。本步骤不新增业务 Store。</p>
+<p>2026-11-02 类型与依赖修正：ChatClient.stream_reply 与 SSE 生成器明确返回 AsyncGenerator，体现 aclose 清理契约。已核实当前 ChatOpenAI.astream 是异步生成器，其公开注解较宽，因此仅在该外部边界 cast 为 AsyncGenerator[AIMessageChunk, None]。密钥直接传 SecretStr，与当前 ChatOpenAI 类型一致。openai==3.41.0 从已安装的间接依赖提升为直接依赖（代码直接导入异常类），未升级软件包；uv.lock 同步、uv sync --locked 与 uv pip check 通过。临时模拟代理验证 SecretStr 鉴权、流式正文及 done；不调用真实模型，未操作 PyCharm 检查面板。</p><h3>2026-11-02 官方版本复查与升级</h3>
+<table><tr><th>组件</th><th>升级前 → 实际安装</th><th>PyPI 最新预发布（未采用）</th></tr><tr><td>LangGraph</td><td>1.2.18 → 1.2.19</td><td>1.2.0a7</td></tr><tr><td>LangSmith</td><td>0.14.16 → 0.14.17</td><td>0.14.9rc1</td></tr><tr><td>OpenAI SDK</td><td>3.41.0 → 3.42.1</td><td>1.0.0rc3</td></tr></table>
+<p>来源为 https://pypi.org/pypi/{包名}/json；排除已撤回版本，三项最新稳定版均要求 Python ≥3.10，当前 Python 3.13 满足。预发布版本较旧，仅记录状态，不安装。已执行 uv lock、uv sync --locked、uv pip check；核心导入、SecretStr 鉴权、模拟代理流式正文和 done、健康接口与 OpenAPI 验证通过。未验证真实模型、Harness/MCP/Office 联调或 PyCharm 面板警告消失。</p>
+<p>依赖统一由 uv 管理：pyproject.toml 声明 → uv.lock 完整解析 → uv sync --locked 同步 .venv。已撤销为 IDE 增加 requirements.txt 的方案，不维护第二份清单。重新执行 uv sync --locked --check 显示 Would make no changes，uv pip check 无冲突。当前声明、锁文件与实际环境均为 langgraph 1.2.19、langsmith 0.14.17、openai 3.42.1。PyCharm 提示旧的 1.2.18/0.14.16 与当前文件不一致，尚未直接观察 IDE 内存文档及索引，不能断言缓存是唯一原因。</p>
+<p>整体约束复核：langchain 1.4.7 要求 langgraph ≥1.2.12 且 &lt;1.3.0；langchain-openai 1.7.3 要求 openai ≥2.45.0；Harness SDK 要求 pydantic ≥2.12 且 &lt;3，以及固定的 runtime-bin 0.2.1rc2。当前环境满足这些约束；全部已安装分发包通过 uv pip check。依赖一致不等于 Harness/MCP/Office 已完成运行验证。</p>
+<p>openai 已在 pyproject.toml 直接声明并可从 .venv 导入；.idea 项目与模块均指向该 .venv。IDE 警告应通过重新加载磁盘文档、uv 项目关联和解释器索引进一步定位，不通过忽略警告或增加 requirements.txt 绕过。配置与操作见接口调试说明。</p>
 <h2 id="architecture">1. 总体架构</h2><pre><code>未来 Web 前端 / 当前 API 客户端
             │ HTTP + SSE
             ▼

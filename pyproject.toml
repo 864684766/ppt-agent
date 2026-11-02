@@ -3,13 +3,15 @@ name = "ppt-agent"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "httpx==0.28.1",
     "deepseek-harness-sdk==0.2.1rc2",
     "fastapi==0.162.0",
     "langchain[mcp]==1.4.7",
     "langchain-openai==1.7.3",
-    "langgraph==1.2.18",
-    "langsmith==0.14.16",
+    "langgraph==1.2.19",
+    "langsmith==0.14.17",
     "mcp==2.3.0",
+    "openai==3.42.1",
     "pydantic==2.14.2",
     "pydantic-settings==2.16.2",
     "python-pptx==1.0.2",
@@ -18,7 +20,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx==0.28.1",
     "pytest==9.2.0",
     "pytest-asyncio==1.4.1",
 ]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = ""
+    # 单次模型请求超时（秒）与输出 token 上限；不等同于输入字符数。
+    llm_timeout_seconds: float = Field(default=60, gt=0, le=600)
+    llm_max_tokens: int = Field(default=1024, ge=1, le=32768)
 
     # 留空表示使用 llm_model；后续可独立替换每种任务的模型。
     llm_outline_model: str = ""
