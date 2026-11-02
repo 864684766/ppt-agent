@@ -2,12 +2,20 @@
 
 先按功能找目录，再按用途找文件。这里的“模型”指数据结构，不是大语言模型客户端。
 
+资料模型集中为 5 个文件：资料来源、正文块、内部查询结果，以及两个工具各自的完整契约。查看一个工具怎么传参、返回什么，只需打开对应的 `_contract.py`；文件里的 Input 和 Output 仍是不同的类。
+
+内部结果与工具契约分开，是为了让业务查询只使用标准库数据结构，不被迫引入 Pydantic 或 LangChain。共享限于真正被复用的资料实体与查询结果，不把所有工具的参数挤进一个大文件。
+
 | 功能 | 你想找什么 | 类型 | 定义位置 |
 | --- | --- | --- | --- |
-| 资料 | 单份内部资料数据 | MaterialSummary | [material_summary.py](materials/material_summary.py) |
-| 资料 | 内部目录查询的返回页 | MaterialPage | [material_page.py](materials/material_page.py) |
-| 资料 | list_materials 工具输入 | ListMaterialsInput | [list_materials_input.py](materials/list_materials_input.py) |
-| 资料 | list_materials 工具输出 | ListMaterialsOutput、MaterialListItem | [list_materials_output.py](materials/list_materials_output.py) |
+| 资料 | 单份内部资料数据 | MaterialSummary | [material_source.py](materials/material_source.py) |
+| 资料 | 内部目录查询的返回页 | MaterialPage | [material_query_results.py](materials/material_query_results.py) |
+| 资料 | 解析后的正文块 | MaterialFragment | [material_fragment.py](materials/material_fragment.py) |
+| 资料 | 内部正文命中及结果 | MaterialSearchMatch、MaterialSearchResult | [material_query_results.py](materials/material_query_results.py) |
+| 资料 | search_materials 工具输入 | SearchMaterialsInput | [search_materials_contract.py](materials/search_materials_contract.py) |
+| 资料 | search_materials 工具输出及定位 | SearchMaterialsOutput、MaterialSearchItem、MaterialMatchLocation | [search_materials_contract.py](materials/search_materials_contract.py) |
+| 资料 | list_materials 工具输入 | ListMaterialsInput | [list_materials_contract.py](materials/list_materials_contract.py) |
+| 资料 | list_materials 工具输出 | ListMaterialsOutput、MaterialListItem | [list_materials_contract.py](materials/list_materials_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 
@@ -37,19 +45,31 @@ list_project_materials 执行查询 → MaterialPage
 
 ## 类型与校验
 
-- MaterialSummary、MaterialPage：标准库 dataclass；MaterialSummary 构造时执行业务字段校验。
-- ListMaterialsInput、ChatRequest、HealthResponse：Pydantic BaseModel，用于声明边界数据结构和执行校验。
-- ListMaterialsOutput、MaterialListItem：TypedDict，只描述字典类型，不自动执行运行时校验。
+- MaterialSummary、MaterialFragment、MaterialPage、MaterialSearchMatch、MaterialSearchResult：标准库 dataclass；前两种实体构造时执行各自字段校验。
+- ListMaterialsInput、SearchMaterialsInput、ChatRequest、HealthResponse：Pydantic BaseModel，用于声明边界数据结构和执行校验。
+- ListMaterialsOutput、MaterialListItem、SearchMaterialsOutput、MaterialSearchItem、MaterialMatchLocation：TypedDict，只描述字典类型，不自动执行运行时校验。
 - 调用描述和参数描述会用于模型工具定义；普通Python注释和输出类型标注不会自动成为模型可见的返回Schema。
 
 ## 命名和扩展规则
 
 1. 先按业务功能分组，如 materials、chat、health。新增功能只在实际开发时创建目录。
-2. 模型工具统一用 `<操作>_input.py` / `<操作>_output.py`，类型统一用 `<操作>Input` / `<操作>Output`。
+2. 模型工具统一用 `<操作>_contract.py`，集中定义该操作的输入、公开输出及其条目；类型仍用 `<操作>Input` / `<操作>Output`。
 3. HTTP契约用 `<业务>_request.py` / `<业务>_response.py`，类型用 Request / Response；与Agent工具的Input / Output区分。
-4. 业务数据按对象命名，例如 material_summary.py；不使用笼统的 models.py、data.py、query.py。
-5. 输入输出属于同一操作，放在同一功能目录；只对真正复用的数据结构做共享，不强制复用HTTP与工具类型。
+4. 业务数据按对象命名，例如 material_source.py；不使用笼统的 models.py、data.py、query.py。
+5. 同一操作的输入输出放在同一契约文件；相关内部查询结果集中在 material_query_results.py。按职责、依赖和实际复用需求拆分，不按类数量机械拆文件，不强制复用HTTP与工具类型。
 6. __init__.py不批量加载所有类型，使用时显式导入具体模块，避免依赖扩散。
 
 当前对话回复是SSE事件流，不存在普通JSON的ChatResponse；不要为了目录对称编造输出类。
 当前未开发大纲、模板识别等结构化Agent结果，它们尚无可供导航的类型定义。
+
+## 真实数据来源（已确认，登记模块尚未实现）
+
+上传业务文件 → 后端保存原文件到本地磁盘 → 读取实际元数据并创建MaterialSummary → 写入当前项目内存资料目录 → 宿主用目录快照创建list_materials工具。
+
+初始pending、未知页数None；解析/本机OCR成功后用新的不可变摘要替换为ready，失败则failed。正文与来源定位单独保存，不进入目录摘要。资料或状态更新后需重建工具；同轮分页固定快照。第一阶段目录不要求数据库，重启不承诺恢复。模板/技能单独登记。测试样本和正式摘要使用相同类型，但测试样本不作为正式资料写入应用。
+
+## 第二个工具：正文检索数据流（2026-11-02）
+
+解析模块提供MaterialFragment(project_id/source_id/version/block_id/text/page)，工具宿主同时提供目录摘要与正文快照。模型参数用SearchMaterialsInput校验，纯业务检索生成MaterialSearchResult，工具选择公开字段生成SearchMaterialsOutput。正文与目录版本必须一致，片段只能关联当前项目ready来源。page从1开始，未知为None；块ID由解析模块生成，不由搜索工具猜测。
+
+MaterialFragment及内部检索结果为标准库dataclass；SearchMaterialsInput为Pydantic，公开输出为TypedDict。资料正文与目录的正式登记仍未实现，当前通过宿主传样本验证工具；没有新增数据库或全局Store。详情见[search_materials调试说明](../docs/search_materials调试说明.md)。

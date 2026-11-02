@@ -11,7 +11,7 @@ import pytest
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from models.materials.material_summary import MaterialSummary
+from models.materials.material_source import MaterialSummary
 from tools.materials import create_list_materials_tool
 
 

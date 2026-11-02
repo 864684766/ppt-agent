@@ -1,12 +1,13 @@
-"""list_materials 工具的入参字段、声明式校验和模型填参说明。
+"""list_materials 工具契约：在一处查看模型输入和公开输出。
 
-Pydantic Field 同时参与运行时校验与 JSON Schema 生成；这些约束
-必须留在入参声明处，模型才能看到类型、枚举、范围、默认值和描述。
-这属于“调用请求是否合法”，不负责判断业务资料本身是否合法。
-当前转换会省略 examples，所以必要例子也直接写入 description。
+Input 使用 Pydantic 声明参数、运行时校验及模型可见的 Field 描述；
+必要例子写入 description，避免工具转换时 examples 被省略。
+Output 及其条目使用 TypedDict 描述字典形状，不自动执行运行时校验，
+也不会仅凭类型标注自动成为发送给模型的输出 Schema。
+这里只定义数据约定，不执行查询；内部业务结果另见 material_query_results.py。
 """
 
-from typing import Literal
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,3 +56,24 @@ class ListMaterialsInput(BaseModel):
         examples=[10, 20],
     )
 
+
+# 以下是工具返回给模型的公开字段；由工具适配器显式组装。
+class MaterialListItem(TypedDict):
+    """明确选择可公开字段，不把内部对象全部转成字典交给模型。"""
+
+    source_id: str
+    name: str
+    origin: Literal["uploaded", "web"]
+    format: str
+    status: Literal["pending", "ready", "failed"]
+    version: str
+    url: str | None
+    page_count: int | None
+
+
+class ListMaterialsOutput(TypedDict):
+    """稳定的工具返回结构；空结果也保留同样的字段。"""
+
+    items: list[MaterialListItem]
+    total: int
+    next_offset: int | None

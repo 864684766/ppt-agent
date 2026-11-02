@@ -1,6 +1,7 @@
 """list_materials 工具的组装和执行入口。
 
-参数在 models/materials/list_materials_input.py；结果在 models/materials/list_materials_output.py；实体在 models/materials/material_summary.py，查询规则在 domain.materials。
+输入与公开输出在 models/materials/list_materials_contract.py；
+资料实体在 models/materials/material_source.py，查询规则在 domain.materials。
 这个文件只连接它们，不承担文件上传、解析、HTTP 或存储职责。
 """
 
@@ -10,10 +11,13 @@ from typing import Literal
 from langchain.tools import tool
 from langchain_core.tools import BaseTool
 
-from models.materials.material_summary import MaterialSummary
+from models.materials.material_source import MaterialSummary
 from domain.materials import list_project_materials
-from models.materials.list_materials_input import ListMaterialsInput
-from models.materials.list_materials_output import ListMaterialsOutput, MaterialListItem
+from models.materials.list_materials_contract import (
+    ListMaterialsInput,
+    ListMaterialsOutput,
+    MaterialListItem,
+)
 
 
 def create_list_materials_tool(

@@ -1,13 +1,14 @@
 """资料目录查询规则：范围隔离、过滤、排序与分页，仅依赖标准库。
 
-数据定义放 models/materials/material_summary.py；这里不关心数据来自数据库、上传还是测试样本。
+数据定义放 models/materials/material_source.py；这里不关心数据来自数据库、上传还是测试样本。
 """
 
 from collections.abc import Sequence
 from typing import Literal
 
-from models.materials.material_page import MaterialPage
-from models.materials.material_summary import MaterialSummary
+from domain.materials.material_validator import validate_material_catalog
+from models.materials.material_query_results import MaterialPage
+from models.materials.material_source import MaterialSummary
 
 
 def list_project_materials(
@@ -26,8 +27,8 @@ def list_project_materials(
     offset 从 0 开始；超过结果数量返回空页。非法参数抛 ValueError。
     调用方拥有快照；若要在多次调用之间看到新增资料，需重新提供快照。
     """
-    if not isinstance(project_id, str) or not project_id.strip():
-        raise ValueError("project_id 必须为非空字符串。")
+    # 共享业务校验明确调用，不通过执行另一个查询来间接获得校验效果。
+    validate_material_catalog(project_id=project_id, materials=materials)
     if origin not in ("all", "uploaded", "web"):
         raise ValueError("origin 必须为 all、uploaded 或 web。")
     if type(offset) is not int or offset < 0:
@@ -40,8 +41,6 @@ def list_project_materials(
     keyword = name_contains.strip().casefold()
     # 项目范围来自宿主，不允许模型通过过滤参数访问其他项目。
     scoped = [item for item in materials if item.project_id == project_id]
-    if len({item.source_id for item in scoped}) != len(scoped):
-        raise ValueError("同一目录快照内 source_id 不得重复。")
     # 来源过滤和名称过滤共同生效；空关键词会匹配所有名称。
     # casefold 比 lower 更适合做不区分大小写的 Unicode 文本比较。
     matched = [

@@ -1,28 +1,27 @@
 # 第一个工具：list_materials
 
-本次仅实现“查看已登记的业务参考资料目录”。上传、网页抓取、正文检索、数据库、MCP 和聊天中的工具选择循环尚未接入。这里的样本不代表真实上传文件，也不会写入应用状态。
+本工具仅实现“查看已登记的业务参考资料目录”。正文检索已作为独立的search_materials工具实现；上传、网页抓取、数据库、MCP 和聊天中的工具选择循环尚未接入。这里的样本不代表真实上传文件，也不会写入应用状态。
 
 模型位置总索引见 [models/README.md](../models/README.md)。同一功能的所有输入、输出与业务数据集中在 models/materials/。
 
 ## 文件与依赖方向
 
-- `models/materials/material_summary.py`：单份资料字段与构造校验入口。
-- `models/materials/material_page.py`：目录业务查询的内部返回类型。
+- `models/materials/material_source.py`：单份资料字段与构造校验入口。
+- `models/materials/material_query_results.py`：目录业务查询的内部返回类型。
 - `validators/materials/material_metadata_validator.py`：资料自身的字段和字段组合合法性规则，仅依赖标准库。
 - `domain/materials/material_catalog.py`：项目隔离、来源/名称筛选、稳定排序和分页。
-- `models/materials/list_materials_input.py`：工具入参及Pydantic边界校验，`Field(description=...)`解释参数。
-- `models/materials/list_materials_output.py`：公开输出字典的类型结构，不自动校验。
+- `models/materials/list_materials_contract.py`：集中查看工具输入与公开输出。Input用Pydantic和`Field(description=...)`校验、解释参数；Output及条目用TypedDict描述字典结构，不自动校验。
 - `tools/materials/list_materials_tool.py`：LangChain `@tool` 薄入口，声明工具使用场景并选择可公开返回字段。
 - `tests/test_list_materials.py`：只保留工具定义JSON与调用结果两个测试，并打印供人查看。
 
-导入方向为 `tools → domain → models.materials.material_summary`，工具另引用 `models.materials.list_materials_input`；实体另调用纯校验模块 `validators.materials.material_metadata_validator`；校验模块不反向引用实体。models 不反向引用查询或执行模块。domain 不依赖 LangChain、FastAPI、配置、网络或数据库。调用方负责提供已经登记好的业务资料，不把模板和技能资源混入其中。目录按 source_id 字符串升序排列，不按上传时间排列。
+导入方向为 `tools → domain → models.materials.material_source`，工具另引用 `models.materials.list_materials_contract`；实体另调用纯校验模块 `validators.materials.material_metadata_validator`；校验模块不反向引用实体。models 不反向引用查询或执行模块。domain 不依赖 LangChain、FastAPI、配置、网络或数据库。调用方负责提供已经登记好的业务资料，不把模板和技能资源混入其中。目录按 source_id 字符串升序排列，不按上传时间排列。
 
 ## 如何创建与调用
 
 在项目根目录运行 `uv run --locked python`，将下列代码粘贴到 Python 交互窗口；也可以在 PyCharm 使用项目虚拟环境的 Python Console 执行。若 Console 无法导入包，先把其工作目录设置为项目根目录。
 
 ```python
-from models.materials.material_summary import MaterialSummary
+from models.materials.material_source import MaterialSummary
 from tools.materials import create_list_materials_tool
 
 # 示例数据由宿主提供，不是工具自动扫描硬盘得到的。
@@ -102,15 +101,14 @@ print(json.dumps(convert_to_openai_tool(material_tool), ensure_ascii=False, inde
 
 当前版本转换后的工具定义保留字段 description 和 default，但省略 examples。为保证例子确实可见，必要例子也写进 description；例如 offset 告诉模型把上次返回的 next_offset 用于下一次查询。`examples` 仍保留在原始 Pydantic Schema 里，供本地查看。当前测试打印转换后的完整JSON，并检查工具及参数说明存在，方便直接查看。
 
-实体现在从 `models.materials.material_summary` 导入，查询从 `domain.materials` 导入，工具工厂仍从 `tools.materials` 导入。阅读顺序建议是业务实体 → validators/materials/material_metadata_validator.py → domain/materials/material_catalog.py → 工具入参/结果 → tools/materials/list_materials_tool.py。
+实体现在从 `models.materials.material_source` 导入，查询从 `domain.materials` 导入，工具工厂仍从 `tools.materials` 导入。阅读顺序建议是业务实体 → validators/materials/material_metadata_validator.py → domain/materials/material_catalog.py → 工具入参/结果 → tools/materials/list_materials_tool.py。
 
 ## 如何查找输入、输出和校验
 
-- 实体文件 `material_summary.py` 回答“一份业务资料有什么字段”。其 `__post_init__` 调用规则，保证通过正常构造路径不能创建非法资料。
+- 实体文件 `material_source.py` 回答“一份业务资料有什么字段”。其 `__post_init__` 调用规则，保证通过正常构造路径不能创建非法资料。
 - `validators/materials/material_metadata_validator.py` 回答“这些资料字段组合是否合法”，例如网页资料必须有URL。它接收普通值，不导入实体，不查询文件和网络。
-- `list_materials_input.py` 回答“模型这次怎么调用目录工具”。分页、筛选参数和资料自身字段不同；Pydantic Field 同时负责参数校验和模型Schema说明，保留在输入声明处。
-- `list_materials_output.py` 回答“工具允许公开什么结果”。TypedDict只描述类型，不自动做运行时校验。
-- `domain/materials/material_catalog.py` 回答“在当前项目中如何查”，包括项目隔离和多条记录的source_id唯一性。
+- `list_materials_contract.py` 同时回答“模型怎么调用”和“允许公开什么结果”。Input声明分页、筛选参数，Pydantic Field负责校验和模型Schema说明；Output与条目使用TypedDict，只描述公开字典类型，不自动做运行时校验。
+- `domain/materials/material_catalog.py` 回答“在当前项目中如何查”，负责项目范围筛选；多条记录的source_id唯一性由共享的material_validator.py检查。
 
 ## 参数与结果
 
@@ -155,3 +153,7 @@ PyCharm使用项目`.venv`解释器；右键运行/调试此测试文件，在py
 已验证：2026-11-02，按用户最新范围收敛后的2个测试通过。此前的34项详细检查已从当前测试文件移除，当前不宣称这2项覆盖那些场景。测试不调用真实模型，不访问网络。
 
 第一项输出是“提供给模型的工具定义”，不是模型已经生成了tool_calls，也不表示已验证模型会正确选用工具。第二项是直接invoke工具的实际返回结果。当前无新增HTTP工具接口，不能直接使用Postman调用；现有聊天接口还没有工具调用循环。
+
+## 公共目录校验的职责（2026-11-02）
+
+`../domain/materials/material_validator.py`中的`validate_material_catalog`只校验项目编号和当前项目内的来源编号唯一性，通过时返回`None`，失败抛出`ValueError`。目录查询和正文关联校验直接复用它，不再通过查询、排序和分页来间接触发校验。目录查询和正文检索各自依赖这一共享模块，彼此不导入对方的操作模块。它是内部业务函数，不是Agent工具。单份实体字段校验仍在实体构造时执行。目录公共校验现在先于查询参数校验；多项输入同时无效时，可能优先报告目录错误。
