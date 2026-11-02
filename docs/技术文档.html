@@ -14,6 +14,7 @@
 │   │   ├── material_fragment.py          # 带原文定位的正文块
 │   │   ├── material_query_results.py     # 内部目录页、检索命中及结果
 │   │   ├── list_materials_contract.py    # 目录工具输入、公开输出和条目
+│   │   ├── read_material_contract.py    # 读取工具输入、公开输出和定位
 │   │   └── search_materials_contract.py  # 检索工具输入、公开输出和定位
 │   ├── chat/
 │   │   └── chat_request.py                # ChatRequest：HTTP请求，回复为SSE
@@ -24,10 +25,12 @@
 │   └── materials/
 │       ├── material_validator.py  # 公共项目编号与来源唯一性校验
 │       ├── material_catalog.py            # 项目资料目录筛选、排序、分页
+│       ├── material_reader.py             # 指定版本、正文块与字符范围读取
 │       └── material_search.py             # 正文关系校验、关键词匹配和截取
 ├── tools/                                # 模型可调用的工具适配
 │   └── materials/
 │       ├── list_materials_tool.py         # 资料目录工具
+│       ├── read_material_tool.py          # 正文读取工具
 │       └── search_materials_tool.py       # 正文检索工具
 ├── validators/
 │   └── materials/
@@ -46,6 +49,7 @@
 │   └── settings.py                       # 环境变量配置
 ├── tests/
 │   ├── test_list_materials.py             # 目录工具：JSON定义和返回结果
+│   ├── test_read_material.py             # 读取工具：JSON定义和返回结果
 │   └── test_search_materials.py           # 检索工具：JSON定义和返回结果
 ├── agents/                               # 智能体预留包，尚无业务实现
 ├── workflows/                            # 编排预留包，尚无业务实现
@@ -57,13 +61,13 @@
 
 包目录保留 __init__.py，上图省略包标记、缓存、本地IDE与用户Postman文件。</code></pre>
 <div class="scroll"><table><tr><th>职责边界</th><th>约定</th></tr><tr><td>应用入口</td><td><code>main.py</code> 负责创建应用及注册路由，业务逻辑放入对应功能包。已提供 create_app() 和 app，可使用 Uvicorn 启动。</td></tr><tr><td>领域与业务工具</td><td><code>models/</code> 集中表达数据模型，<code>domain/</code> 表达业务规则及协议；<code>tools/</code> 提供模型可调用的薄入口；独立业务查询放在 domain，避免依赖 HTTP 请求和 Agent 会话。</td></tr><tr><td>编排与智能体</td><td><code>workflows/</code> 决定流程和确认边界；<code>agents/</code> 封装各子智能体的任务输入与结果，不直接覆盖已确认业务状态。</td></tr><tr><td>外部集成</td><td><code>integrations/</code> 管理模型、MCP 和 Harness 的连接及适配。MCP 工具接口与 LangChain 工具复用独立业务模块，不将 LangChain 工具对象作为核心业务依赖。</td></tr><tr><td>Python 包与导入</td><td>各功能目录保留 <code>__init__.py</code>，例如可从根目录导入 <code>api</code> 或 <code>domain</code>。后续命令从项目根目录运行；根目录本身不需要 <code>__init__.py</code>。</td></tr></table></div>
-<p>当前已实现应用入口、健康检查、LangChain 普通对话调试接口，以及资料目录和正文检索两个独立工具及其领域模型；工作流与子智能体仍为骨架。未来需要新增文件或子包时，随对应任务补充，不提前建立大量空模块。开发时同步维护本节；目录树不展示缓存和生成文件。</p>
+<p>当前已实现应用入口、健康检查、LangChain 普通对话调试接口，以及资料目录、正文检索和正文读取三个独立工具及其领域模型；工作流与子智能体仍为骨架。未来需要新增文件或子包时，随对应任务补充，不提前建立大量空模块。开发时同步维护本节；目录树不展示缓存和生成文件。</p>
 <h3>插入任务：第一个 Agent 工具 list_materials（2026-11-02）</h3>
 <p>按工具清单中的开发顺序，先实现资料目录工具，而非技能发现工具。models/materials/material_source.py 和 domain/materials/material_catalog.py 定义不可变 MaterialSummary、MaterialPage 和纯函数 list_project_materials；tools/materials/list_materials_tool.py 使用 LangChain @tool 和 Pydantic 参数模型，将其暴露为模型可选择的 list_materials。外层 create_list_materials_tool 绑定 project_id 与目录快照；模型只能提供 origin、name_contains、offset、limit，不得切换项目。工具只列业务参考资料，不包括模板、技能和未关联历史文件。</p>
 <p>输出为 items、筛选后的 total、next_offset；按 source_id 排序。参数模型拒绝未知字段与隐式数字转换；域函数保留独立校验。工具只公开约定元数据，不暴露项目绑定、本机路径或正文。输入序列被复制为不可变快照；宿主更新资料后需重建工具，当前未引入动态仓库或持久化。资料登记仍是后续能力，不把测试样本装入应用。</p>
 <p>当前运行：<code>uv run --locked python -m pytest tests/test_list_materials.py -s -q</code>，2个测试通过。按用户最新要求，只打印并验证tool-calling JSON定义及工具实际返回结果；原34项详细测试已从当前文件移除，不将其覆盖范围计为当前测试结果。未验证真实模型选择、MCP/Harness 连接或 HTTP 工具调用；聊天接口行为保持原状。依赖沿用现有锁定环境，未升级或新增包。详见 <a href="list_materials调试说明.md">调用与断点调试说明</a>，范围与后续计划见 <a href="Agent工具清单.html">工具清单</a>。</p>
 <h3>功能分组、输入输出导航与依赖方向（2026-11-02）</h3>
-<p>目录公共校验由domain/materials/material_validator.py中的validate_material_catalog负责，只检查项目编号与项目内source_id唯一性。list_project_materials先调用它，再执行筛选、排序和分页；validate_material_search_data直接调用它，再检查正文关联、版本和块编号。正文校验不再借用目录查询触发异常，不执行无关排序或构造目录页。该函数是内部业务能力，不是新增Agent工具；独立的共享模块只依赖资料实体，目录查询和正文检索分别引用它，彼此不依赖对方的操作模块。</p>
+<p>目录公共校验由domain/materials/material_validator.py中的validate_material_catalog负责，只检查项目编号与项目内source_id唯一性。list_project_materials先调用它，再执行筛选、排序和分页；共享的validate_material_content_data调用它，再检查正文关联、版本和块编号；检索与读取各自引用共享校验。正文校验不再借用目录查询触发异常，不执行无关排序或构造目录页。该函数是内部业务能力，不是新增Agent工具；独立的共享模块只依赖资料实体，目录查询和正文检索分别引用它，彼此不依赖对方的操作模块。</p>
 <p>models统一管理类型，内部按materials、chat、health功能分组。同一个工具的Input/Output与公开条目在同一个&lt;操作&gt;_contract.py中，查看传参与结果无需跨文件。资料来源与正文块分别定义，内部目录页和检索结果集中在material_query_results.py；该模块不导入Pydantic或Agent框架，供业务查询独立使用。按职责、依赖和实际复用需求拆分，不按类数量机械拆文件。类型导航统一见<a href="../models/README.md">models/README.md</a>，包含定义位置、创建方和使用方；不依赖到多个按技术角色分类的文件夹中猜测。</p>
 <table><tr><th>类型</th><th>创建方 → 使用方</th><th>路径</th></tr>
 <tr><td>MaterialSummary</td><td>宿主登记数据 → 目录业务查询</td><td>models/materials/material_source.py</td></tr>
@@ -88,7 +92,7 @@
 <p>工具已独立实现，资料摘要与正文片段由宿主提供并复制快照；模型只传queries、source_ids、origin、max_results、max_chars_per_match。来源范围和原文不由模型指定。资料关系在纯业务层校验：片段须关联当前项目ready来源、版本一致、同来源版本块ID唯一；指定不存在/未ready或正文未载入的来源明确报错。</p>
 <p>模型输入用Pydantic生成带中文用途、约束和例子的Schema；查询为标准库re.escape + IGNORECASE字面子串匹配，任意关键词命中，同一块一次，不自动扩词。按来源/页码/块ID稳定排序，长正文围绕最早命中截取。输出保留source_id、version、location、matched_queries和文本；total_matches表示命中块数，truncated表示条数限制，text_truncated表示块内截取。首版不提供offset分页、ripgrep或向量库，不做相关性排名。</p>
 <p>新增MaterialFragment与内部MaterialSearchResult；输入/输出定义集中在models/materials，模型索引及Store清单已同步。工具层只适配结果，执行期ValueError转为ToolException，入参错误仍由Pydantic校验，HTTP/SSE错误事件尚未接线。没有新增包、环境变量、全局Store、文件IO或真实服务调用。</p>
-<p>运行<code>uv run --locked python -m pytest tests/test_search_materials.py -s -q</code>查看工具JSON和返回值，两项通过；与第一个工具合跑共四项通过。详细参数、样本输出及断点步骤见<a href="search_materials调试说明.md">第二个工具调试说明</a>。真实上传登记、正文解析/OCR、联网抓取、MCP与聊天工具循环仍未实现；read_material仍待开发。检索轮数和调用预算在未来Agent/编排接线时实现，本工具不自行循环调用模型。</p>
+<p>运行<code>uv run --locked python -m pytest tests/test_search_materials.py -s -q</code>查看工具JSON和返回值，两项通过；与第一个工具合跑共四项通过。详细参数、样本输出及断点步骤见<a href="search_materials调试说明.md">第二个工具调试说明</a>。真实上传登记、正文解析/OCR、联网抓取、MCP与聊天工具循环仍未实现；read_material已独立实现，见第三个工具说明；尚未接入聊天流程。检索轮数和调用预算在未来Agent/编排接线时实现，本工具不自行循环调用模型。</p>
 <h3>启动与接口调试</h3>
 <p>LangSmith 当前按 Agent 组织的工作区使用 Agent ID 与环境寻址，本机使用 <code>LANGSMITH_AGENT_ID</code> 和 <code>LANGSMITH_AGENT_ENVIRONMENT=local</code>，不与旧 <code>LANGSMITH_PROJECT</code> 混用。创建与配置步骤见 <a href="LangSmith配置说明.md">LangSmith 配置说明</a>；追踪运行时尚未接入。</p>
 <p>启动入口通过 <code>config/settings.py</code> 读取 <code>APP_HOST</code> 和 <code>APP_PORT</code>，默认 127.0.0.1:8000；端口范围为 1–65535。系统环境变量优先于根目录 .env，未配置时使用代码默认值；直接用 Uvicorn 命令启动须自行提供其监听参数，项目变量仅由 Python 启动入口读取。</p>
@@ -125,6 +129,9 @@ api/sse_encoder → 标准库 json
 <p>tool_start、tool_result、progress、reasoning_summary 仅为未来事件示例，当前 /ppt-agent/v1/chat 仍仅产出 delta/done/error。文本流契约当前不携带工具事件或推理字段；后续应先定义独立的结构化运行事件契约，由 Agent/工作流产生，再由 API 转 SSE，不能由通用编码器识别 SDK 对象。推理摘要需显式产出，供应商公开 reasoning 字段的支持以 SDK、模型和代理实测为准，不保证获得完整内部思维链。前端须按事件名分别显示或聚合；Postman 可查看事件，不自动生成工具卡片。</p>
 <p>单一职责检查：main为应用组装/启动；api_router为路由组装；chat_routes为对话HTTP与流事件映射；models按功能保存接口/工具数据；chat_dependencies为对话依赖及连接生命周期；sse_encoder为通用编码；chat_client_contract为独立协议；langchain_chat_client为外部模型适配；settings为配置读取。目录查询位于material_catalog，公共跨记录业务校验位于material_validator，单份资料字段校验位于material_metadata_validator。各文件围绕一个可说明职责组织，不按行数拆分。</p>
 <p>验证：临时脚本对工具嵌套数据、摘要换行、进度做 JSON 往返；对非法事件名、非标准数值、不可编码对象检查拒绝；现有 HTTP delta/done 与健康检查通过。未新增测试文件、未调用真实模型、未验证前端工具展示。无依赖、配置或业务 Store 变更。</p>
+<h3>第三个Agent工具：read_material（2026-11-02）</h3>
+<p>material_reader.py负责按source_id、version、block_id精确定位当前项目ready来源中的正文块，offset默认0，max_chars默认2000且为1–8000个Python字符。返回原文片段、原定位、实际字符范围、总字符数和next_offset；块尾为null。MaterialReadResult是内部结果，工具只选择公开字段返回。一次只读一个块，不包含相邻块，不按页读取，不访问原文件或进行OCR。</p>
+<p>模型契约见models/materials/read_material_contract.py；公共正文关联校验迁入domain/materials/material_validator.py并命名为validate_material_content_data，读取与检索不互相依赖。新工具的2项测试通过，与前两个工具合跑共6项通过。未接HTTP、聊天工具循环、真实上传或解析；无新增依赖或持久化。详见<a href="read_material调试说明.md">读取工具调试说明</a>。</p>
 <h2 id="architecture">1. 总体架构</h2><pre><code>未来 Web 前端 / 当前 API 客户端
             │ HTTP + SSE
             ▼

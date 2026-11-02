@@ -37,3 +37,18 @@ class MaterialSearchResult:
     matches: tuple[MaterialSearchMatch, ...]
     total_matches: int
     truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialReadResult:
+    """一次块内读取结果；保留原块定位，end_offset不包含该字符。
+
+    next_offset为None表示已读到块尾；总长度取自fragment.text。
+    工具另行选择公开字段，不直接序列化包含project_id的原块。
+    """
+
+    fragment: MaterialFragment
+    text: str
+    offset: int
+    end_offset: int
+    next_offset: int | None

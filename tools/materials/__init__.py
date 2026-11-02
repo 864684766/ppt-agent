@@ -2,5 +2,6 @@
 
 from tools.materials.list_materials_tool import create_list_materials_tool
 from tools.materials.search_materials_tool import create_search_materials_tool
+from tools.materials.read_material_tool import create_read_material_tool
 
-__all__ = ["create_list_materials_tool", "create_search_materials_tool"]
+__all__ = ["create_list_materials_tool", "create_search_materials_tool", "create_read_material_tool"]

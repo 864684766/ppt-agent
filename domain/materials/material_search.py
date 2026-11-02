@@ -8,36 +8,10 @@ import re
 from collections.abc import Sequence
 from typing import Literal
 
-from domain.materials.material_validator import validate_material_catalog
+from domain.materials.material_validator import validate_material_content_data
 from models.materials.material_fragment import MaterialFragment
 from models.materials.material_query_results import MaterialSearchMatch, MaterialSearchResult
 from models.materials.material_source import MaterialSummary
-
-
-def validate_material_search_data(
-    *, project_id: str, materials: Sequence[MaterialSummary],
-    fragments: Sequence[MaterialFragment],
-) -> None:
-    """校验宿主提供的当前项目数据；无效关联抛ValueError。
-
-    其他项目的数据不参与本次查询。当前项目正文必须关联ready来源、
-    匹配目录版本，且同一来源版本内block_id不可重复，防止错误引用。
-    """
-    # 这里只需确认目录合法，不需要执行目录的排序、分页或创建返回页。
-    # 重复 source_id 必须先拒绝，否则下方构造字典时会覆盖同名来源。
-    validate_material_catalog(project_id=project_id, materials=materials)
-    sources = {item.source_id: item for item in materials if item.project_id == project_id}
-    seen: set[tuple[str, str, str]] = set()
-    for fragment in fragments:
-        if fragment.project_id != project_id:
-            continue
-        source = sources.get(fragment.source_id)
-        if source is None or source.status != "ready" or source.version != fragment.version:
-            raise ValueError("正文必须关联当前项目已ready且版本一致的资料。")
-        identity = (fragment.source_id, fragment.version, fragment.block_id)
-        if identity in seen:
-            raise ValueError("同来源版本内block_id不得重复。")
-        seen.add(identity)
 
 
 def search_project_materials(
@@ -54,7 +28,7 @@ def search_project_materials(
     total_matches统计块数而非词出现次数；不做相关性或权威性排名。
     不存在/未就绪/正文未载入与零命中不同，前几种情况明确抛ValueError。
     """
-    validate_material_search_data(project_id=project_id, materials=materials, fragments=fragments)
+    validate_material_content_data(project_id=project_id, materials=materials, fragments=fragments)
     # 独立Python调用不经过Pydantic，因此业务入口也守住基本输入约束。
     terms = _normalize_strings(queries, "queries", max_items=8)
     requested = None if source_ids is None else _normalize_strings(source_ids, "source_ids", max_items=100)

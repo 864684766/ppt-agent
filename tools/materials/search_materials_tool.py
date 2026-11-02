@@ -6,7 +6,8 @@ from typing import Literal
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
-from domain.materials.material_search import search_project_materials, validate_material_search_data
+from domain.materials.material_search import search_project_materials
+from domain.materials.material_validator import validate_material_content_data
 from models.materials.material_fragment import MaterialFragment
 from models.materials.material_source import MaterialSummary
 from models.materials.search_materials_contract import (
@@ -28,7 +29,7 @@ def create_search_materials_tool(
     """
     material_snapshot = tuple(materials)
     fragment_snapshot = tuple(fragments)
-    validate_material_search_data(
+    validate_material_content_data(
         project_id=project_id, materials=material_snapshot, fragments=fragment_snapshot,
     )
 
