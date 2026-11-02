@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter
 
-from api.routes.health import router as health_router
-from api.routes.chat import router as chat_router
+from api.routes.health_routes import router as health_router
+from api.routes.chat_routes import router as chat_router
 
 
 # 每个元素是一组接口，后续添加大纲、模板等路由时在此显式登记。

@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from config.settings import Settings
-from domain.chat import ChatClient
-from integrations.llm import ModelConfigurationError, create_chat_client
+from domain.chat_client_contract import ChatClient
+from integrations.langchain_chat_client import ModelConfigurationError, create_chat_client
 
 
 async def get_chat_client() -> AsyncIterator[ChatClient]:

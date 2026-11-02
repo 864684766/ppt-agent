@@ -1,10 +1,10 @@
 """健康检查路由，用于验证 HTTP 服务能够正常响应。"""
 
 from fastapi import APIRouter
-from api.schemas.health import HealthResponse
+from models.health.health_response import HealthResponse
 
 
-# 同类接口集中到一个路由对象，由 api/router.py 汇总后挂载到应用。
+# 同类接口集中到一个路由对象，由 api/api_router.py 汇总后挂载到应用。
 router = APIRouter(tags=["健康检查"])
 
 

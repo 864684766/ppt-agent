@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APIError, APITimeoutError
 from pydantic import SecretStr
 
-from domain.chat import ChatClient, ModelCallError
+from domain.chat_client_contract import ChatClient, ModelCallError
 
 
 class ModelConfigurationError(ValueError):

@@ -7,10 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from api.dependencies import get_chat_client
-from api.schemas.chat import ChatRequest
-from api.streaming import encode_event
-from domain.chat import ChatClient, ModelCallError
+from api.chat_dependencies import get_chat_client
+from models.chat.chat_request import ChatRequest
+from api.sse_encoder import encode_event
+from domain.chat_client_contract import ChatClient, ModelCallError
 
 
 router = APIRouter(tags=["模型调试"])
@@ -46,7 +46,7 @@ async def chat(
     """将校验后的消息交给模型适配器，以 SSE 格式逐段返回正文。
 
     Depends 告诉 FastAPI：client 由 get_chat_client 提供，不从 JSON 读取。
-    接口负责 HTTP 协议转换，具体如何调用模型由 integrations/llm.py 负责。
+    接口负责 HTTP 协议转换，具体如何调用模型由 integrations/langchain_chat_client.py 负责。
     """
     # 返回生成器而不是完整回答；Starlette 在响应期间持续迭代并发送内容。
     # 默认 request 作用域的 yield 依赖会在流发送完后才释放 HTTP 客户端。
