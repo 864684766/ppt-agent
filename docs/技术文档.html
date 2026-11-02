@@ -10,18 +10,26 @@
 │   └── __init__.py
 ├── api/                   # HTTP 路由、请求响应及接口依赖
 │   ├── __init__.py
-│   ├── health.py           # GET /health 路由及响应模型
-│   ├── chat.py             # POST /ppt-agent/v1/chat 单轮 SSE 流式对话与请求模型
+│   ├── routes/             # 按业务组织 HTTP 路由
+│   │   ├── __init__.py
+│   │   ├── health.py       # GET /health
+│   │   └── chat.py         # 流式对话路由及对话事件转换
+│   ├── schemas/            # HTTP 请求响应结构，不替代 domain 业务模型
+│   │   ├── __init__.py
+│   │   ├── health.py       # HealthResponse
+│   │   └── chat.py         # ChatRequest
 │   ├── dependencies.py     # FastAPI 依赖注入与网络连接释放
-│   └── router.py           # 显式路由清单及总路由组装
-├── domain/                # 大纲、模板映射等领域数据模型和业务约束
-│   └── __init__.py
+│   ├── streaming.py        # 通用 SSE 编码，不依赖模型
+│   └── router.py           # 健康路由、业务路由清单与公共前缀组装
+├── domain/                # 业务模型、规则及不依赖具体框架的调用契约
+│   ├── __init__.py
+│   └── chat.py             # ChatClient 协议与 ModelCallError，仅标准库
 ├── config/                # 环境变量和配置读取
 │   ├── __init__.py
 │   └── settings.py         # Settings 及按任务选择模型
 ├── integrations/          # 模型、MCP、Harness 等外部系统的连接与协议适配
 │   ├── __init__.py
-│   └── llm.py              # ChatClient 协议、LangChain 适配器与客户端工厂
+│   └── llm.py              # LangChain 适配器与显式参数工厂
 ├── tools/                 # 模板解析、PPTX 生成、渲染等可独立调用的业务能力
 │   └── __init__.py
 ├── workflows/             # LangGraph 节点、图状态、条件分支和人工介入
@@ -49,7 +57,7 @@
 <p>启动入口通过 <code>config/settings.py</code> 读取 <code>APP_HOST</code> 和 <code>APP_PORT</code>，默认 127.0.0.1:8000；端口范围为 1–65535。系统环境变量优先于根目录 .env，未配置时使用代码默认值；直接用 Uvicorn 命令启动须自行提供其监听参数，项目变量仅由 Python 启动入口读取。</p>
 <p>新增直接依赖 <code>pydantic-settings==2.16.2</code>，锁文件已更新。按任务配置 <code>LLM_OUTLINE_MODEL</code>、<code>LLM_TEMPLATE_ANALYSIS_MODEL</code>、<code>LLM_PPT_GENERATION_MODEL</code>，留空回退 <code>LLM_MODEL</code>；当前共用 <code>LLM_BASE_URL</code> 与 <code>LLM_API_KEY</code>。已接入 LangChain ChatOpenAI，普通对话接口仅使用 LLM_MODEL；任务专用模型调用与 Harness provider 尚未接入。不把模型名称视为视觉能力证明。</p>
 <p>直接运行 <code>uv run --locked python main.py</code> 会启动本机 127.0.0.1:8000，可在 PyCharm 中对 main.py 使用 Debug。发布时由进程管理器或容器执行 Uvicorn 命令并管理重启，可配置 <code>--host 0.0.0.0 --port 8000 --workers 1</code>；不使用自动重载。第一阶段内存状态不跨进程共享，保持单 worker。</p>
-<p>路由采用集中组装：各业务模块定义自己的 APIRouter，在 <code>api/router.py</code> 的 <code>ROUTERS</code> 清单中登记，由循环汇总到 <code>api_router</code>；<code>main.py</code> 仅挂载一次总路由。新增模块无需修改应用工厂，同一模块内可定义多个接口。</p>
+<p>路由采用集中组装：各业务模块定义自己的 APIRouter，在 <code>api/router.py</code> 的 <code>BUSINESS_ROUTERS</code> 清单中登记，由循环汇总到带 /ppt-agent/v1 前缀的 business_router，再与独立的 /health 汇总到 api_router；<code>main.py</code> 仅挂载一次总路由。新增模块无需修改应用工厂，同一模块内可定义多个接口。</p>
 <p>在项目根目录运行 <code>uv run --locked uvicorn main:app --host 127.0.0.1 --port 8000</code>。PyCharm 可使用模块 <code>uvicorn</code>、上述参数及项目虚拟环境启动 Debug；断点调试先不启用自动重载。操作步骤见 <a href="接口调试说明.md">接口调试说明</a>。</p>
 <p>2026-10-30 实际启动验证：GET /health 返回 200 和 status=ok，GET /openapi.json 与 /docs 返回 200；未知路径返回默认 404，POST /health 返回默认 405。当前优先用 Postman 和断点验证接口；健康检查只表示服务存活，不代表外部模型或 PPT 生成能力可用。</p>
 <h3>任务 03：模型流式对话（2026-11-02）</h3>
@@ -66,6 +74,20 @@
 <p>依赖统一由 uv 管理：pyproject.toml 声明 → uv.lock 完整解析 → uv sync --locked 同步 .venv。已撤销为 IDE 增加 requirements.txt 的方案，不维护第二份清单。重新执行 uv sync --locked --check 显示 Would make no changes，uv pip check 无冲突。当前声明、锁文件与实际环境均为 langgraph 1.2.19、langsmith 0.14.17、openai 3.42.1。PyCharm 提示旧的 1.2.18/0.14.16 与当前文件不一致，尚未直接观察 IDE 内存文档及索引，不能断言缓存是唯一原因。</p>
 <p>整体约束复核：langchain 1.4.7 要求 langgraph ≥1.2.12 且 &lt;1.3.0；langchain-openai 1.7.3 要求 openai ≥2.45.0；Harness SDK 要求 pydantic ≥2.12 且 &lt;3，以及固定的 runtime-bin 0.2.1rc2。当前环境满足这些约束；全部已安装分发包通过 uv pip check。依赖一致不等于 Harness/MCP/Office 已完成运行验证。</p>
 <p>openai 已在 pyproject.toml 直接声明并可从 .venv 导入；.idea 项目与模块均指向该 .venv。IDE 警告应通过重新加载磁盘文档、uv 项目关联和解释器索引进一步定位，不通过忽略警告或增加 requirements.txt 绕过。配置与操作见接口调试说明。</p>
+<p>2026-11-02 API 结构整理：路由放入 api/routes，请求响应结构放入 api/schemas，通用 SSE 编码放入 api/streaming.py；对话增量到事件的转换保留在 routes/chat.py。dependencies.py 继续为单文件，不提前引入更多空目录。业务前缀只在 router.py 定义，接口地址及事件契约不变。不改变依赖、配置、领域状态与 Store。当前结构为已实现状态；本次验收使用临时假客户端，不消耗模型额度。临时假客户端验证通过：健康响应、OpenAPI 精确路径、delta/done、422 参数校验、公共前缀、error 事件和流关闭。未调用真实模型，未新增测试文件；未替用户操作 Postman。</p><h3>业务与系统解耦、局部移植（2026-11-02）</h3>
+<p>依赖契约与具体实现分离：domain/chat.py 仅使用标准库，定义 ChatClient 和 ModelCallError；路由只依赖契约。integrations/llm.py 实现契约并转换 SDK 异常，不导入 Settings、FastAPI 或项目路径。api/dependencies.py 是当前 HTTP 入口的组装边界，将 Settings 转换为基础地址、SecretStr 密钥、模型名、超时、输出上限及 HTTP 客户端参数。</p>
+<pre><code>api/routes/chat → domain/chat（契约）
+api/dependencies → Settings + integrations/llm（组装）
+integrations/llm → domain/chat + LangChain/OpenAI/httpx/Pydantic
+api/streaming → 标准库 json
+外部脚本 → 显式参数 + integrations/llm，无需 FastAPI 或 .env</code></pre>
+<p>复用范围：仅使用契约可移植 domain/chat.py（及包标记文件），无需第三方依赖；复用 LangChain 适配器需同时携带契约及相应 SDK 依赖，调用方负责关闭传入的 httpx 客户端；复用 SSE 编码只需 api/streaming.py。HTTP 请求校验与事件映射属于 API 层，不把 FastAPI 或 SSE 字符串传入业务层。后续 PPT 业务同样通过显式输入输出和薄工具适配器接入，不提前引入无职责的服务层。</p>
+<p>检查结果：main 只组装应用和启动，Settings 负责读取配置，schemas 负责 HTTP 契约，SSE 编码不依赖模型；这些职责边界保留。规则已写入 AGENTS.md。验证：独立进程 python -S 成功导入对话契约；显式参数工厂通过模拟代理流验证；HTTP 健康、delta/done、error、输入校验和清理通过。未调用真实模型，未新增测试文件，不涉及依赖、环境变量或业务 Store 变化。</p>
+<h3>单一职责与结构化 SSE（2026-11-02）</h3>
+<p>encode_event 的输入扩展为 Mapping[str, JsonValue]，JsonValue 是递归 JSON 类型，支持嵌套对象、数组、数字、布尔值和 null。只编码调用方选定的公开字段；拒绝包含 CR/LF/空字符的事件名及 NaN/Infinity，不用 default=str 自动泄露对象。中文字符保留，UTF-8 编码由 StreamingResponse 完成。</p>
+<p>tool_start、tool_result、progress、reasoning_summary 仅为未来事件示例，当前 /ppt-agent/v1/chat 仍仅产出 delta/done/error。文本流契约当前不携带工具事件或推理字段；后续应先定义独立的结构化运行事件契约，由 Agent/工作流产生，再由 API 转 SSE，不能由通用编码器识别 SDK 对象。推理摘要需显式产出，供应商公开 reasoning 字段的支持以 SDK、模型和代理实测为准，不保证获得完整内部思维链。前端须按事件名分别显示或聚合；Postman 可查看事件，不自动生成工具卡片。</p>
+<p>单一职责检查：main 为应用组装/启动；router 为路由组装；routes/chat 为对话 HTTP 与流事件映射；schemas 为接口数据校验；dependencies 为 HTTP 入口的依赖组装/生命周期；streaming 为通用 SSE 编码；domain/chat 为独立契约；integrations/llm 为 LangChain 适配；settings 为配置读取/模型选择。各文件内的辅助函数服务同一职责，目前不需要继续机械拆分。未来大纲、模板业务规则不得进入路由或编码模块。单一职责原则及三层能力区别已加入 AGENTS.md。</p>
+<p>验证：临时脚本对工具嵌套数据、摘要换行、进度做 JSON 往返；对非法事件名、非标准数值、不可编码对象检查拒绝；现有 HTTP delta/done 与健康检查通过。未新增测试文件、未调用真实模型、未验证前端工具展示。无依赖、配置或业务 Store 变更。</p>
 <h2 id="architecture">1. 总体架构</h2><pre><code>未来 Web 前端 / 当前 API 客户端
             │ HTTP + SSE
             ▼

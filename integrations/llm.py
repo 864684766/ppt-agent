@@ -2,34 +2,19 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
-from typing import Protocol, cast
+from typing import cast
 
 import httpx
 from langchain.messages import AIMessageChunk
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APIError, APITimeoutError
+from pydantic import SecretStr
 
-from config.settings import Settings
+from domain.chat import ChatClient, ModelCallError
 
 
 class ModelConfigurationError(ValueError):
-    """必要的模型配置缺失；健康检查仍可独立使用。"""
-
-
-class ModelCallError(Exception):
-    """可公开的调用错误；不携带代理原始响应、密钥或请求正文。"""
-
-    def __init__(self, message: str, *, timed_out: bool = False) -> None:
-        super().__init__(message)
-        self.timed_out = timed_out
-
-
-class ChatClient(Protocol):
-    """接口只依赖这份行为约定，测试时可用不联网的假客户端替换。"""
-
-    def stream_reply(self, message: str) -> AsyncGenerator[str, None]:
-        """返回可 aclose 的异步生成器，便于调用方在取消时释放上游连接。"""
-        ...
+    """模型连接参数缺失或无效，由组装层转换为对应入口的错误。"""
 
 
 class LangChainChatClient:
@@ -74,31 +59,51 @@ class LangChainChatClient:
 
 
 def create_chat_client(
-    settings: Settings, http_client: httpx.AsyncClient
+    *,
+    base_url: str,
+    api_key: SecretStr,
+    model_name: str,
+    timeout_seconds: float,
+    max_tokens: int,
+    http_client: httpx.AsyncClient,
 ) -> ChatClient:
-    """使用默认模型创建客户端；这里只组装对象，不发起模型请求。
+    """通过显式参数创建适配器，不依赖本项目的 Settings 或 .env 路径。
 
-    http_client 由调用方管理生命周期。后续任务专用模型复用配置选择规则，
-    本调试接口仅使用 LLM_MODEL，避免混淆普通对话和大纲任务。
+    Args:
+        base_url: OpenAI 兼容代理基础地址，须包含供应商要求的基础路径。
+        api_key: 密钥包装对象，避免常规打印时展开明文。
+        model_name: 调用方已选定的模型；工厂不决定任务路由。
+        timeout_seconds: 上游请求超时秒数，不是整个流的总时限。
+        max_tokens: 本次输出 token 上限，仍须满足实际模型限制。
+        http_client: 调用方拥有并负责关闭的异步 HTTP 客户端。
+
+    Returns:
+        满足 ChatClient 契约的适配器；创建时不发送模型请求。
+
+    Raises:
+        ModelConfigurationError: 必填连接参数缺失或基础地址无效。
+
+    配置来源和客户端生命周期由外层组装。独立脚本可直接传参复用，
+    无需携带 FastAPI、Settings 或项目目录；仍需安装本适配器的 SDK 依赖。
     """
-    if not all((settings.llm_base_url, settings.llm_api_key.get_secret_value(), settings.llm_model)):
-        raise ModelConfigurationError("请配置 LLM_BASE_URL、LLM_API_KEY 和 LLM_MODEL。")
+    if not all((base_url, api_key.get_secret_value(), model_name)):
+        raise ModelConfigurationError("模型基础地址、密钥和模型名称不能为空。")
     try:
-        endpoint = httpx.URL(settings.llm_base_url)
+        endpoint = httpx.URL(base_url)
     except httpx.InvalidURL:
-        raise ModelConfigurationError("LLM_BASE_URL 必须是有效的 HTTP 或 HTTPS 基础地址。") from None
+        raise ModelConfigurationError("模型基础地址必须是有效的 HTTP 或 HTTPS 地址。") from None
     if endpoint.scheme not in ("http", "https") or not endpoint.host:
-        raise ModelConfigurationError("LLM_BASE_URL 必须是有效的 HTTP 或 HTTPS 基础地址。")
+        raise ModelConfigurationError("模型基础地址必须是有效的 HTTP 或 HTTPS 地址。")
 
     model = ChatOpenAI(
-        base_url=settings.llm_base_url,
+        base_url=base_url,
         # 当前版本接受 SecretStr；直接传入，避免提前展开成明文字符串。
-        api_key=settings.llm_api_key,
-        model=settings.llm_model,
-        timeout=settings.llm_timeout_seconds,
+        api_key=api_key,
+        model=model_name,
+        timeout=timeout_seconds,
         # 学习阶段一次请求只尝试一次，便于理解错误和控制调用次数。
         max_retries=0,
-        max_tokens=settings.llm_max_tokens,
+        max_tokens=max_tokens,
         http_async_client=http_client,
         # 固定使用 OpenAI 兼容的 Chat Completions 接口。
         use_responses_api=False,

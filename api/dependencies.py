@@ -7,7 +7,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from config.settings import Settings
-from integrations.llm import ChatClient, ModelConfigurationError, create_chat_client
+from domain.chat import ChatClient
+from integrations.llm import ModelConfigurationError, create_chat_client
 
 
 async def get_chat_client() -> AsyncIterator[ChatClient]:
@@ -25,7 +26,16 @@ async def get_chat_client() -> AsyncIterator[ChatClient]:
 
     async with httpx.AsyncClient() as http_client:
         try:
-            client = create_chat_client(settings, http_client)
+            # 这里是组装边界：将项目配置映射为适配器参数。
+            # 适配器本身不知道 Settings、.env 或 FastAPI 的存在。
+            client = create_chat_client(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key,
+                model_name=settings.llm_model,
+                timeout_seconds=settings.llm_timeout_seconds,
+                max_tokens=settings.llm_max_tokens,
+                http_client=http_client,
+            )
         except ModelConfigurationError as error:
             raise HTTPException(503, str(error)) from None
         yield client

@@ -1,16 +1,7 @@
 """健康检查路由，用于验证 HTTP 服务能够正常响应。"""
 
-from typing import Literal
-
 from fastapi import APIRouter
-from pydantic import BaseModel
-
-
-class HealthResponse(BaseModel):
-    """健康检查响应；不代表模型或 PPT 生成等外部能力已经可用。"""
-
-    # 固定取值使接口契约和 OpenAPI 文档保持一致。
-    status: Literal["ok"] = "ok"
+from api.schemas.health import HealthResponse
 
 
 # 同类接口集中到一个路由对象，由 api/router.py 汇总后挂载到应用。
