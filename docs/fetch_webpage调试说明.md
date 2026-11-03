@@ -9,6 +9,7 @@
 ```dotenv
 WEBPAGE_TIMEOUT_SECONDS=20
 WEBPAGE_MAX_DOWNLOAD_BYTES=2000000
+WEBPAGE_TLS_VERIFY=true
 ```
 
 系统环境优先于.env，缺失时使用Settings默认值。前者是网页HTTP各阶段等待超时秒数，范围(0,120]；后者是解压后HTML下载字节上限，范围1024至10000000，超限报错。它们不是任务总时限，也不是工具max_chars。不修改用户已有.env，不需要额外API密钥。
@@ -49,7 +50,7 @@ PyCharm选择pytest运行此文件，附加参数-s。在`result = await fetch_t
 
 只读取可直接通过HTTP取得的静态HTML/XHTML；不执行JavaScript、不登录、不处理附件、不OCR。优先提取main，其次article，否则使用去除脚本、样式及常见导航后的页面文本。使用标准库HTMLParser，是启发式提取，不保证去掉所有广告，也不保证识别出验证码/登录提示；只要存在文本就不自动宣称有效文章。正文作为外部资料，不执行其中的指令。
 
-适配器检查HTTP状态和Content-Type，跟随重定向，下载时按解压后字节数限制。测试宿主设置max_redirects=5；其他调用方同样负责配置连接。超时、HTTP错误、连接失败、重定向过多、非HTML、超限和空文本返回明确工具错误，不暴露响应原文。不捕获取消异常。保留TLS校验，遇到证书问题不自动关闭验证。
+适配器检查HTTP状态和Content-Type，跟随重定向，下载时按解压后字节数限制。测试宿主设置max_redirects=5；其他调用方同样负责配置连接。超时、HTTP错误、连接失败、重定向过多、非HTML、超限和空文本返回明确工具错误，不暴露响应原文。不捕获取消异常。TLS通过WEBPAGE_TLS_VERIFY统一配置：默认true，false为所有目标网站跳过证书身份校验的兼容模式。当前本机.env按用户要求设为false，不维护域名名单。连接由create_webpage_http_client创建，最多5次重定向。证书模式不保证能访问登录、验证码、动态页面或被拒绝的网站；服务端身份无法验证的风险仍存在。证书校验失败单独提示，工具不会自行改变配置。
 
 连接由外层async with创建关闭，搜索和网页读取共用连接池。读取业务只依赖小型Protocol和标准库数据结构，不依赖HTTP库、Settings或LangChain。业务负责参数与字符截断；HTTP适配器负责网络，HTML解析器只负责文本提取，工具薄入口选择公开字段。
 
@@ -65,6 +66,7 @@ PyCharm选择pytest运行此文件，附加参数-s。在`result = await fetch_t
 | models/web/webpage_content.py | 适配器内容与业务读取结果，标准库dataclass |
 | domain/web/webpage_reader_contract.py | 可替换读取协议与安全异常 |
 | domain/web/webpage_reader.py | URL、字符范围校验与文本截断 |
+| integrations/webpage_http_client.py | 通用TLS策略和HTTP连接创建，外层负责关闭 |
 | integrations/http_webpage_reader.py | HTTP读取、下载限制、编码处理 |
 | integrations/html_text_extractor.py | 静态HTML的标题及文本提取 |
 | tools/web/fetch_webpage_tool.py | LangChain工具入口 |

@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import re
+import ssl
 
 import httpx
 
@@ -55,6 +56,14 @@ class HttpWebpageReader:
             raise WebpageReadError(f"网页返回HTTP {error.response.status_code}，无法读取。") from None
         except httpx.TooManyRedirects:
             raise WebpageReadError("网页重定向次数过多，无法读取。") from None
+        except httpx.ConnectError as error:
+            # 遍历异常链区分TLS校验失败，不把底层原文或请求信息公开。
+            cause: BaseException | None = error
+            while cause is not None:
+                if isinstance(cause, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(cause):
+                    raise WebpageReadError("网页HTTPS证书校验失败，请检查证书、代理或网页TLS校验配置。") from None
+                cause = cause.__cause__
+            raise WebpageReadError("无法连接网页，请检查网络或选择其他来源。") from None
         except httpx.RequestError:
             raise WebpageReadError("无法连接网页，请检查网络或选择其他来源。") from None
 

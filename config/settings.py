@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     webpage_timeout_seconds: float = Field(default=20, gt=0, le=120)
     # 解压后HTML下载字节上限，默认200万，范围1024至1000万；不是max_chars。
     webpage_max_download_bytes: int = Field(default=2_000_000, ge=1024, le=10_000_000)
+    # 网页HTTPS证书校验开关：默认True；False跳过全部目标的证书身份校验。
+    # 只控制外层连接策略，模型不能通过工具参数修改，不保证所有网站均可读。
+    webpage_tls_verify: bool = Field(default=True, description="是否校验网页HTTPS证书，默认开启。")
 
     def get_searxng_allowed_engines(self) -> tuple[str, ...]:
         """返回去空白、去重后的Agent可选搜索引擎名称。

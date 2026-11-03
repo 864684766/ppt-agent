@@ -6,13 +6,13 @@ uv run --locked python -m pytest tests/test_fetch_webpage.py -s -q
 
 import json
 
-import httpx
 import pytest
 from langchain_core.tools import ToolException
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from config.settings import Settings
 from integrations.http_webpage_reader import HttpWebpageReader
+from integrations.webpage_http_client import create_webpage_http_client
 from integrations.searxng_search_client import SearxngSearchClient
 from tools.web import create_fetch_webpage_tool, create_search_web_tool
 
@@ -21,7 +21,7 @@ from tools.web import create_fetch_webpage_tool, create_search_web_tool
 async def test_tool_calling_json() -> None:
     """只转换定义，不发送请求；核对模型能看到参数说明。"""
     settings = Settings()
-    async with httpx.AsyncClient(max_redirects=5) as http_client:
+    async with create_webpage_http_client(verify_tls=settings.webpage_tls_verify) as http_client:
         reader = HttpWebpageReader(
             client=http_client, timeout_seconds=settings.webpage_timeout_seconds,
             max_download_bytes=settings.webpage_max_download_bytes,
@@ -50,7 +50,7 @@ async def test_tool_return_result_from_search() -> None:
     settings = Settings()
     search_arguments = {"query": "中国居民膳食指南 健康饮食", "max_results": 3}
     # 共用连接池，响应在各适配器的上下文中关闭；最多跟随5次HTTP重定向。
-    async with httpx.AsyncClient(max_redirects=5) as http_client:
+    async with create_webpage_http_client(verify_tls=settings.webpage_tls_verify) as http_client:
         search_client = SearxngSearchClient(
             client=http_client, base_url=settings.searxng_base_url,
             engines=settings.searxng_default_engines,
