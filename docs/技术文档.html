@@ -19,7 +19,9 @@
 │   │   └── search_materials_contract.py  # 检索工具输入、公开输出和定位
 │   ├── web/
 │   │   ├── web_search_candidate.py        # 内部候选网页，不是已登记资料
-│   │   └── search_web_contract.py         # 搜索输入与公开输出
+│   │   ├── search_web_contract.py         # 搜索输入与公开输出
+│   │   ├── fetch_webpage_contract.py      # 网页读取输入与公开输出
+│   │   └── webpage_content.py             # 网页内容及内部读取结果
 │   ├── chat/
 │   │   └── chat_request.py                # ChatRequest：HTTP请求，回复为SSE
 │   └── health/
@@ -28,7 +30,9 @@
 │   ├── chat_client_contract.py            # ChatClient协议与模型调用错误
 │   ├── web/
 │   │   ├── web_search_contract.py         # 搜索能力协议和安全错误
-│   │   └── web_search.py                  # 查询参数与搜索业务入口
+│   │   ├── web_search.py                  # 查询参数与搜索业务入口
+│   │   ├── webpage_reader_contract.py     # 网页读取协议与错误
+│   │   └── webpage_reader.py              # 网页校验与文本截断
 │   └── materials/
 │       ├── material_validator.py  # 公共项目编号与来源唯一性校验
 │       ├── material_catalog.py            # 项目资料目录筛选、排序、分页
@@ -36,7 +40,8 @@
 │       └── material_search.py             # 正文关系校验、关键词匹配和截取
 ├── tools/                                # 模型可调用的工具适配
 │   ├── web/
-│   │   └── search_web_tool.py             # 联网搜索异步工具
+│   │   ├── search_web_tool.py             # 联网搜索异步工具
+│   │   └── fetch_webpage_tool.py          # 网页读取工具
 │   └── materials/
 │       ├── list_materials_tool.py         # 资料目录工具
 │       ├── read_material_tool.py          # 正文读取工具
@@ -54,18 +59,24 @@
 │       └── health_routes.py              # 健康检查HTTP入口
 ├── integrations/
 │   ├── langchain_chat_client.py           # LangChain模型客户端适配
-│   └── searxng_search_client.py            # SearXNG请求与候选转换
+│   ├── searxng_search_client.py            # SearXNG请求与候选转换
+│   ├── http_webpage_reader.py             # 网页下载与编码处理
+│   └── html_text_extractor.py             # 静态HTML可读文本提取
 ├── config/
 │   └── settings.py                       # 环境变量配置
 ├── examples/
 │   └── search_web_demo.py                 # 独立真实搜索断点入口
 ├── tests/
 │   ├── test_list_materials.py             # 目录工具：JSON定义和返回结果
+│   ├── test_fetch_webpage.py             # JSON及真实搜索后读取验证
 │   ├── test_search_web.py                # JSON定义检查与真实搜索集成验证
 │   ├── test_read_material.py             # 读取工具：JSON定义和返回结果
 │   └── test_search_materials.py           # 检索工具：JSON定义和返回结果
 ├── agents/                               # 智能体预留包，尚无业务实现
 ├── workflows/                            # 编排预留包，尚无业务实现
+├── optimization/                         # 后续调优需求及实验记录
+│   ├── README.md
+│   └── 搜索与网页读取效率对比.md
 ├── docs/                                 # 技术、产品、任务和调试说明
 ├── AGENTS.md                             # 开发规则
 ├── pyproject.toml                        # uv依赖声明
@@ -142,6 +153,10 @@ api/sse_encoder → 标准库 json
 <p>tool_start、tool_result、progress、reasoning_summary 仅为未来事件示例，当前 /ppt-agent/v1/chat 仍仅产出 delta/done/error。文本流契约当前不携带工具事件或推理字段；后续应先定义独立的结构化运行事件契约，由 Agent/工作流产生，再由 API 转 SSE，不能由通用编码器识别 SDK 对象。推理摘要需显式产出，供应商公开 reasoning 字段的支持以 SDK、模型和代理实测为准，不保证获得完整内部思维链。前端须按事件名分别显示或聚合；Postman 可查看事件，不自动生成工具卡片。</p>
 <p>单一职责检查：main为应用组装/启动；api_router为路由组装；chat_routes为对话HTTP与流事件映射；models按功能保存接口/工具数据；chat_dependencies为对话依赖及连接生命周期；sse_encoder为通用编码；chat_client_contract为独立协议；langchain_chat_client为外部模型适配；settings为配置读取。目录查询位于material_catalog，公共跨记录业务校验位于material_validator，单份资料字段校验位于material_metadata_validator。各文件围绕一个可说明职责组织，不按行数拆分。</p>
 <p>验证：临时脚本对工具嵌套数据、摘要换行、进度做 JSON 往返；对非法事件名、非标准数值、不可编码对象检查拒绝；现有 HTTP delta/done 与健康检查通过。未新增测试文件、未调用真实模型、未验证前端工具展示。无依赖、配置或业务 Store 变更。</p>
+<h3>第五个Agent工具：fetch_webpage（2026-11-03）</h3>
+<p>工具接收url和max_chars，业务通过WebpageReader协议读取WebpageContent并生成WebpageReadResult，工具选择字段公开。HttpWebpageReader负责网络与编码，HtmlTextExtractor只负责静态HTML解析；不新增依赖，领域层不依赖HTTP/Settings/LangChain。优先main/article，缺失时退回清理后的页面文本；不执行JavaScript，不处理附件，不保证消除广告或识别登录/验证码。工具不登记资料、不返回source_id，Store不变。</p>
+<p>配置WEBPAGE_TIMEOUT_SECONDS默认20、范围(0,120]，控制HTTP各阶段等待；WEBPAGE_MAX_DOWNLOAD_BYTES默认2000000、范围1024至10000000，控制解压后HTML字节数，超限报错。输入max_chars默认12000、范围100至50000，控制返回正文字符数，超出时标记truncated。连接属于宿主，真实测试共用连接池并限制5次重定向。</p>
+<p>返回requested_url、final_url、title、text、returned_chars、extracted_chars、truncated、fetched_at，字段含义及限制见<a href="fetch_webpage调试说明.md">工具调试说明</a>。JSON定义和真实search_web→网页读取两项验证通过；此次读取到1857字符，但内容不切题，不代表相关性合格。后续性能调优需求单独记录在<a href="../optimization/README.md">optimization目录</a>，未执行A/B实验。</p>
 <h3>第四个Agent工具：search_web（2026-11-03）</h3>
 <p>模型传query和max_results；工具调用领域入口，领域只依赖WebSearchClient协议，外层注入SearxngSearchClient。适配器向配置地址的/search请求format=json、categories=general和默认引擎，保留上游顺序、完整URL去重、跳过无效地址并限制返回条数。不做语义过滤，不将score当作相似度，不抓正文、不登记资料。</p>
 <p>配置：SEARXNG_BASE_URL默认空（未配置时真实调用报错），SEARXNG_DEFAULT_ENGINES默认sogou（本次未指定引擎时使用，逗号分隔，空值使用服务器默认），SEARXNG_ALLOWED_ENGINES默认sogou,bing,360search（以后Agent可选择的范围，逗号分隔，必须与服务器settings.yml的name一致），WEB_SEARCH_TIMEOUT_SECONDS默认30、范围(0,120]，控制HTTP各阶段等待。允许列表只负责边界，提示词将根据它生成模型说明，工具运行时还要校验；本次工具尚未开放engines参数。系统环境优先于.env。无需SearXNG内部secret_key；地址、默认引擎和超时已由独立调试入口接线；允许列表仅已实现读取和解析，提示词及工具参数校验尚未接线。未接聊天或HTTP搜索接口。</p>

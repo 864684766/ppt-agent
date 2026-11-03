@@ -20,6 +20,8 @@
 | 资料 | read_material 工具输入与公开输出 | ReadMaterialInput、ReadMaterialOutput、MaterialReadLocation | [read_material_contract.py](materials/read_material_contract.py) |
 | 联网 | 内部候选网页 | WebSearchCandidate | [web_search_candidate.py](web/web_search_candidate.py) |
 | 联网 | search_web输入与公开输出 | SearchWebInput、SearchWebOutput、WebSearchItem | [search_web_contract.py](web/search_web_contract.py) |
+| 联网 | fetch_webpage输入与公开输出 | FetchWebpageInput、FetchWebpageOutput | [fetch_webpage_contract.py](web/fetch_webpage_contract.py) |
+| 联网 | 内部网页内容与读取结果 | WebpageContent、WebpageReadResult | [webpage_content.py](web/webpage_content.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 
@@ -86,10 +88,14 @@ MaterialReadResult由读取业务创建、工具适配使用，包含内部fragm
 
 ## 联网候选与资料来源的边界（2026-11-02）
 
-未来的搜索适配器将供应商结果创建为WebSearchCandidate → WebSearchClient协议交付业务 → search_web工具选择公开字段返回SearchWebOutput。SearchWebInput由运行时校验模型参数。实体为标准库dataclass，输入为Pydantic，公开输出为TypedDict；模型目录不导入执行层。当前只有测试替身，没有真实搜索适配器。
+SearXNG适配器将供应商结果创建为WebSearchCandidate → WebSearchClient协议交付业务 → search_web工具选择公开字段返回SearchWebOutput。SearchWebInput由运行时校验模型参数。实体为标准库dataclass，输入为Pydantic，公开输出为TypedDict；模型目录不导入执行层。已接入真实SearXNG适配器。
 
-candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录source_id，不承诺创建可恢复的Store。title/url/snippet不代表已抓取正文。后续fetch_webpage抓取并登记后才产生可供共用资料工具使用的来源。当前不登记、不落盘、不保存查询历史。
+candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录source_id，不承诺创建可恢复的Store。title/url/snippet不代表已抓取正文。fetch_webpage已能抓取静态网页；资料登记尚未接线，不能把工具结果当作可供共用资料工具使用的来源。当前不登记、不落盘、不保存查询历史。
 
 ## 字段说明约定（2026-11-03）
 
 当前实体与TypedDict输出逐字段提供中文注释；输入通过Field(description=...)解释。阅读类型时先看字段附近注释，区分条数/字符数、None/null、版本与页码、候选ID与来源ID。源码注释不会自动传给模型，必要的返回字段含义同时写入工具description。具体搜索返回字段见[联网搜索调试说明](../docs/search_web调试说明.md)。
+
+## 网页读取数据流（2026-11-03）
+
+HttpWebpageReader创建WebpageContent → WebpageReader协议返回业务 → read_webpage创建WebpageReadResult → fetch_webpage工具组装FetchWebpageOutput。FetchWebpageInput由运行时校验，输入说明通过Field进入Schema。内部dataclass只依赖标准库，不反向依赖执行层；公开输出不含本机路径或项目内部状态。没有创建资料source_id/版本或新的Store。字段及真实搜索测试见[网页读取调试说明](../docs/fetch_webpage调试说明.md)。

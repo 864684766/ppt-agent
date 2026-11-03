@@ -20,7 +20,7 @@ def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
         "返回query（实际搜索词）、items（候选网页列表）和returned_count（本次返回条数，非全网总数）。"
         "每个候选含candidate_id（URL生成的候选编号）、title（网页标题）、url（网页地址）、snippet（搜索摘要）。snippet不是完整原文或事实核实结果；"
         "candidate_id不能用于read_material，不会自动登记source_id。"
-        "后续需要fetch_webpage抓取并登记正文；该工具尚未实现。"
+        "可用fetch_webpage读取候选url的正文；正文登记为项目资料尚未实现。"
         "查询已上传或已登记资料应使用search_materials；不搜索PPT设计模板。"
         "每次只搜索一次，不自动扩词、重试或循环；空items表示本次没有候选。"
     ))

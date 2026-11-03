@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # HTTP各阶段等待超时秒数，默认30、范围(0,120]；不是整个任务时限。
     web_search_timeout_seconds: float = Field(default=30, gt=0, le=120)
 
+    # 读取网页的HTTP各阶段超时秒数，与SearXNG搜索超时分别配置。
+    webpage_timeout_seconds: float = Field(default=20, gt=0, le=120)
+    # 解压后HTML下载字节上限，默认200万，范围1024至1000万；不是max_chars。
+    webpage_max_download_bytes: int = Field(default=2_000_000, ge=1024, le=10_000_000)
+
     def get_searxng_allowed_engines(self) -> tuple[str, ...]:
         """返回去空白、去重后的Agent可选搜索引擎名称。
 
