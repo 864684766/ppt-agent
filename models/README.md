@@ -18,6 +18,8 @@
 | 资料 | list_materials 工具输出 | ListMaterialsOutput、MaterialListItem | [list_materials_contract.py](materials/list_materials_contract.py) |
 | 资料 | 块内读取的内部结果 | MaterialReadResult | [material_query_results.py](materials/material_query_results.py) |
 | 资料 | read_material 工具输入与公开输出 | ReadMaterialInput、ReadMaterialOutput、MaterialReadLocation | [read_material_contract.py](materials/read_material_contract.py) |
+| 联网 | 内部候选网页 | WebSearchCandidate | [web_search_candidate.py](web/web_search_candidate.py) |
+| 联网 | search_web输入与公开输出 | SearchWebInput、SearchWebOutput、WebSearchItem | [search_web_contract.py](web/search_web_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 
@@ -81,3 +83,13 @@ MaterialFragment及内部检索结果为标准库dataclass；SearchMaterialsInpu
 宿主提供MaterialSummary与MaterialFragment快照 → ReadMaterialInput校验模型定位 → material_reader.read_project_material返回MaterialReadResult → 工具选择公开字段生成ReadMaterialOutput。
 
 MaterialReadResult由读取业务创建、工具适配使用，包含内部fragment，不直接公开；公开输出不含project_id或本机路径。ReadMaterialInput为Pydantic，ReadMaterialOutput与MaterialReadLocation为TypedDict。共享的validate_material_content_data放在domain/materials/material_validator.py，检索和读取各自引用它，不互相依赖。详见[read_material调试说明](../docs/read_material调试说明.md)。
+
+## 联网候选与资料来源的边界（2026-11-02）
+
+未来的搜索适配器将供应商结果创建为WebSearchCandidate → WebSearchClient协议交付业务 → search_web工具选择公开字段返回SearchWebOutput。SearchWebInput由运行时校验模型参数。实体为标准库dataclass，输入为Pydantic，公开输出为TypedDict；模型目录不导入执行层。当前只有测试替身，没有真实搜索适配器。
+
+candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录source_id，不承诺创建可恢复的Store。title/url/snippet不代表已抓取正文。后续fetch_webpage抓取并登记后才产生可供共用资料工具使用的来源。当前不登记、不落盘、不保存查询历史。
+
+## 字段说明约定（2026-11-03）
+
+当前实体与TypedDict输出逐字段提供中文注释；输入通过Field(description=...)解释。阅读类型时先看字段附近注释，区分条数/字符数、None/null、版本与页码、候选ID与来源ID。源码注释不会自动传给模型，必要的返回字段含义同时写入工具description。具体搜索返回字段见[联网搜索调试说明](../docs/search_web调试说明.md)。

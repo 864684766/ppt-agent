@@ -65,24 +65,35 @@ class SearchMaterialsInput(BaseModel):
 class MaterialMatchLocation(TypedDict):
     """原文定位；page从1开始，未知为None，block_id用于后续精确读取。"""
 
+    # 原文块编号，交给read_material精确读取，不是搜索排名。
     block_id: str
+    # 原文件页码，从1开始；未知为None（JSON中为null）。
     page: int | None
 
 
 class MaterialSearchItem(TypedDict):
     """不返回内部project_id或本地路径；matched_queries对应完整原文块。"""
 
+    # 命中正文所属资料的项目内编号。
     source_id: str
+    # 命中正文的资料版本，读取原块时需原样传入。
     version: str
+    # 原文定位，包含block_id和可选原页码page。
     location: MaterialMatchLocation
+    # 完整正文块命中的查询词；可能不全在截取后的text中出现。
     matched_queries: list[str]
+    # 围绕首次命中位置截取的原文片段，不保证包含整个块。
     text: str
+    # True表示该块完整正文未全部返回，可用read_material继续核实。
     text_truncated: bool
 
 
 class SearchMaterialsOutput(TypedDict):
     """零命中返回空matches；truncated表示条数上限，不是单条文本截取。"""
 
+    # 本次返回的公开命中块列表；零命中时为空列表。
     matches: list[MaterialSearchItem]
+    # 全部命中块总数，可能大于matches长度。
     total_matches: int
+    # True表示结果条数受max_results限制，不代表单条文本是否完整。
     truncated: bool

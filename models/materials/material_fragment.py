@@ -18,11 +18,17 @@ class MaterialFragment:
     text 保存此块的完整解析文本；工具返回的截取片段不替代这里的原文。
     """
 
+    # 正文所属项目编号，用于与当前任务范围隔离。
     project_id: str
+    # 所属资料编号，对应目录中同项目的MaterialSummary.source_id。
     source_id: str
+    # 正文来源版本，必须与资料目录版本一致。
     version: str
+    # 解析模块分配的正文块编号；在同一来源版本内唯一，不是检索结果序号。
     block_id: str
+    # 该块完整的解析正文；保留原文空白，不用搜索摘要覆盖。
     text: str
+    # 原文件页码，从1开始；网页或无法可靠定位时为None。
     page: int | None = None
 
     def __post_init__(self) -> None:

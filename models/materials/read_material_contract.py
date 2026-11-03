@@ -36,18 +36,28 @@ class ReadMaterialInput(BaseModel):
 class MaterialReadLocation(TypedDict):
     """原文定位；page从1开始，未知为None，不编造页码。"""
 
+    # 本次读取的原文块编号，和请求定位对应。
     block_id: str
+    # 原文件页码，从1开始；未知为None（JSON中为null）。
     page: int | None
 
 
 class ReadMaterialOutput(TypedDict):
     """实际读取范围为[offset, end_offset)，均相对完整块；仅描述字典类型。"""
 
+    # 实际读取的资料编号，不是候选网页编号。
     source_id: str
+    # 实际读取的资料版本，与请求版本一致。
     version: str
+    # 原文定位：块编号和可获得的原页码。
     location: MaterialReadLocation
+    # 本次返回的原文范围，不一定是整块，更不是整份文件。
     text: str
+    # 实际起点，完整块内从0开始的Python字符偏移。
     offset: int
+    # 实际终点，不包含该位置；本次范围为[offset,end_offset)。
     end_offset: int
+    # 完整原块的Python字符总数，不是本次返回长度或token数。
     total_chars: int
+    # 下一次读取的offset；None（JSON中为null）表示到块尾。
     next_offset: int | None

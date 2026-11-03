@@ -13,6 +13,7 @@ class ModelCallError(Exception):
 
     def __init__(self, message: str, *, timed_out: bool = False) -> None:
         super().__init__(message)
+        # True表示模型超时，供HTTP层选择model_timeout错误码；False为其他模型错误。
         self.timed_out = timed_out
 
 

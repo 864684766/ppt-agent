@@ -37,15 +37,24 @@ class MaterialSummary:
     """
 
     # 以下字段由宿主登记：模型只能看公开摘要，不能修改项目绑定。
+    # 所属PPT项目编号；内部隔离范围，由宿主绑定，不向模型公开。
     project_id: str
+    # 所属项目内唯一的资料编号；供检索、读取和引用使用，不是本地路径。
     source_id: str
+    # 资料显示名称，例如员工手册.pdf。
     name: str
+    # 资料来源：uploaded为上传业务文件，web为已登记网页。
     origin: MaterialOrigin
+    # 文件或正文格式，例如pdf、docx、html，不含点号。
     format: str
+    # 解析状态：pending待解析、ready解析成功、failed解析失败；上传成功不等于ready。
     status: MaterialStatus
+    # 资料版本标识，例如v1；必须与对应正文块版本一致。
     version: str
     # 可选字段用 None 表示未知/不适用；不要将未知页数写成 0。
+    # 原网页地址；上传资料为None，不公开本机文件路径。
     url: str | None = None
+    # 原文件总页数；未知为None，不用0代替未知。
     page_count: int | None = None
 
     def __post_init__(self) -> None:

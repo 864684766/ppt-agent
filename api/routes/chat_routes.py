@@ -26,13 +26,16 @@ async def stream_events(client: ChatClient, message: str) -> AsyncGenerator[str,
     try:
         async with aclosing(client.stream_reply(message)) as chunks:
             async for text in chunks:
+                # text：本次新增的可见正文，客户端按顺序追加；不是完整回复或严格单个token。
                 yield encode_event("delta", {"text": text})
     except ModelCallError as error:
         yield encode_event("error", {
+            # code：稳定错误分类；message：可展示的安全提示，不含上游原始异常。
             "code": "model_timeout" if error.timed_out else "model_error",
             "message": str(error),
         })
         return
+    # finish_reason：本流正常结束原因；completed不表示PPT业务任务已经完成。
     yield encode_event("done", {"finish_reason": "completed"})
 
 

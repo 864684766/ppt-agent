@@ -3,6 +3,7 @@
 :root{color-scheme:light;--ink:#1b2932;--muted:#596c72;--line:#d7e0e2;--accent:#12675f;--wash:#edf6f4;--orange:#a2541d}*{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:var(--ink);font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:white;padding:42px max(24px,calc((100% - 1100px)/2))}header p{color:#cfe3df;margin:5px 0}h1{font-size:32px;line-height:1.3;margin:8px 0}h2{font-size:23px;margin:42px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px}h3{font-size:18px;margin:25px 0 8px}main{max-width:1100px;margin:auto;padding:8px 24px 70px}nav{background:white;border:1px solid var(--line);padding:16px 22px;margin:22px 0}nav a{display:inline-block;margin:4px 18px 4px 0}a{color:var(--accent)}p{margin:10px 0}ul,ol{padding-left:24px}li{margin:5px 0}.note{border-left:4px solid var(--accent);background:var(--wash);padding:12px 18px;margin:18px 0}.warn{border-color:var(--orange);background:#fff4e9}table{width:100%;border-collapse:collapse;background:white;margin:12px 0}th,td{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}.scroll{overflow-x:auto}code{background:#e9efee;padding:1px 4px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#182b30;color:#e5f5f2;padding:18px;line-height:1.55;font:14px/1.6 Consolas,monospace}pre code{background:none;padding:0;color:inherit}.flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin:18px 0}.flow span{background:white;border:1px solid var(--line);padding:9px 12px}.flow span:not(:last-child):after{content:' →';color:var(--accent)}.meta{color:var(--muted)}@media(max-width:650px){h1{font-size:26px}main{padding-inline:16px}header{padding:30px 16px}table{min-width:680px}}@media print{body{background:white}header{background:white;color:black;padding:10px 0}header p{color:#555}main{padding:0}nav{display:none}h2{break-after:avoid}table,.note{break-inside:avoid}pre{background:#f2f2f2;color:black}}
 </style></head><body><header><p>TECHNICAL DESIGN · DRAFT 0.1 · 2026-10-30</p><h1>AI PPT 工作台<br>技术设计文档</h1><p>Python 后端优先 · Agent 编排 · 模板分析与可编辑 PPTX</p></header><main><nav><strong>目录</strong><br><a href="#architecture">架构</a><a href="#workflow">运行流程</a><a href="#agents">子智能体</a><a href="#template">模板</a><a href="#skills">技能与工具</a><a href="#api">API 与数据</a><a href="#ops">运行与验证</a><a href="#sources">参考资料</a></nav>
 <div class="note"><strong>状态：</strong>讨论稿。第一阶段以 Windows 本机为目标，必须实现完整大纲对话编辑、上传完整或残缺模板、识别不全时的人工反馈与继续生成。项目最终有前后端，本阶段只实现 Python 后端；接口、存储和组件名称是建议设计，待原型及讨论确认。不会将未经验证的 Harness、PPT Master 和模板能力视为已实现。</div>
+<div class="note"><strong>字段说明审查（2026-11-03）：</strong>已补齐资料实体、目录/检索/读取内部结果、四个工具公开输出及网页候选的逐字段中文注释；输入沿用Field描述，健康响应补充OpenAPI字段说明，配置与SSE事件载荷补充语义。条数、字符偏移、空值、版本与编号需明确区分。模型可见的工具description需解释关键返回字段，源码注释不自动成为模型Schema。后续作为开发规则执行。</div>
 <h2 id="structure">项目目录与职责</h2>
 <p>当前采用根目录直接放置 Python 功能包的布局。根目录 <code>main.py</code> 已提供 FastAPI 应用工厂和应用对象。项目根目录不作为 Python 包使用，不放置 <code>__init__.py</code>。</p>
 <pre><code>ppt-agent/
@@ -16,18 +17,26 @@
 │   │   ├── list_materials_contract.py    # 目录工具输入、公开输出和条目
 │   │   ├── read_material_contract.py    # 读取工具输入、公开输出和定位
 │   │   └── search_materials_contract.py  # 检索工具输入、公开输出和定位
+│   ├── web/
+│   │   ├── web_search_candidate.py        # 内部候选网页，不是已登记资料
+│   │   └── search_web_contract.py         # 搜索输入与公开输出
 │   ├── chat/
 │   │   └── chat_request.py                # ChatRequest：HTTP请求，回复为SSE
 │   └── health/
 │       └── health_response.py             # HealthResponse：HTTP响应
 ├── domain/                               # 业务操作与框架无关协议
 │   ├── chat_client_contract.py            # ChatClient协议与模型调用错误
+│   ├── web/
+│   │   ├── web_search_contract.py         # 搜索能力协议和安全错误
+│   │   └── web_search.py                  # 查询参数与搜索业务入口
 │   └── materials/
 │       ├── material_validator.py  # 公共项目编号与来源唯一性校验
 │       ├── material_catalog.py            # 项目资料目录筛选、排序、分页
 │       ├── material_reader.py             # 指定版本、正文块与字符范围读取
 │       └── material_search.py             # 正文关系校验、关键词匹配和截取
 ├── tools/                                # 模型可调用的工具适配
+│   ├── web/
+│   │   └── search_web_tool.py             # 联网搜索异步工具
 │   └── materials/
 │       ├── list_materials_tool.py         # 资料目录工具
 │       ├── read_material_tool.py          # 正文读取工具
@@ -44,11 +53,15 @@
 │       ├── chat_routes.py                # 流式对话HTTP入口
 │       └── health_routes.py              # 健康检查HTTP入口
 ├── integrations/
-│   └── langchain_chat_client.py           # LangChain模型客户端适配
+│   ├── langchain_chat_client.py           # LangChain模型客户端适配
+│   └── searxng_search_client.py            # SearXNG请求与候选转换
 ├── config/
 │   └── settings.py                       # 环境变量配置
+├── examples/
+│   └── search_web_demo.py                 # 独立真实搜索断点入口
 ├── tests/
 │   ├── test_list_materials.py             # 目录工具：JSON定义和返回结果
+│   ├── test_search_web.py                # JSON定义检查与真实搜索集成验证
 │   ├── test_read_material.py             # 读取工具：JSON定义和返回结果
 │   └── test_search_materials.py           # 检索工具：JSON定义和返回结果
 ├── agents/                               # 智能体预留包，尚无业务实现
@@ -129,6 +142,10 @@ api/sse_encoder → 标准库 json
 <p>tool_start、tool_result、progress、reasoning_summary 仅为未来事件示例，当前 /ppt-agent/v1/chat 仍仅产出 delta/done/error。文本流契约当前不携带工具事件或推理字段；后续应先定义独立的结构化运行事件契约，由 Agent/工作流产生，再由 API 转 SSE，不能由通用编码器识别 SDK 对象。推理摘要需显式产出，供应商公开 reasoning 字段的支持以 SDK、模型和代理实测为准，不保证获得完整内部思维链。前端须按事件名分别显示或聚合；Postman 可查看事件，不自动生成工具卡片。</p>
 <p>单一职责检查：main为应用组装/启动；api_router为路由组装；chat_routes为对话HTTP与流事件映射；models按功能保存接口/工具数据；chat_dependencies为对话依赖及连接生命周期；sse_encoder为通用编码；chat_client_contract为独立协议；langchain_chat_client为外部模型适配；settings为配置读取。目录查询位于material_catalog，公共跨记录业务校验位于material_validator，单份资料字段校验位于material_metadata_validator。各文件围绕一个可说明职责组织，不按行数拆分。</p>
 <p>验证：临时脚本对工具嵌套数据、摘要换行、进度做 JSON 往返；对非法事件名、非标准数值、不可编码对象检查拒绝；现有 HTTP delta/done 与健康检查通过。未新增测试文件、未调用真实模型、未验证前端工具展示。无依赖、配置或业务 Store 变更。</p>
+<h3>第四个Agent工具：search_web（2026-11-03）</h3>
+<p>模型传query和max_results；工具调用领域入口，领域只依赖WebSearchClient协议，外层注入SearxngSearchClient。适配器向配置地址的/search请求format=json、categories=general和默认引擎，保留上游顺序、完整URL去重、跳过无效地址并限制返回条数。不做语义过滤，不将score当作相似度，不抓正文、不登记资料。</p>
+<p>配置：SEARXNG_BASE_URL默认空（未配置时真实调用报错），SEARXNG_DEFAULT_ENGINES默认sogou（本次未指定引擎时使用，逗号分隔，空值使用服务器默认），SEARXNG_ALLOWED_ENGINES默认sogou,bing,360search（以后Agent可选择的范围，逗号分隔，必须与服务器settings.yml的name一致），WEB_SEARCH_TIMEOUT_SECONDS默认30、范围(0,120]，控制HTTP各阶段等待。允许列表只负责边界，提示词将根据它生成模型说明，工具运行时还要校验；本次工具尚未开放engines参数。系统环境优先于.env。无需SearXNG内部secret_key；地址、默认引擎和超时已由独立调试入口接线；允许列表仅已实现读取和解析，提示词及工具参数校验尚未接线。未接聊天或HTTP搜索接口。</p>
+<p>连接由外层async with管理，适配器只借用。超时、连接、HTTP/JSON/响应结构故障转换安全错误；无候选且引擎报告故障时报错，部分成功时只返回候选。取消沿调用栈传播，未单独验证取消和各故障分支。按用户最新要求，search_web测试移除模拟数据，服务地址/引擎/超时统一读取Settings。JSON定义检查不发请求，结果测试实际联网，属于集成验证；本次2项通过并返回3条，含不相关网页，不代表内容质量通过。无新增依赖、无新增Store。详见<a href="search_web调试说明.md">配置、断点、字段及验证说明</a>。</p>
 <h3>第三个Agent工具：read_material（2026-11-02）</h3>
 <p>material_reader.py负责按source_id、version、block_id精确定位当前项目ready来源中的正文块，offset默认0，max_chars默认2000且为1–8000个Python字符。返回原文片段、原定位、实际字符范围、总字符数和next_offset；块尾为null。MaterialReadResult是内部结果，工具只选择公开字段返回。一次只读一个块，不包含相邻块，不按页读取，不访问原文件或进行OCR。</p>
 <p>模型契约见models/materials/read_material_contract.py；公共正文关联校验迁入domain/materials/material_validator.py并命名为validate_material_content_data，读取与检索不互相依赖。新工具的2项测试通过，与前两个工具合跑共6项通过。未接HTTP、聊天工具循环、真实上传或解析；无新增依赖或持久化。详见<a href="read_material调试说明.md">读取工具调试说明</a>。</p>

@@ -61,19 +61,30 @@ class ListMaterialsInput(BaseModel):
 class MaterialListItem(TypedDict):
     """明确选择可公开字段，不把内部对象全部转成字典交给模型。"""
 
+    # 项目内资料编号，可用于后续检索和引用。
     source_id: str
+    # 资料显示名称，不是本机文件路径。
     name: str
+    # 来源类型：uploaded上传文件，web已登记网页。
     origin: Literal["uploaded", "web"]
+    # 资料格式名，例如pdf、docx、html。
     format: str
+    # 解析状态：pending待解析、ready可读、failed解析失败。
     status: Literal["pending", "ready", "failed"]
+    # 资料版本标识，读取时必须与正文版本一致。
     version: str
+    # 网页原始地址；上传资料为None（JSON中为null）。
     url: str | None
+    # 原文件总页数；未知为None（JSON中为null）。
     page_count: int | None
 
 
 class ListMaterialsOutput(TypedDict):
     """稳定的工具返回结构；空结果也保留同样的字段。"""
 
+    # 本次返回的资料摘要列表；没有符合条件的资料时为空列表。
     items: list[MaterialListItem]
+    # 筛选后全部资料的总条数，可大于本次items长度。
     total: int
+    # 下次目录调用的offset；None表示分页结束，单位是资料条数。
     next_offset: int | None
