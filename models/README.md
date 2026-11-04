@@ -22,6 +22,8 @@
 | 联网 | search_web输入与公开输出 | SearchWebInput、SearchWebOutput、WebSearchItem | [search_web_contract.py](web/search_web_contract.py) |
 | 联网 | fetch_webpage输入与公开输出 | FetchWebpageInput、FetchWebpageOutput | [fetch_webpage_contract.py](web/fetch_webpage_contract.py) |
 | 联网 | 内部网页内容与读取结果 | WebpageContent、WebpageReadResult | [webpage_content.py](web/webpage_content.py) |
+| 技能 | 内部技能摘要 | SkillSummary | [skill_summary.py](skills/skill_summary.py) |
+| 技能 | list_skills输入、公开输出和条目 | ListSkillsInput、ListSkillsOutput、SkillListItem | [list_skills_contract.py](skills/list_skills_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 
@@ -99,3 +101,7 @@ candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录sour
 ## 网页读取数据流（2026-11-03）
 
 HttpWebpageReader创建WebpageContent → WebpageReader协议返回业务 → read_webpage创建WebpageReadResult → fetch_webpage工具组装FetchWebpageOutput。FetchWebpageInput由运行时校验，输入说明通过Field进入Schema。内部dataclass只依赖标准库，不反向依赖执行层；公开输出不含本机路径或项目内部状态。没有创建资料source_id/版本或新的Store。字段及真实搜索测试见[网页读取调试说明](../docs/fetch_webpage调试说明.md)。
+
+## 技能发现数据流（2026-11-04）
+
+LocalSkillCatalog扫描项目根目录skills/，parse_skill_metadata创建SkillSummary，目录返回SkillSummary元组（不合格式的技能记录日志并跳过）→工具调用filter_skills→组装SkillListItem/ListSkillsOutput。内部dataclass只依赖标准库；输入Pydantic校验keyword，输出TypedDict不自动校验。当前不建立技能注册Store或正文快照、不执行脚本；缺失版本返回None，不与资料version混淆。模型不选择本机目录。未来技能市场通过服务接口及适配器接入，现有协议保留摘要加载边界，具体远程契约待开发时确定。详见[list_skills调试说明](../docs/list_skills调试说明.md)。

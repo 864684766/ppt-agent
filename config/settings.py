@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     # 服务监听端口，默认8000，范围1–65535；对应APP_PORT。
     app_port: int = Field(default=8000, ge=1, le=65535)
 
+    # 应用日志最低级别；对应LOG_LEVEL，修改后重启服务或重新运行测试生效。
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        description="日志最低级别，使用大写；默认INFO，记录所选级别及更严重的日志。",
+    )
+    # 应用日志输出目标；对应LOG_OUTPUT，独立于最低日志级别。
+    log_output: Literal["file", "console", "both"] = Field(
+        default="both",
+        description="日志输出：file仅文件，console仅控制台标准错误，both两者；默认both。",
+    )
+
     # 当前几个任务共用一个代理；密钥使用 SecretStr 避免常规打印时泄露。
     # OpenAI兼容代理基础地址，空值表示未配置；对应LLM_BASE_URL。
     llm_base_url: str = ""

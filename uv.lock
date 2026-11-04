@@ -1375,6 +1375,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-pptx" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -1398,6 +1399,7 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.14.2" },
     { name = "pydantic-settings", specifier = "==2.16.2" },
     { name = "python-pptx", specifier = "==1.0.2" },
+    { name = "pyyaml", specifier = "==6.0.3" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
