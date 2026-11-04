@@ -1,6 +1,6 @@
 # 第六个工具：list_skills
 
-日期：2026-11-04。状态：独立实现、JSON定义检查及真实本地技能目录验证完成；read_skill、Agent选择技能、资源读取和执行脚本尚未实现。
+日期：2026-11-04。状态：独立实现、JSON定义检查及真实本地技能目录验证完成；read_skill已独立实现；Agent选择技能、附属资源读取和执行脚本尚未实现。
 
 ## 运行与断点
 
@@ -64,7 +64,8 @@ LOG_LEVEL接入后：日志及技能测试3 passed（0.66秒），验证WARNING�
 | models/skills/list_skills_contract.py | 工具输入与公开输出 |
 | domain/skills/skill_catalog_contract.py | 可替换目录协议和安全异常 |
 | domain/skills/skill_catalog.py | 纯筛选与排序，无文件系统和框架依赖 |
-| integrations/local_skill_catalog.py | 实际目录扫描与有界头部读取 |
+| integrations/local_skill_catalog.py | 实际目录扫描 |
+| integrations/skill_header_reader.py | 发现与完整读取共用的有界头部读取 |
 | integrations/skill_metadata_parser.py | YAML元数据解析与字段检查 |
 | tools/skills/list_skills_tool.py | LangChain薄入口与公开字段组装 |
 | config/settings.py | 提供已有PROJECT_ROOT定位；技能目录不属于Settings环境配置 |

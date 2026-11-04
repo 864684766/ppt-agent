@@ -19,7 +19,7 @@ def create_list_skills_tool(*, catalog: SkillCatalog) -> BaseTool:
         "返回items（技能摘要）和returned_count（本次条数，无分页）。不符合介绍格式的技能记录日志并忽略，不返回给模型。"
         "每项skill_id是技能目录编号，name是声明名称，description是作者的用途说明，version是声明版本或null。"
         "仅扫描并返回SKILL.md的介绍元数据；不检查依赖、不分析脚本或执行流程，也不判断技能可用性。"
-        "需要完整指令时后续使用read_skill，该工具尚未实现。当前使用项目内置skills目录，不能传任意本机路径。"
+        "需要完整指令时使用read_skill并传入skill_id。当前使用项目内置skills目录，不能传任意本机路径。"
     ))
     async def list_skills(keyword: str = "") -> ListSkillsOutput:
         """文件扫描放入线程，避免阻塞HTTP事件循环；结果不建立全局缓存。"""

@@ -24,6 +24,7 @@
 | 联网 | 内部网页内容与读取结果 | WebpageContent、WebpageReadResult | [webpage_content.py](web/webpage_content.py) |
 | 技能 | 内部技能摘要 | SkillSummary | [skill_summary.py](skills/skill_summary.py) |
 | 技能 | list_skills输入、公开输出和条目 | ListSkillsInput、ListSkillsOutput、SkillListItem | [list_skills_contract.py](skills/list_skills_contract.py) |
+| 技能 | read_skill输入与公开输出 | ReadSkillInput、ReadSkillOutput | [read_skill_contract.py](skills/read_skill_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 
@@ -105,3 +106,7 @@ HttpWebpageReader创建WebpageContent → WebpageReader协议返回业务 → re
 ## 技能发现数据流（2026-11-04）
 
 LocalSkillCatalog扫描项目根目录skills/，parse_skill_metadata创建SkillSummary，目录返回SkillSummary元组（不合格式的技能记录日志并跳过）→工具调用filter_skills→组装SkillListItem/ListSkillsOutput。内部dataclass只依赖标准库；输入Pydantic校验keyword，输出TypedDict不自动校验。当前不建立技能注册Store或正文快照、不执行脚本；缺失版本返回None，不与资料version混淆。模型不选择本机目录。未来技能市场通过服务接口及适配器接入，现有协议保留摘要加载边界，具体远程契约待开发时确定。详见[list_skills调试说明](../docs/list_skills调试说明.md)。
+
+## 技能完整读取（2026-11-04）
+
+ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协议返回普通str，工具显式组装ReadSkillOutput（skill_id/resource_path/content）。输入来源为list_skills编号，输出供模型阅读，不含本机绝对路径。正文包含YAML头部，不截断、不展开资源、不执行脚本；无新内部结果实体、缓存或状态。共享头部读取位于integrations/skill_header_reader.py。详见[read_skill调试说明](../docs/read_skill调试说明.md)。
