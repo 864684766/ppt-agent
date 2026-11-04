@@ -1,39 +1,212 @@
-<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜Store 与状态清单</title><style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>当前实体与工具字段说明</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:#1b2932;font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:white;padding:38px max(24px,calc((100% - 1100px)/2))}header p{color:#cfe3df}h1{font-size:30px;margin:4px 0}h2{font-size:22px;margin:36px 0 12px;border-bottom:2px solid #d8e1e2;padding-bottom:8px}main{max-width:1100px;margin:auto;padding:12px 24px 70px}table{width:100%;border-collapse:collapse;background:white}th,td{border:1px solid #d8e1e2;padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}.scroll{overflow-x:auto}.note{background:#edf6f4;border-left:4px solid #12675f;padding:12px 18px;margin:20px 0}code{background:#e9efee;padding:1px 4px;overflow-wrap:anywhere}a{color:#12675f}li{margin:6px 0}@media(max-width:650px){main{padding-inline:16px}header{padding:26px 16px}table{min-width:780px}}@media print{body{background:white}header{background:white;color:black;padding:0}header p{color:#555}main{padding:0}}
-</style></head><body><header><p>STATE &amp; STORAGE CATALOG · DRAFT 0.1 · 2026-10-30</p><h1>Store 与结构化状态清单</h1><p>概念设计、字段说明和第一阶段的保存方式</p></header><main><div class="note">本清单是设计草案，不代表这些 Store 或数据库已经实现。第一阶段以单进程内存保存结构化运行状态、以本地文件保存上传和生成文件；重启后不承诺恢复内存状态。表中的名称是建议逻辑分类，不要求每项都实现为独立类或数据库表。</div>
-<h2>1. 状态与存储清单</h2><div class="scroll"><table><tr><th>逻辑 Store</th><th>主要内容与建议字段</th><th>作用域 / 更新方</th><th>第一阶段与后续</th></tr>
-<tr><td>Project</td><td><code>project_id</code>、主题、创建时间、当前大纲版本、模板及任务引用。</td><td>项目；API 与 LangGraph。</td><td>内存；重启恢复后续引入持久化。</td></tr>
-<tr><td>Conversation</td><td><code>message_id</code>、角色、内容、时间、所属项目及关联版本。</td><td>项目会话；API 与 LangGraph。</td><td>内存；跨重启保留后续实现。</td></tr>
-<tr><td>Outline</td><td><code>version</code>、条目 ID、顺序、页面角色、标题、要点、来源引用、确认状态。</td><td>项目；大纲编辑与确认流程。</td><td>内存快照；版本号用于并发冲突检测。持久化后续实现。</td></tr>
-<tr><td>Template</td><td>模板 ID、文件引用与哈希、版式／样例页清单、识别依据、兼容问题。</td><td>项目或内置模板；解析工具产出，LangGraph 校验。</td><td>文件在本地；解析元数据先存内存。持久化后续实现。</td></tr>
-<tr><td>Template Mapping</td><td>模板版本、页面角色、版式／样例页 ID、标题及内容槽位、用户确认、缺失页面处理方式。</td><td>项目；识别子智能体提出，用户与 LangGraph 确认。</td><td>内存；生成任务读取确认快照。</td></tr>
-<tr><td>Task &amp; Question</td><td>任务 ID、状态、进度、错误、问题 ID、选项、回答、对应节点及版本。</td><td>项目任务；LangGraph 与任务执行器。</td><td>内存；暂停和恢复仅限进程存活期间。跨重启恢复后续实现。</td></tr>
-<tr><td>Generation &amp; Artifact</td><td>生成 ID、大纲与映射版本、文件 ID、PPTX／预览路径、警告及检查结果。</td><td>项目生成任务；生成工具产出，后端记录。</td><td>产物文件在本地，索引先存内存；重启后不保证自动找回索引。</td></tr>
-<tr><td>Source &amp; Citation</td><td>来源 ID、文件名或 URL、标题、访问时间、页码／片段、关联大纲条目。</td><td>项目资料；资料处理工具写入，生成流程引用。</td><td>本地文件与内存元数据；完整检索与引用能力按开发任务推进。</td></tr>
-<tr><td>Skill Registry</td><td>技能 ID、名称、版本、内容哈希、入口、依赖、启用状态和脚本执行记录。</td><td>技能注册及项目绑定；技能管理模块。</td><td>完整技能管理为后续增强；脚本与资源保存在受控目录，运行时锁定版本。</td></tr>
-<tr><td>Model Configuration</td><td>任务模型变量 LLM_OUTLINE_MODEL、LLM_TEMPLATE_ANALYSIS_MODEL、LLM_PPT_GENERATION_MODEL，未设置时回退 LLM_MODEL；共用 LLM_BASE_URL 与 LLM_API_KEY。配置由 config/settings.py 读取，密钥使用 SecretStr。普通对话使用 LLM_MODEL、LLM_TIMEOUT_SECONDS（默认 60 秒）和 LLM_MAX_TOKENS（默认 1024）；每次请求重新读取配置。</td><td>应用配置；后端管理。</td><td>配置文件或环境变量；真实密钥不写入项目状态、示例或追踪日志。</td></tr></table></div>
-<p>2026-11-02：POST /ppt-agent/v1/chat 为无状态单轮 SSE 流式接口（delta/done/error，不持久化事件），不写入 Conversation、Project 或 Graph State；本次未新增业务 Store。</p><h2>已实现的数据契约：资料目录快照（2026-11-02）</h2>
-<p>MaterialSummary 定义在 models/materials/material_source.py，MaterialPage 定义在 models/materials/material_query_results.py；类型创建方/使用方索引见 models/README.md，目录工具输入与公开输出集中在 models/materials/list_materials_contract.py；检索工具输入与公开输出集中在 models/materials/search_materials_contract.py，内部检索结果同样在 material_query_results.py；实体详细校验放在 validators/materials/material_metadata_validator.py，由实体构造后调用；此次仅调整定义位置，字段不变。MaterialSummary 是宿主提供的不可变资料摘要，不是已落地的数据库表或完整 Source/Citation Store。每条包含 project_id（内部绑定）、source_id（项目内唯一）、name、origin（uploaded/web）、format、status（pending/ready/failed）、version、url（网页必填，上传资料为 None）、page_count（未知为 None）。模板、技能和其他项目资料不属于本项目目录；登记方按用途提供对象。</p>
-<p>MaterialPage 包含 items、total、next_offset；total 为筛选后总数，偏移从 0 开始，末页 next_offset 为 None。工具对外隐藏 project_id，仅选择公开字段。创建工具时复制输入序列，在同一快照中分页稳定；宿主更新后需重建工具。没有新增全局 Store、数据库或目录扫描，也未接入上传登记；本次测试数据仅存在测试进程内。运行时状态与持久化仍按后续任务实现。</p>
-<h2>已确认待实现：真实上传资料如何进入目录（2026-11-02）</h2>
-<p><strong>真实运行使用与测试相同的MaterialSummary类型，但字段值来自上传和解析的实际结果。</strong>样本只是手动构造，正式数据由登记模块构造；不是把文件转成“测试数据”。当前只实现了接收目录快照的工具，以下上传、登记及内存目录仍待开发。</p>
-<ol><li>用户按“业务资料”用途上传文件；后端确定所属项目、分配source_id、保存原文件到本地磁盘。</li><li>读取实际名称和格式等元数据，构造MaterialSummary并加入当前项目的进程内存资料目录。先标记pending，未知page_count为None；project_id不由模型选择。</li><li>解析文本，扫描件需要时使用本机OCR。成功后创建新的不可变摘要替换目录记录，标记ready并填入可获得页数；失败标记failed。文件上传成功不等于正文解析成功。</li><li>正文和原页/文本块定位按source_id及版本单独关联保存，MaterialSummary只保留目录摘要，不包含正文或本机路径。</li><li>宿主取得当前项目目录快照，传给create_list_materials_tool。工具查询后只返回允许公开的字段。</li><li>目录新增或解析状态更新后，宿主需重建工具供后续调用使用。旧工具不会自动看到新增记录；同一轮分页保持同一快照，避免位置漂移。</li></ol>
-<p>模板、技能和未关联历史文件不混入业务资料目录。第一阶段结构化目录保存在内存，原文件保存在磁盘；不要求先建数据库，也不承诺进程重启后恢复目录。后续网页正文抓取成功并登记时也构造相同资料摘要，origin为web并保留原URL。</p>
-<h2>已实现的数据契约：正文片段与检索结果（2026-11-02）</h2>
-<table><tr><th>类型/字段</th><th>用途和约束</th><th>当前保存方式</th></tr>
-<tr><td>MaterialFragment</td><td>project_id、source_id、version、block_id、text、page。正文不进入MaterialSummary；page为原文件从1开始的页码，未知None。同来源/版本block_id唯一，正文关联ready来源且版本一致。</td><td>类型已实现；调用方提供不可变对象序列，工具复制快照。真实解析与内存正文登记尚未实现，没有新增全局Store。</td></tr>
-<tr><td>MaterialSearchMatch / MaterialSearchResult</td><td>内部命中保留fragment、matched_queries、text、text_truncated；结果含matches、total_matches、truncated。</td><td>一次纯业务调用的临时结果，不持久化。</td></tr>
-<tr><td>SearchMaterialsInput</td><td>queries必填；source_ids可选；origin默认all；max_results默认10，上限50；max_chars_per_match默认300，范围50–1000字符。project_id由宿主绑定。</td><td>模型调用参数，经Pydantic校验；不写入资料目录。</td></tr>
-<tr><td>SearchMaterialsOutput</td><td>matches每项公开source_id、version、location(block_id/page)、matched_queries、text、text_truncated。总结果含total_matches和truncated，不公开内部project_id或磁盘路径。</td><td>工具返回字典，TypedDict只描述结构。截取片段不替代原文；结果不作为新的权威资料写回。</td></tr></table>
-<p>检索按任意关键词字面命中、忽略大小写；同块一次，按来源/页码/块ID排序。truncated表示结果条数被限制，text_truncated表示该块正文未完整返回，total_matches为命中块总数。当前不做offset分页、相关性排序、自动扩词或网络访问。范围错误/未就绪/正文未载入与空命中明确区分。正文与摘要更新后需由宿主重建工具快照。</p>
-<p>模型定义位置见<a href="../models/README.md">数据模型索引</a>；调用与打印结果见<a href="search_materials调试说明.md">第二个工具调试说明</a>。本轮没有实现文件上传、OCR或持久化。</p>
-<h2>已实现的数据契约：正文读取（2026-11-02）</h2>
-<table><tr><th>类型</th><th>字段与边界</th><th>保存方式</th></tr><tr><td>ReadMaterialInput</td><td>source_id、version、block_id必填，offset默认0，max_chars默认2000、范围1–8000；项目由宿主绑定。</td><td>一次工具调用参数，Pydantic校验，不写回资料目录。</td></tr><tr><td>MaterialReadResult</td><td>fragment、text、offset、end_offset、next_offset；保留内部正文块，只供业务与适配层使用。</td><td>临时业务结果，不持久化；定义在material_query_results.py。</td></tr><tr><td>ReadMaterialOutput</td><td>source_id、version、location(block_id/page)、text、offset、end_offset、total_chars、next_offset。字符范围为[offset,end_offset)，next_offset为null表示到块尾。</td><td>公开字典，TypedDict不自动校验；定义在read_material_contract.py。不公开project_id或本机路径。</td></tr></table>
-<p>读取复用已有目录与正文快照，无新增Store或数据库。offset等于块长时返回空文本，超过块长报错；版本不一致需重新检索。不会自动扩展相邻块或把返回片段写回原文。详情见<a href="read_material调试说明.md">读取工具调试说明</a>。</p>
-<h2>已实现的数据契约：搜索候选（2026-11-02）</h2>
-<table><tr><th>类型</th><th>字段与边界</th><th>保存方式</th></tr><tr><td>WebSearchCandidate</td><td>candidate_id、title、url、snippet；适配器创建的内部候选。candidate_id为web_加URL的SHA-256，摘要可为空，不是已登记来源。</td><td>一次搜索的临时结果，不写资料目录或新建全局Store。</td></tr><tr><td>SearchWebInput</td><td>query必填1–1000字符；max_results默认5，范围1–10；无项目ID、密钥或供应商参数。</td><td>工具运行时Pydantic校验，不持久化。</td></tr><tr><td>SearchWebOutput</td><td>query、items(candidate_id/title/url/snippet)、returned_count；只表示本次候选条数，不含全网总数。</td><td>公开TypedDict字典，无自动校验或来源登记。未来抓取成功后才能分配source_id。</td></tr></table>
-<p>当前不会保存搜索历史或抓取网页。模型索引见models/README.md，正式资料登记流程保持不变。</p>
-<p><strong>字段释义补充（2026-11-03）：</strong>SearchWebOutput.query是实际搜索词，items是候选列表，returned_count是本次候选条数；每项candidate_id为URL生成的候选编号、title为网页标题、url为网页地址、snippet为可能为空的搜索摘要。candidate_id不是source_id，摘要不等于正文。无新增Store或字段，完整逐项说明见<a href="search_web调试说明.md">搜索调试说明</a>；其余已实现类型的字段注释见models中的定义。</p>
-<h2>2. LangGraph 中的几个概念</h2><div class="scroll"><table><tr><th>概念</th><th>职责</th><th>与本项目的关系</th></tr><tr><td>Graph State</td><td>一次工作流当前的结构化状态，由图节点读取和更新。</td><td>保存或引用当前大纲、模板映射、问题和任务状态；应避免在多个位置维护冲突的权威副本。</td></tr><tr><td>Checkpointer</td><td>保存线程的图状态快照，用于中断恢复等。</td><td>第一阶段可用内存检查点支持进程内暂停；跨重启持久化后续引入，具体方案待开发验证。</td></tr><tr><td>LangGraph Store</td><td>可供不同线程按命名空间和键访问的数据存储，适合跨线程共享数据。</td><td>不是 Graph State 或 Checkpointer 的同义词。当前不强制引入；仅当确有跨线程共享记忆等需求时评估。</td></tr><tr><td>文件存储</td><td>保存模板、原始资料、PPTX、预览等文件。</td><td>第一阶段本地目录；图状态只存文件标识、路径或元数据，不放大型二进制内容。</td></tr><tr><td>Harness 会话存储</td><td>Harness 自己管理的会话与运行资源。</td><td>与项目状态分开；不把 Harness 会话当作已确认大纲或模板映射的权威来源。</td></tr></table></div>
-<h2>3. 设计约束</h2><ul><li>清单是逻辑视图：实现时可以合并为少量内存仓储和图状态，避免为每一行提前引入独立基础设施。</li><li>以项目 ID、任务 ID 和版本关联数据；确认后的大纲与模板映射作为生成任务输入快照。并发修改须检测版本冲突。</li><li>模型、工具或子智能体的输出先由后端校验，再进入项目状态；人工确认是显式状态变更。</li><li>第一阶段文件可能留在磁盘，但对应项目索引和会话存在内存中，进程重启不保证重新发现或恢复。</li><li>后续引入数据库和持久化检查点时，再定义表结构、迁移、保留期限和恢复策略；不把当前字段草案当作已冻结数据库设计。</li></ul><p><a href="技术文档.html">返回技术文档</a> · <a href="开发任务列表.html">开发任务列表</a></p></main></body></html>
+nav a{display:inline-block;margin:5px 18px 5px 0}h3{margin-top:30px}code{overflow-wrap:anywhere}.scroll{margin-bottom:20px}.meta{color:#596c72}</style></head><body><header><p>DATA FIELD CATALOG · 2026-11-04</p><h1>当前实体与工具字段说明</h1><p>按模块与工具查字段 · 以当前源码为准</p></header><main>
+<div class="note">本文件保留原文件名Store清单.html，内容已调整为当前已实现的实体、内部结果、工具输入输出和接口字段说明。它不是数据库表设计，也不是LangGraph状态草案。尚未实现的项目、会话、版本管理及LangGraph字段不列入；开发到对应功能时再讨论并补充。</div>
+<nav><a href="#materials">资料实体与内部结果</a><a href="#material-tools">资料工具</a><a href="#web">联网工具与内部结果</a><a href="#http">HTTP与SSE</a><a href="#configuration">配置字段</a><a href="#maintenance">维护规则</a></nav>
+<h2>阅读约定</h2><ul><li>Pydantic Input负责工具参数Schema与边界校验；TypedDict Output只描述返回字典，不自动校验。</li><li>dataclass是内部结构；MaterialSummary和MaterialFragment创建时执行字段校验，其他内部结果不因类型标注就自动校验。</li><li>None对外序列化为null；字符数不是字节数或token数，偏移从0开始，原文件页码从1开始。</li><li>既有资料实体仍有project_id和version字段：目前是已有工具契约的内部范围/一致性约束，不代表正在建设多项目或历史版本系统，也不要求前端传project_id。</li><li>来源编号source_id、正文块block_id和候选网页candidate_id用途不同；搜索或抓取成功不等于已登记资料。没有新增数据库或全局Store。</li></ul>
+
+<h2 id="materials">1. 资料实体与内部结果</h2>
+<p><strong>定义：</strong><a href="../models/materials/material_source.py">models/materials/material_source.py</a>。宿主提供摘要，目录、检索和读取业务使用；不包含正文或本机路径，真实上传登记尚未接线。</p>
+<h3>MaterialSummary</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>project_id</code></td><td><code>str</code></td><td>构造时必填</td><td>以下字段由宿主登记：模型只能看公开摘要，不能修改项目绑定。 所属PPT项目编号；内部隔离范围，由宿主绑定，不向模型公开。</td></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>构造时必填</td><td>所属项目内唯一的资料编号；供检索、读取和引用使用，不是本地路径。</td></tr>
+<tr><td><code>name</code></td><td><code>str</code></td><td>构造时必填</td><td>资料显示名称，例如员工手册.pdf。</td></tr>
+<tr><td><code>origin</code></td><td><code>MaterialOrigin</code></td><td>构造时必填</td><td>资料来源：uploaded为上传业务文件，web为已登记网页。</td></tr>
+<tr><td><code>format</code></td><td><code>str</code></td><td>构造时必填</td><td>文件或正文格式，例如pdf、docx、html，不含点号。</td></tr>
+<tr><td><code>status</code></td><td><code>MaterialStatus</code></td><td>构造时必填</td><td>解析状态：pending待解析、ready解析成功、failed解析失败；上传成功不等于ready。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>构造时必填</td><td>资料版本标识，例如v1；必须与对应正文块版本一致。</td></tr>
+<tr><td><code>url</code></td><td><code>str | None</code></td><td>None</td><td>可选字段用 None 表示未知/不适用；不要将未知页数写成 0。 原网页地址；上传资料为None，不公开本机文件路径。</td></tr>
+<tr><td><code>page_count</code></td><td><code>int | None</code></td><td>None</td><td>原文件总页数；未知为None，不用0代替未知。</td></tr>
+</table></div>
+<p><strong>定义：</strong><a href="../models/materials/material_fragment.py">models/materials/material_fragment.py</a>。解析方提供完整正文块，业务检索和读取使用；真实解析/OCR接线尚未实现。</p>
+<h3>MaterialFragment</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>project_id</code></td><td><code>str</code></td><td>构造时必填</td><td>正文所属项目编号，用于与当前任务范围隔离。</td></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>构造时必填</td><td>所属资料编号，对应目录中同项目的MaterialSummary.source_id。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>构造时必填</td><td>正文来源版本，必须与资料目录版本一致。</td></tr>
+<tr><td><code>block_id</code></td><td><code>str</code></td><td>构造时必填</td><td>解析模块分配的正文块编号；在同一来源版本内唯一，不是检索结果序号。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>构造时必填</td><td>该块完整的解析正文；保留原文空白，不用搜索摘要覆盖。</td></tr>
+<tr><td><code>page</code></td><td><code>int | None</code></td><td>None</td><td>原文件页码，从1开始；网页或无法可靠定位时为None。</td></tr>
+</table></div>
+<p><strong>定义：</strong><a href="../models/materials/material_query_results.py">models/materials/material_query_results.py</a>。纯业务查询创建，工具入口使用；不把含内部范围的原对象整体返回模型。</p>
+<h3>MaterialPage</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>items</code></td><td><code>tuple[MaterialSummary, ...]</code></td><td>构造时必填</td><td>本次目录页的内部资料对象，含project_id，工具需挑选公开字段。</td></tr>
+<tr><td><code>total</code></td><td><code>int</code></td><td>构造时必填</td><td>应用筛选条件后的资料总条数，不是本页条数。</td></tr>
+<tr><td><code>next_offset</code></td><td><code>int | None</code></td><td>构造时必填</td><td>下一页跳过的条数，从0计数；None表示没有下一页。</td></tr>
+</table></div>
+<h3>MaterialSearchMatch</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>fragment</code></td><td><code>MaterialFragment</code></td><td>构造时必填</td><td>内部完整正文块，保留来源与定位，不直接对模型整体序列化。</td></tr>
+<tr><td><code>matched_queries</code></td><td><code>tuple[str, ...]</code></td><td>构造时必填</td><td>完整原块命中的查询词，保持查询顺序。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>构造时必填</td><td>截取后返回的命中文本，长度受max_chars_per_match限制。</td></tr>
+<tr><td><code>text_truncated</code></td><td><code>bool</code></td><td>构造时必填</td><td>True表示text未包含该块完整原文。</td></tr>
+</table></div>
+<h3>MaterialSearchResult</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>matches</code></td><td><code>tuple[MaterialSearchMatch, ...]</code></td><td>构造时必填</td><td>本次返回的命中块结果，受max_results限制。</td></tr>
+<tr><td><code>total_matches</code></td><td><code>int</code></td><td>构造时必填</td><td>限制条数前的命中块总数，不是关键词出现次数。</td></tr>
+<tr><td><code>truncated</code></td><td><code>bool</code></td><td>构造时必填</td><td>True表示命中块未全部返回；与单块文本截断不同。</td></tr>
+</table></div>
+<h3>MaterialReadResult</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>fragment</code></td><td><code>MaterialFragment</code></td><td>构造时必填</td><td>被读取的内部完整原块，包含内部项目范围。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>构造时必填</td><td>本次实际读出的原文子串，不改变空白或添加省略号。</td></tr>
+<tr><td><code>offset</code></td><td><code>int</code></td><td>构造时必填</td><td>本次读取起点，相对完整块，从0开始，单位为Python字符。</td></tr>
+<tr><td><code>end_offset</code></td><td><code>int</code></td><td>构造时必填</td><td>实际读取终点，不包含该位置，单位为Python字符。</td></tr>
+<tr><td><code>next_offset</code></td><td><code>int | None</code></td><td>构造时必填</td><td>续读起点；None表示已到块末尾。</td></tr>
+</table></div>
+<h2 id="material-tools">2. 资料工具：按操作查输入输出</h2>
+<h3>工具 list_materials</h3>
+<p><strong>定义：</strong><a href="../models/materials/list_materials_contract.py">models/materials/list_materials_contract.py</a>。查询宿主目录快照；不扫描硬盘、不上传或解析文件。</p>
+<h3>ListMaterialsInput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>origin</code></td><td><code>Literal[&#x27;all&#x27;, &#x27;uploaded&#x27;, &#x27;web&#x27;]</code></td><td>&#x27;all&#x27;</td><td>筛选来源类型：all=当前项目全部已登记业务资料；uploaded=用户上传的业务参考文件；web=已抓取并登记的网页正文。省略时为all。这里不会联网搜索，也不包含PPT设计模板或技能资源。例如只看上传文件时填uploaded。</td></tr>
+<tr><td><code>name_contains</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>仅按资料显示名称做字面子串过滤，不搜索正文，不是正则表达式。例如填劳动可匹配劳动合同法.pdf。忽略首尾空白和大小写，最多200字符；省略或填空字符串表示不按名称过滤。 字段约束：最大长度 200。</td></tr>
+<tr><td><code>offset</code></td><td><code>int</code></td><td>0</td><td>在过滤并排序后的结果中跳过多少条，从0开始，必须为非负整数。首次查询省略或填0；继续翻页时填上次返回的next_offset，并保持同样的来源/名称过滤条件。next_offset为null时停止翻页。例如上次next_offset为20，本次填20。 字段约束：≥ 0。</td></tr>
+<tr><td><code>limit</code></td><td><code>int</code></td><td>20</td><td>本次最多返回多少条资料摘要，必须为1至100的整数，默认20。这是目录条数，不是正文长度、页码或检索轮数；当total大于当前已返回范围时，通过next_offset继续翻页。例如只需查看最多10条摘要时填10。 字段约束：≥ 1；≤ 100。</td></tr>
+</table></div>
+<h3>MaterialListItem</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>项目内资料编号，可用于后续检索和引用。</td></tr>
+<tr><td><code>name</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>资料显示名称，不是本机文件路径。</td></tr>
+<tr><td><code>origin</code></td><td><code>Literal[&#x27;uploaded&#x27;, &#x27;web&#x27;]</code></td><td>返回时提供；非调用入参</td><td>来源类型：uploaded上传文件，web已登记网页。</td></tr>
+<tr><td><code>format</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>资料格式名，例如pdf、docx、html。</td></tr>
+<tr><td><code>status</code></td><td><code>Literal[&#x27;pending&#x27;, &#x27;ready&#x27;, &#x27;failed&#x27;]</code></td><td>返回时提供；非调用入参</td><td>解析状态：pending待解析、ready可读、failed解析失败。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>资料版本标识，读取时必须与正文版本一致。</td></tr>
+<tr><td><code>url</code></td><td><code>str | None</code></td><td>返回时提供；非调用入参</td><td>网页原始地址；上传资料为None（JSON中为null）。</td></tr>
+<tr><td><code>page_count</code></td><td><code>int | None</code></td><td>返回时提供；非调用入参</td><td>原文件总页数；未知为None（JSON中为null）。</td></tr>
+</table></div>
+<h3>ListMaterialsOutput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>items</code></td><td><code>list[MaterialListItem]</code></td><td>返回时提供；非调用入参</td><td>本次返回的资料摘要列表；没有符合条件的资料时为空列表。</td></tr>
+<tr><td><code>total</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>筛选后全部资料的总条数，可大于本次items长度。</td></tr>
+<tr><td><code>next_offset</code></td><td><code>int | None</code></td><td>返回时提供；非调用入参</td><td>下次目录调用的offset；None表示分页结束，单位是资料条数。</td></tr>
+</table></div>
+<h3>工具 search_materials</h3>
+<p><strong>定义：</strong><a href="../models/materials/search_materials_contract.py">models/materials/search_materials_contract.py</a>。在已提供的ready正文中进行字面关键词搜索，不重新联网。</p>
+<h3>SearchMaterialsInput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>queries</code></td><td><code>list[Annotated[str, Field(min_length=1, max_length=200)]]</code></td><td>必填</td><td>必填，1至8个关键词，每个1至200字符。忽略大小写，按字面子串查正文，不是正则或语义搜索；多个词按任意一个命中。例如[经济补偿,解除劳动合同]。同义词需明确列入，不会自动扩展。 字段约束：最小长度 1；最大长度 8。</td></tr>
+<tr><td><code>source_ids</code></td><td><code>list[Annotated[str, Field(min_length=1, max_length=200)]] | None</code></td><td>None</td><td>可选，限定当前项目的来源ID，例如[s01,s02]；省略或null搜索项目内全部ready资料。不能传空列表；指定不存在或未ready的来源会报错，不伪装为无命中。 字段约束：最小长度 1；最大长度 100。</td></tr>
+<tr><td><code>origin</code></td><td><code>Literal[&#x27;all&#x27;, &#x27;uploaded&#x27;, &#x27;web&#x27;]</code></td><td>&#x27;all&#x27;</td><td>来源过滤：all=全部，uploaded=上传业务文件，web=已抓取并登记的网页正文。默认all；例如只看上传资料填uploaded。与source_ids共同过滤，不重新联网。</td></tr>
+<tr><td><code>max_results</code></td><td><code>int</code></td><td>10</td><td>最多返回几个命中正文块，1至50，默认10；例如填5最多返回5块。同一块命中多个词只返回一次。truncated为true时可缩小范围后重新搜索。 字段约束：≥ 1；≤ 50。</td></tr>
+<tr><td><code>max_chars_per_match</code></td><td><code>int</code></td><td>300</td><td>每条命中文本最多返回多少个Python字符，50至1000，默认300，不是字节或token。例如填100返回最多100字符；长块围绕最早命中截取，text_truncated表示原块未完整返回。 字段约束：≥ 50；≤ 1000。</td></tr>
+</table></div>
+<h3>MaterialMatchLocation</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>block_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>原文块编号，交给read_material精确读取，不是搜索排名。</td></tr>
+<tr><td><code>page</code></td><td><code>int | None</code></td><td>返回时提供；非调用入参</td><td>原文件页码，从1开始；未知为None（JSON中为null）。</td></tr>
+</table></div>
+<h3>MaterialSearchItem</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>命中正文所属资料的项目内编号。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>命中正文的资料版本，读取原块时需原样传入。</td></tr>
+<tr><td><code>location</code></td><td><code>MaterialMatchLocation</code></td><td>返回时提供；非调用入参</td><td>原文定位，包含block_id和可选原页码page。</td></tr>
+<tr><td><code>matched_queries</code></td><td><code>list[str]</code></td><td>返回时提供；非调用入参</td><td>完整正文块命中的查询词；可能不全在截取后的text中出现。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>围绕首次命中位置截取的原文片段，不保证包含整个块。</td></tr>
+<tr><td><code>text_truncated</code></td><td><code>bool</code></td><td>返回时提供；非调用入参</td><td>True表示该块完整正文未全部返回，可用read_material继续核实。</td></tr>
+</table></div>
+<h3>SearchMaterialsOutput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>matches</code></td><td><code>list[MaterialSearchItem]</code></td><td>返回时提供；非调用入参</td><td>本次返回的公开命中块列表；零命中时为空列表。</td></tr>
+<tr><td><code>total_matches</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>全部命中块总数，可能大于matches长度。</td></tr>
+<tr><td><code>truncated</code></td><td><code>bool</code></td><td>返回时提供；非调用入参</td><td>True表示结果条数受max_results限制，不代表单条文本是否完整。</td></tr>
+</table></div>
+<h3>工具 read_material</h3>
+<p><strong>定义：</strong><a href="../models/materials/read_material_contract.py">models/materials/read_material_contract.py</a>。读取一个已定位正文块，支持按next_offset续读，不直接读取磁盘原文件。</p>
+<h3>ReadMaterialInput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>必填</td><td>必填，当前项目已登记资料的来源ID，例如s01；来自list_materials或search_materials。不是文件路径、URL或资料名称；不能切换项目。 字段约束：最小长度 1；最大长度 200。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>必填</td><td>必填，资料版本标识，例如v1；使用search_materials返回的version，必须与当前目录一致。版本过期会报错，不能把旧定位静默用于新资料。 字段约束：最小长度 1；最大长度 200。</td></tr>
+<tr><td><code>block_id</code></td><td><code>str</code></td><td>必填</td><td>必填，正文块ID，例如block_31；使用search_materials返回的location.block_id。不是页码或结果序号，不要自行猜测；一次读取一个块，不自动包含相邻块。 字段约束：最小长度 1；最大长度 200。</td></tr>
+<tr><td><code>offset</code></td><td><code>int</code></td><td>0</td><td>从完整正文块的第几个Python字符开始读取，从0开始，不是字节或token。首次省略或填0；续读填上次next_offset。next_offset为null时该块读取完毕。例如上次next_offset为2000，本次填2000；需保持来源、版本和块ID一致。 字段约束：≥ 0。</td></tr>
+<tr><td><code>max_chars</code></td><td><code>int</code></td><td>2000</td><td>本次最多返回的Python字符数，1至8000，默认2000；不是字节或token。例如填500最多读取500字符，长块通过next_offset续读，不会静默丢掉剩余正文。 字段约束：≥ 1；≤ 8000。</td></tr>
+</table></div>
+<h3>MaterialReadLocation</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>block_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>本次读取的原文块编号，和请求定位对应。</td></tr>
+<tr><td><code>page</code></td><td><code>int | None</code></td><td>返回时提供；非调用入参</td><td>原文件页码，从1开始；未知为None（JSON中为null）。</td></tr>
+</table></div>
+<h3>ReadMaterialOutput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>source_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>实际读取的资料编号，不是候选网页编号。</td></tr>
+<tr><td><code>version</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>实际读取的资料版本，与请求版本一致。</td></tr>
+<tr><td><code>location</code></td><td><code>MaterialReadLocation</code></td><td>返回时提供；非调用入参</td><td>原文定位：块编号和可获得的原页码。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>本次返回的原文范围，不一定是整块，更不是整份文件。</td></tr>
+<tr><td><code>offset</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>实际起点，完整块内从0开始的Python字符偏移。</td></tr>
+<tr><td><code>end_offset</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>实际终点，不包含该位置；本次范围为[offset,end_offset)。</td></tr>
+<tr><td><code>total_chars</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>完整原块的Python字符总数，不是本次返回长度或token数。</td></tr>
+<tr><td><code>next_offset</code></td><td><code>int | None</code></td><td>返回时提供；非调用入参</td><td>下一次读取的offset；None（JSON中为null）表示到块尾。</td></tr>
+</table></div>
+<h2 id="web">3. 联网工具与内部数据</h2><h3>工具 search_web</h3>
+<p><strong>定义：</strong><a href="../models/web/search_web_contract.py">models/web/search_web_contract.py</a>。由LangChain运行时校验输入，工具入口组装输出；真实SearXNG搜索，不将score当相似度。engines目前未开放为模型入参。</p>
+<h3>SearchWebInput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>query</code></td><td><code>str</code></td><td>必填</td><td>必填，1至1000字符的互联网搜索词，例如健康饮食 均衡膳食 每日食谱。用于发现主题资料的候选网页，不查询已上传文件，也不搜索PPT设计模板。不要把本地资料全文或密钥放入搜索词；查询会发送给外部搜索供应商。 字段约束：最小长度 1；最大长度 1000。</td></tr>
+<tr><td><code>max_results</code></td><td><code>int</code></td><td>5</td><td>最多返回的候选网页条数，1至10的整数，默认5；例如填3最多返回3条。供应商可能返回更少结果；不是检索轮数，不会自动翻页或重试。 字段约束：≥ 1；≤ 10。</td></tr>
+</table></div>
+<h3>WebSearchItem</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>candidate_id</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>候选网页编号，web_加URL的SHA-256；不是source_id，不可传给read_material。</td></tr>
+<tr><td><code>title</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>候选网页标题，由搜索供应商提供。</td></tr>
+<tr><td><code>url</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>候选网页地址，后续抓取正文时使用，不是本地路径。</td></tr>
+<tr><td><code>snippet</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>搜索摘要，可能为空；不代表已抓取或核实原网页。</td></tr>
+</table></div>
+<h3>SearchWebOutput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>query</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>本次实际使用的搜索词，已去除首尾空白。</td></tr>
+<tr><td><code>items</code></td><td><code>list[WebSearchItem]</code></td><td>返回时提供；非调用入参</td><td>本次返回的候选网页列表，每项是WebSearchItem；无候选时为空列表。</td></tr>
+<tr><td><code>returned_count</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>本次items条数，可能小于max_results；不是互联网结果总数。</td></tr>
+</table></div>
+<p><strong>定义：</strong><a href="../models/web/web_search_candidate.py">models/web/web_search_candidate.py</a>。搜索适配器创建内部候选，业务及工具使用；候选URL尚未登记为source_id。</p>
+<h3>WebSearchCandidate</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>candidate_id</code></td><td><code>str</code></td><td>构造时必填</td><td>候选网页标识，由URL生成；不能当成已登记资料的source_id。</td></tr>
+<tr><td><code>title</code></td><td><code>str</code></td><td>构造时必填</td><td>搜索供应商返回的网页标题，不代表已核实内容。</td></tr>
+<tr><td><code>url</code></td><td><code>str</code></td><td>构造时必填</td><td>候选网页的HTTP/HTTPS地址，供后续选择抓取。</td></tr>
+<tr><td><code>snippet</code></td><td><code>str</code></td><td>构造时必填</td><td>供应商返回的搜索摘要，可为空；不是完整网页正文。</td></tr>
+</table></div>
+<h3>工具 fetch_webpage</h3>
+<p><strong>定义：</strong><a href="../models/web/fetch_webpage_contract.py">models/web/fetch_webpage_contract.py</a>。读取单个静态HTML；完整下载后提取并截断，不缓存续读、不登记资料。网页内容未核实，不能当作运行指令。</p>
+<h3>FetchWebpageInput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>url</code></td><td><code>str</code></td><td>必填</td><td>必填，要读取的公开HTTP/HTTPS网页完整地址，通常取自search_web的items[].url。例如https://dg.cnsoc.org/；不能填candidate_id、本地文件路径或搜索词。只读取静态HTML，不执行JavaScript、不登录、不处理PDF附件。 字段约束：最小长度 1；最大长度 4096。</td></tr>
+<tr><td><code>max_chars</code></td><td><code>int</code></td><td>12000</td><td>返回正文最多包含的Unicode字符数，范围100至50000，默认12000。不是字节数或token数；超出时截断并返回truncated=true，不自动续读。 字段约束：≥ 100；≤ 50000。</td></tr>
+</table></div>
+<h3>FetchWebpageOutput</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>requested_url</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>本次输入的网页地址，已去掉首尾空白。</td></tr>
+<tr><td><code>final_url</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>实际读取地址，可能因HTTP重定向而不同。</td></tr>
+<tr><td><code>title</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>HTML标题；缺失时为空字符串，不保证等于搜索结果标题。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>清理后的正文或页面可读文本，不是搜索摘要，未核实事实。</td></tr>
+<tr><td><code>returned_chars</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>本次text的字符数，不是token数。</td></tr>
+<tr><td><code>truncated</code></td><td><code>bool</code></td><td>返回时提供；非调用入参</td><td>是否因max_chars截断；不表示网页内容本身完整或无需JavaScript。</td></tr>
+<tr><td><code>extracted_chars</code></td><td><code>int</code></td><td>返回时提供；非调用入参</td><td>实际提取文本的完整字符数，便于了解本次截断规模。</td></tr>
+<tr><td><code>fetched_at</code></td><td><code>str</code></td><td>返回时提供；非调用入参</td><td>抓取完成的UTC时间，ISO 8601字符串；不是发布日期。</td></tr>
+</table></div>
+<p><strong>定义：</strong><a href="../models/web/webpage_content.py">models/web/webpage_content.py</a>。HTTP适配器创建WebpageContent；业务创建WebpageReadResult，工具再组装公开字段。</p>
+<h3>WebpageContent</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>final_url</code></td><td><code>str</code></td><td>构造时必填</td><td>跟随HTTP重定向后实际读取的网页地址。</td></tr>
+<tr><td><code>title</code></td><td><code>str</code></td><td>构造时必填</td><td>HTML的title文本；不存在时为空，不由模型猜测。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>构造时必填</td><td>从HTML提取的可读文本，未按工具max_chars截断；不含原始HTML。</td></tr>
+<tr><td><code>fetched_at</code></td><td><code>str</code></td><td>构造时必填</td><td>完成读取时的UTC时间，ISO 8601格式，非网页发布日期。</td></tr>
+</table></div>
+<h3>WebpageReadResult</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>requested_url</code></td><td><code>str</code></td><td>构造时必填</td><td>实际输入地址，去首尾空白。</td></tr>
+<tr><td><code>content</code></td><td><code>WebpageContent</code></td><td>构造时必填</td><td>原始提取结果，提供标题、最终地址、抓取时间及原文本长度。</td></tr>
+<tr><td><code>text</code></td><td><code>str</code></td><td>构造时必填</td><td>根据max_chars截取的返回正文。</td></tr>
+<tr><td><code>truncated</code></td><td><code>bool</code></td><td>构造时必填</td><td>原文本是否超过返回字符上限。</td></tr>
+</table></div>
+<h2 id="http">4. HTTP与SSE字段</h2>
+<p><strong>定义：</strong><a href="../models/chat/chat_request.py">models/chat/chat_request.py</a>。普通单轮流式对话请求，不是多轮大纲或项目会话模型。</p>
+<h3>ChatRequest</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>message</code></td><td><code>str</code></td><td>必填</td><td>用户消息，最多 10000 字符 字段约束：最小长度 1；最大长度 10000。</td></tr>
+</table></div>
+<p><strong>定义：</strong><a href="../models/health/health_response.py">models/health/health_response.py</a>。健康检查返回，表示服务存活。</p>
+<h3>HealthResponse</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>status</code></td><td><code>Literal[&#x27;ok&#x27;]</code></td><td>&#x27;ok&#x27;</td><td>服务存活状态，固定为ok；不表示模型、网络或PPT生成能力已就绪。</td></tr>
+</table></div>
+<h3>SSE事件载荷</h3><p>定义位于<a href="../api/routes/chat_routes.py">api/routes/chat_routes.py</a>；编码位于<a href="../api/sse_encoder.py">api/sse_encoder.py</a>。以下已由当前对话路由产生，尚无工具调用或思考摘要业务事件。</p><table><tr><th>事件</th><th>字段</th><th>类型与含义</th></tr><tr><td>delta</td><td>text</td><td>str，本次新增可见正文，按顺序追加，不保证一个事件等于一个token。</td></tr><tr><td>done</td><td>finish_reason</td><td>str，当前为completed，表示本次流正常结束，不表示PPTX制作完成。</td></tr><tr><td>error</td><td>code</td><td>str，model_timeout表示超时，model_error表示其他模型调用错误。</td></tr><tr><td>error</td><td>message</td><td>str，可展示的安全错误说明，不含上游响应原文。error终止后不再发送done。</td></tr></table><p>SSE外层event为事件名，data为JSON载荷；响应开始后错误事件不改变此前已发送的HTTP状态码。</p>
+<h2 id="configuration">5. 配置字段</h2><p>Settings属于配置，不是业务实体或Graph State。字段与环境变量对应，系统环境优先于根目录.env，再使用默认值；敏感内容不抄入本清单。适用范围与是否接线以<a href="../.env.example">.env.example</a>及源码注释为准。</p>
+
+<p><strong>定义：</strong><a href="../config/settings.py">config/settings.py</a>。配置由外层组装，业务模块不直接读取Settings。配置存在不等于业务已接线。</p>
+<h3>Settings</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
+<tr><td><code>app_host</code></td><td><code>str</code></td><td>&#x27;127.0.0.1&#x27;</td><td>服务监听地址，默认127.0.0.1；python main.py启动时使用，对应APP_HOST。 字段约束：最小长度 1。</td></tr>
+<tr><td><code>app_port</code></td><td><code>int</code></td><td>8000</td><td>服务监听端口，默认8000，范围1–65535；对应APP_PORT。 字段约束：≥ 1；≤ 65535。</td></tr>
+<tr><td><code>llm_base_url</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>当前几个任务共用一个代理；密钥使用 SecretStr 避免常规打印时泄露。 OpenAI兼容代理基础地址，空值表示未配置；对应LLM_BASE_URL。</td></tr>
+<tr><td><code>llm_api_key</code></td><td><code>SecretStr</code></td><td>SecretStr(&#x27;&#x27;)</td><td>模型代理密钥，空值表示未配置；SecretStr遮蔽常规输出，对应LLM_API_KEY。</td></tr>
+<tr><td><code>llm_model</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>默认模型名称，空值表示未配置；当前单轮聊天使用，对应LLM_MODEL。</td></tr>
+<tr><td><code>llm_timeout_seconds</code></td><td><code>float</code></td><td>60</td><td>单次模型请求超时（秒）与输出 token 上限；不等同于输入字符数。 单次模型请求超时秒数，默认60、范围(0,600]；不是整个任务总时限。 字段约束：&gt; 0；≤ 600。</td></tr>
+<tr><td><code>llm_max_tokens</code></td><td><code>int</code></td><td>1024</td><td>最大输出token数，默认1024、范围1–32768；仍受模型实际限制。 字段约束：≥ 1；≤ 32768。</td></tr>
+<tr><td><code>llm_outline_model</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>留空表示使用 llm_model；后续可独立替换每种任务的模型。 大纲任务模型，空值回退llm_model；业务尚未接线。</td></tr>
+<tr><td><code>llm_template_analysis_model</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>模板识别模型，空值回退llm_model；业务尚未接线，名称不保证视觉能力。</td></tr>
+<tr><td><code>llm_ppt_generation_model</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>PPT生成任务模型，空值回退llm_model；Harness业务尚未接线。</td></tr>
+<tr><td><code>searxng_base_url</code></td><td><code>str</code></td><td>&#x27;&#x27;</td><td>SearXNG服务根地址，留空不启用。</td></tr>
+<tr><td><code>searxng_default_engines</code></td><td><code>str</code></td><td>&#x27;sogou&#x27;</td><td>普通网页引擎名称，默认sogou。</td></tr>
+<tr><td><code>searxng_allowed_engines</code></td><td><code>str</code></td><td>&#x27;sogou,bing,360search&#x27;</td><td>Agent可选择的普通网页引擎名称，英文逗号分隔。</td></tr>
+<tr><td><code>web_search_timeout_seconds</code></td><td><code>float</code></td><td>30</td><td>HTTP各阶段等待超时秒数，默认30、范围(0,120]；不是整个任务时限。 字段约束：&gt; 0；≤ 120。</td></tr>
+<tr><td><code>webpage_timeout_seconds</code></td><td><code>float</code></td><td>20</td><td>读取网页的HTTP各阶段超时秒数，与SearXNG搜索超时分别配置。 字段约束：&gt; 0；≤ 120。</td></tr>
+<tr><td><code>webpage_max_download_bytes</code></td><td><code>int</code></td><td>2000000</td><td>解压后HTML下载字节上限，默认200万，范围1024至1000万；不是max_chars。 字段约束：≥ 1024；≤ 10000000。</td></tr>
+<tr><td><code>webpage_tls_verify</code></td><td><code>bool</code></td><td>True</td><td>是否校验网页HTTPS证书，默认开启。</td></tr>
+</table></div>
+<h2 id="maintenance">6. 随开发维护</h2><ul><li>新增、修改或删除实体、工具输入输出、内部结果或事件字段时，同次更新本页和models/README.md等受影响文档；按模块及工具归组，不恢复为历史任务流水账。</li><li>源码定义是事实依据；字段说明须包含含义、类型、默认值、单位、空值及必要约束，并标明创建方、使用方和公开边界。</li><li>后续开发LangGraph时，先讨论实际节点需要的状态，再新增专门的Graph State字段分组，说明写入节点、读取节点、更新和清理时机；不提前冻结字段。</li><li>本页不是可执行Schema；模型可见输入说明仍来自Pydantic Field与工具description。输出TypedDict说明不自动发送给模型。</li></ul><p>关联文档：<a href="技术文档.html">技术文档</a> · <a href="Agent工具清单.html">Agent工具清单</a> · <a href="开发任务列表.html">开发任务列表</a> · <a href="../models/README.md">模型索引</a></p></main></body></html>

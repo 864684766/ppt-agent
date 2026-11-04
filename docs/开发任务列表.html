@@ -1,29 +1,51 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜开发任务列表</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:#1b2932;font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:#fff;padding:38px max(24px,calc((100% - 1050px)/2))}header p{color:#cfe3df}h1{font-size:30px;margin:5px 0}main{max-width:1050px;margin:auto;padding:12px 24px 70px}h2{border-bottom:2px solid #d8e1e2;padding-bottom:8px;margin-top:38px;font-size:22px}h3{font-size:18px;margin-bottom:4px}.note{background:#edf6f4;border-left:4px solid #12675f;padding:12px 18px;margin:22px 0}table{border-collapse:collapse;width:100%;background:white}td,th{border:1px solid #d8e1e2;padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}a{color:#12675f}code{background:#e9efee;padding:2px 4px}.scroll{overflow-x:auto}li{margin:6px 0}@media(max-width:650px){main{padding-inline:16px}header{padding:26px 16px}table{min-width:700px}}@media print{body{background:white}header{background:white;color:black;padding:0}header p{color:#555}main{padding:0}}
-</style></head><body><header><p>DEVELOPMENT CHECKLIST · DRAFT 0.1 · 2026-10-30</p><h1>后端开发任务列表</h1><p>按小步骤开发、讲解、验证与讨论</p></header><main>
-<div class="note"><strong>协作方式：</strong>每次只推进一个小任务，先讲目标、涉及技术和完成标准；实现后展示关键代码、运行结果和测试方式，等待讨论后再进入下一项。用户另行要求连续推进时按用户要求执行。状态随实际实现与验证更新。用户已要求此前三个工具统一标记已完成；工具完成指独立实现和约定的两项测试，不表示正式资料或HTTP/模型循环已接线。设计、中文注释、版本及测试要求见 <a href="../AGENTS.md">项目开发规则</a>。</div>
-<p>目标环境：Windows 本机、Python 后端。第一阶段必须包含主题对话、大纲编辑、模板上传与缺失反馈、LangGraph 编排、LangChain 模板识别、Harness 模板使用以及 PPTX 生成；数据库与跨重启恢复放到后续。</p>
-<h2>第一阶段：完整后端闭环</h2><div class="scroll"><table><tr><th>任务</th><th>工作内容</th><th>完成标准</th><th>状态</th></tr>
-<tr><td>01 环境与依赖</td><td>检查 Python、虚拟环境、Windows 依赖，确认并锁定兼容版本，建立不含密钥的配置示例。</td><td>查询最新版本并验证兼容性；依赖安装成功后输出实际版本、锁文件与启动方法；不改写现有密钥。</td><td>已完成</td></tr>
-<tr><td>02 FastAPI 基础</td><td>建立应用入口、健康检查，使用 FastAPI 默认 404 / 405 错误响应；提供 Postman 与断点调试说明。</td><td>本机已启动验证：健康接口、OpenAPI 和 /docs 返回 200，错误路径与方法返回 404 / 405。</td><td>已完成</td></tr>
-<tr><td>03 模型配置</td><td>已提供按任务选择模型的配置入口；LangChain SSE 流式对话接口 POST /ppt-agent/v1/chat 使用默认模型，任务专用调用随对应业务接入。</td><td>2026-11-02：真实 Uvicorn 流式调用收到 28 个 delta 和 done，临时脚本检查空白、错误及提前关闭清理；提供 Postman 与断点步骤；按用户要求删除本次自动测试文件，用户手工验收待进行。已复查并升级 LangGraph 1.2.19、LangSmith 0.14.17、OpenAI 3.42.1，声明、锁文件与虚拟环境一致，整体约束检查通过；撤销 requirements.txt 导出方案，保持 uv 管理；已修正异步流与 SecretStr 类型，补充 openai 直接依赖并通过模拟流检查。API 结构及解耦整理完成：契约移至 domain/chat_client_contract.py，适配器不再依赖 Settings；标准库独立导入、显式参数模拟调用、路由、流事件、校验和清理验证通过；单一职责审查完成；通用 SSE 支持结构化 JSON 并验证，工具/推理摘要事件尚未接线。未接入 LangSmith 追踪和 Harness。</td><td>已完成（API 结构整理完成，等待用户学习与讨论）</td></tr>
-<tr><td>03A-1 资料目录工具（插入任务）</td><td>实现list_materials：资料目录查询与LangChain工具入口分离；实体、入参、输出在models/materials按功能集中，模型索引说明数据流；查询名为material_catalog.py，工具入口名为list_materials_tool.py。系统文件也按客户端/路由/编码等明确角色命名。</td><td>2026-11-02：按用户最新要求，测试文件只保留tool-calling JSON定义、实际返回结果两项，均打印JSON并断言，2项通过。运行：uv run --locked python -m pytest tests/test_list_materials.py -s -q。此前34项详细检查已从当前文件移除。当前输入为宿主提供的快照，未接上传/网页登记、HTTP工具接口或模型工具循环，无数据库。详见<a href="list_materials调试说明.md">调试说明</a>。</td><td>已完成</td></tr>
-<tr><td>03A-2 真实业务资料登记（待后续逐项开发）</td><td>承接用户上传业务资料，磁盘保存原文件，读取实际元数据并构造MaterialSummary，按项目写入进程内存目录；解析/OCR后替换不可变状态记录，正文单独关联保存；为list_materials接入真实目录快照。</td><td>上传后目录出现真实记录且为pending；解析后ready/failed准确，页数未知不虚填。目录更新后重建工具，同轮分页固定快照。模板与技能不混入，重启不承诺恢复，不要求数据库。</td><td>已确认数据流，未开始；本轮仅记录，不推进实现</td></tr>
-<tr><td>03A-3 正文检索工具（第二个工具）</td><td>实现search_materials、正文块数据契约、工具输入/输出及纯Python检索；按项目/来源/ready状态/版本限定范围，保留原文定位，限定条数和文本长度。</td><td>2026-11-02：仅保留JSON定义和实际结果2项可打印测试，均通过；与list_materials合跑共4项通过。标准库字面检索、任意关键词命中，同块去重；返回来源/版本/页码/块ID与截断标记。未接真实解析/OCR、上传、内存登记仓库、HTTP、MCP或聊天工具循环。详见<a href="search_materials调试说明.md">第二个工具调试说明</a>。</td><td>已完成；read_material见03A-6</td></tr>
-<tr><td>03A-4 资料模型结构整合</td><td>资料模型8个定义文件整合为5个：资料来源、正文块、内部查询结果，以及两个工具各自的完整契约；同步导入、模型索引与开发规则。类型、字段和工具行为保持不变。</td><td>2026-11-02：两个工具现有JSON定义与样本返回结果共4项测试通过；业务模块独立导入检查通过。未新增依赖、Store字段或HTTP接口。</td><td>结构整合完成，等待用户学习与讨论；不推进下一个工具</td></tr>
-<tr><td>03A-5 目录公共校验职责整理</td><td>将validate_material_catalog提取到独立的material_validator.py，目录查询与正文校验分别引用共享模块，不再互相依赖；移除仅为校验而调用完整目录查询的写法，补充开发规则及职责说明。</td><td>2026-11-02：两个工具现有4项测试通过；独立业务调用确认项目编号、重复来源校验与项目隔离仍生效，正文校验不调用目录查询。无新增工具、模型字段、配置或依赖；多项非法输入同时出现时可能先报告目录错误。</td><td>完成，等待用户学习与讨论</td></tr>
-<tr><td>03A-6 正文读取工具（第三个工具）</td><td>实现read_material：指定来源、版本、正文块及字符范围读取；新增完整工具契约与内部读取结果；正文关联校验由检索和读取共同依赖material_validator。</td><td>2026-11-02：新工具JSON定义和样本返回结果2项测试通过，与前两个工具合跑6项通过。结果场景展示首次读取与next_offset续读；不自动扩展相邻块。未接真实上传、解析/OCR、HTTP、MCP或聊天工具循环。详见<a href="read_material调试说明.md">第三个工具调试说明</a>。</td><td>已完成</td></tr>
-<tr><td>03A-7 联网搜索工具（第四个工具）</td><td>search_web协议、契约与SearXNG真实适配；工具一次调用只执行一次普通网页搜索。</td><td>2026-11-03：SearXNG地址/引擎/超时配置及独立断点入口完成；新增SEARXNG_ALLOWED_ENGINES允许列表读取与解析，后续提示词和工具参数校验待接线；按最新要求移除搜索测试模拟数据，地址/默认引擎/超时统一读取Settings；JSON定义检查及真实搜索集成验证2项通过，返回3条（存在无关结果，不代表相关性合格）。未接HTTP、聊天循环或正式资料仓库；fetch_webpage见03A-9；无新增Store或依赖。</td><td>已完成独立工具与SearXNG接入</td></tr>
-<tr><td>03A-8 全项目字段说明审查</td><td>补齐实体、内部结果、工具输出、配置与SSE字段中文注释；健康响应增加Field说明，搜索工具描述解释每个返回字段；写入开发规则。</td><td>2026-11-03：四个工具现有8项测试通过。只完善说明，保留字段、约束与返回行为；未新增依赖。Store结构不变，仅补充已有搜索字段含义。</td><td>已完成</td></tr>
-<tr><td>03A-9 网页正文工具及调优记录</td><td>实现fetch_webpage静态HTML读取；新建optimization目录记录搜索后自动读取与选择后读取的对比需求。</td><td>2026-11-03：JSON定义及真实search_web候选URL读取2项通过，成功提取1857字符；未用模拟数据，属于网络集成验证，实际内容不切题，不代表质量验证。新增网页超时及下载大小配置；证书失败单独提示，增加通用WEBPAGE_TLS_VERIFY开关，默认true，本机false兼容模式；无新增依赖或Store；不登记资料，未实现浏览器、附件、并发编排。</td><td>独立工具已完成；调优实验待执行（OPT-002已记录正文分段及提前停止需求，暂保留完整下载）</td></tr><tr><td>04 大纲数据模型</td><td>定义项目、对话、大纲条目、版本及内存状态。</td><td>可表达页类型、标题、要点、顺序和版本；验证不合法输入。</td><td>未开始</td></tr>
-<tr><td>05 大纲对话与编辑</td><td>主题生成大纲；多轮对话修改；接口直接修改、增删、排序、合并与拆分。</td><td>对话和手动操作更新同一份大纲，冲突不静默覆盖；可确认大纲。</td><td>未开始</td></tr>
-<tr><td>06 文件和简洁模板</td><td>上传 PPTX，保存在本地项目目录；制作一个简单内置模板。</td><td>完整和残缺模板均可上传；文件大小与类型检查生效。</td><td>未开始</td></tr>
-<tr><td>07 Python 模板分析</td><td>解析母版、版式、占位符和样例页；验证一种 Windows 预览渲染方式。</td><td>返回结构与预览或明确错误；记录字体和模板兼容问题。</td><td>未开始</td></tr>
-<tr><td>08 MCP 工具服务</td><td>将模板分析等 Python 模块封装为 MCP 工具，LangChain 与 Harness 分别接入。</td><td>两端可发现并调用指定工具；验证 Windows 进程、取消、错误和文件范围。</td><td>未开始</td></tr>
-<tr><td>09 LangChain 模板识别</td><td>结合结构、文本和可用视觉能力，生成角色建议、槽位、依据及缺失项。</td><td>能分析完整和残缺模板；不确定项不会伪装为确定结论。</td><td>未开始</td></tr>
-<tr><td>10 LangGraph 人工反馈</td><td>识别结果返回图状态；用户回答、映射确认或选择补充／AI 补全。</td><td>运行进程内可暂停与继续；确认后的映射可供后续节点读取。</td><td>未开始</td></tr>
-<tr><td>11 Harness 接入</td><td>用 Python SDK 接入百舸模型配置、任务输入和 MCP 工具；验证提问、取消和错误。</td><td>可接收 LangGraph 交付的确认结果并完成受控子任务；如遇兼容问题先记录并解决。</td><td>未开始</td></tr>
-<tr><td>12 PPTX 生成</td><td>Harness 使用确认的大纲和模板映射调用 Python 工具；残缺模板按用户选择补全。</td><td>生成 8–12 页可打开 PPTX，含封面、目录、内容和来源页；主要文本可编辑。</td><td>未开始</td></tr>
-<tr><td>13 闭环验证</td><td>通过 API 执行主题对话、大纲编辑、残缺模板反馈、生成和下载。</td><td>完整与残缺模板至少各验证一次；报告局限和操作步骤。</td><td>未开始</td></tr></table></div>
-<h2>后续增强</h2><ol><li>资料与来源：本地文件、联网搜索及可追溯引用；第一阶段来源不足时明确反馈，不虚构来源。</li><li>技能：导入包含 <code>SKILL.md</code>、脚本与资源的技能包，热加载及锁定版本；评估 PPT Master 的依赖与可复用部分。</li><li>生成后对话修改、版本恢复、页面预览与更完整的视觉检查。</li><li>持久化：数据库、检查点、跨重启恢复、任务队列与多用户部署。</li></ol><div class="note">依赖关系可能要求在某一步提前引入少量基础代码；每次只实现当前任务所需范围。任务 05–12 共同构成第一阶段目标，不能把“大纲对话”或“缺失模板反馈”推迟到后续阶段。</div><p><a href="产品文档.html">产品文档</a> · <a href="技术文档.html">技术文档</a></p></main></body></html>
+.status{display:inline-block;white-space:nowrap;padding:2px 9px;border-radius:5px;font-weight:bold}.done{background:#dff2e8;color:#185a3d}.partial{background:#fff0cd;color:#785000}.todo{background:#e9edf0;color:#52616b}.summary{display:flex;gap:14px;flex-wrap:wrap;margin:20px 0}.summary span{background:white;border:1px solid #d8e1e2;padding:10px 16px}nav a{display:inline-block;margin:5px 18px 5px 0}pre{white-space:pre-wrap;background:#eaf1f0;padding:16px}</style></head><body><header><p>DEVELOPMENT CHECKLIST · 2026-11-04</p><h1>后端开发任务列表</h1><p>阶段任务与完成状态 · 具体工具统一在工具清单维护</p></header><main>
+<nav><a href="#status">当前进度</a><a href="#tasks">开发任务</a><a href="#dependencies">依赖与推进顺序</a><a href="#later">后续调优与增强</a></nav>
+<div class="note"><strong>文档分工：</strong>本页管理项目级任务、依赖和完成标准；<a href="Agent工具清单.html">Agent工具清单</a>管理每个工具的职责、输入输出、开发状态和验证方法；<a href="技术文档.html">技术文档</a>管理架构与流程；<a href="Store清单.html">字段清单</a>按模块与工具解释当前实现字段；LangGraph字段在开发时讨论补充。工具开发在本页只占一个任务，不再逐个展开工具或堆叠重构记录。</div>
+<p>目标：Windows本机Python后端，完成主题对话、业务资料研究、完整大纲编辑、完整或残缺模板上传与人工反馈，以及8–12页可打开的PPTX生成。LangChain负责内容，Harness负责模板与制作，LangGraph负责本次任务的编排、确认和修改分派。</p>
+<div class="note"><strong>2026-11-04范围收窄：</strong>当前仅做一次性任务；上传携带用途类型，按类型分析。项目定义、独立会话管理与历史版本延期，记录在<a href="../optimization/多项目会话与历史版本管理.md">OPT-003</a>。本次任务所需临时上下文及来源定位仍保留。</div><h2 id="status">当前进度</h2>
+<div class="summary"><span>已完成：3项</span><span>部分完成：1项</span><span>未开始：8项</span></div>
+<p><span class="status done">已完成</span> 表示该任务限定范围已实现并有验证记录；<span class="status partial">部分完成</span> 表示已交付部分能力，但整体完成标准尚未满足；<span class="status todo">未开始</span> 表示仅设计、依赖安装或目录骨架，尚无任务业务实现。历史验证记录不表示本次重新运行。</p>
+<p><strong>当前工作位置：任务04「Agent工具开发」。</strong>继续按工具清单逐项开发、测试和讨论。五个独立工具已实现不代表全部工具、资料登记、Agent循环或PPTX闭环已完成。</p>
+<h2 id="tasks">开发任务</h2><div class="scroll"><table><thead><tr><th>编号与任务</th><th>状态</th><th>范围与完成标准</th><th>当前成果或待办边界</th></tr></thead><tbody>
+<tr><td><strong>01 环境、依赖与工程规范</strong></td><td><span class="status done">已完成</span></td><td>使用uv管理pyproject.toml与uv.lock，建立Windows Python环境和分层目录；维护配置示例、模型索引与开发规则。</td><td>已有安装、核心导入及依赖约束检查记录。单一职责、解耦、中文注释及文档同步规则已建立。以后新增或升级依赖仍须重新检查，不把历史版本当作当前最新版本。</td></tr>
+<tr><td><strong>02 FastAPI基础服务</strong></td><td><span class="status done">已完成</span></td><td>应用入口、统一路由组装、健康检查、OpenAPI及监听配置；支持PyCharm启动与断点。</td><td>已有健康接口、OpenAPI、404/405及启动验证记录。HOST/PORT由配置读取；Uvicorn是服务启动器，不是单元测试。</td></tr>
+<tr><td><strong>03 模型连接与流式对话基础</strong></td><td><span class="status done">已完成</span></td><td>通过LangChain接入OpenAI兼容模型；提供单轮SSE对话、超时及安全错误处理，预留按任务选择模型的配置。</td><td>已有真实流式delta/done验证。当前为无状态普通对话，不包含大纲编辑、模型选工具循环、Harness接入或LangSmith追踪初始化。</td></tr>
+<tr><td><strong>04 Agent工具开发</strong></td><td><span class="status partial">部分完成</span></td><td>按<a href="Agent工具清单.html">Agent工具清单</a>完成第一阶段必需的工具、独立业务实现、中文Schema说明和各自验证。工具明细、状态、可选项与测试命令只在工具清单维护。</td><td>已完成五个独立资料/联网工具；其余能力及已有工具的未接线事项见工具清单。联网结果验证使用真实配置和真实网页，明确为集成验证。工具完成不代表正式上传资料、MCP或Agent调用链已接线。</td></tr>
+<tr><td><strong>05 按用途上传与文件分析</strong></td><td><span class="status todo">未开始</span></td><td>一次性任务接收文件和用途类型（业务资料material / 模板template），校验后按用途保存与分派分析，返回真实元数据、解析或OCR结果及明确失败原因。</td><td>当前不定义项目、会话或历史版本管理，不要求前端传项目ID。必要来源编号与引用定位仍保留；与现有资料工具接线时复用内部契约，不为此建设多项目系统。文件分析可按类型逐步交付。</td></tr>
+<tr><td><strong>06 技能与提示词接入</strong></td><td><span class="status todo">未开始</span></td><td>建立独立可修改的提示词目录；从手动放置的本地技能目录发现并按需读取说明、资源和脚本入口；编写或选用一个最小的通用资料研究示例技能验证接入，不批量制作专业技能。本版不做技能上传接口或市场。</td><td>技能来源与使用解耦：PPT业务只消费统一加载结果，不依赖市场下载或安装；运行任务固定已加载内容；脚本由明确运行时执行，支持错误与取消。搜索范围等提示根据配置生成，工具参数仍需运行时校验。系统不因读取技能文本而自动授予新权限。</td></tr>
+<tr><td><strong>07 LangChain内容子智能体与大纲编辑</strong></td><td><span class="status todo">未开始</span></td><td>接入资料工具，使用任务06已加载且适用于内容研究的技能；支持上传材料分析或联网搜索、筛选与正文核查；生成带来源的逐页内容，支持完整对话编辑及手动增删、排序、合并、拆分和确认。</td><td>输出稳定页面ID、角色、标题、结论、要点、数据、来源与缺口；不能只输出标题让制作侧补事实。对话与手动操作更新本次任务的当前大纲，资料不足需反馈；不实现历史版本管理。专业技能编写、自动生成和安装不属于本任务；没有专业技能时按基础提示词执行，不宣称具备已验证的专业判断能力。</td></tr>
+<tr><td><strong>08 Harness运行时接入</strong></td><td><span class="status todo">未开始</span></td><td>通过Python SDK配置模型及子任务输入；验证真实任务、工具/技能调用、取消、错误和人工提问桥接，建立可替换适配边界。</td><td>SDK已安装不代表此任务完成。MCP所需工具由独立Python实现适配接入；验证两类运行时需要的发现、调用、资源释放及取消，不把框架对象当业务协议。</td></tr>
+<tr><td><strong>09 Harness模板分析与PPTX制作</strong></td><td><span class="status todo">未开始</span></td><td>准备一个自制简洁内置模板；分析上传完整或残缺模板的结构、页面角色及槽位。Harness提出选择与映射，按确认的逐页内容制作PPTX。</td><td>模板分析与应用为两个独立模块，统一归Harness负责。识别不确定或缺失时提出结构化问题；支持用户补传或同意补全。生成8–12页含封面、目录、内容与来源页的可打开PPTX，主要文本可编辑，不擅自改结论。</td></tr>
+<tr><td><strong>10 LangGraph编排、人工反馈与修改路由</strong></td><td><span class="status todo">未开始</span></td><td>串联内容和制作子任务，管理确认快照、问题与答案、取消和失败。按内容、视觉、混合、需澄清四类分派修改。</td><td>内容→LangChain→Harness；视觉→Harness；混合先内容后制作；不清楚先问用户。自由文本分类由明确节点产出并校验，LangGraph不天然具备语义判断。本次任务的当前大纲、用户决定与进度显式传递，不依赖独立会话管理。</td></tr>
+<tr><td><strong>11 任务API、进度与产物交付</strong></td><td><span class="status todo">未开始</span></td><td>将一次性上传、大纲编辑确认、人工答案、生成修改、任务状态与PPTX下载接入HTTP；扩展SSE事件载荷。</td><td>复用现有FastAPI和SSE编码，不把已支持JSON编码当成已有业务事件。提供请求与断点说明，用户自行使用Postman；不生成Postman目录或集合。产物对应本次确认的大纲及模板，不建设历史版本库。</td></tr>
+<tr><td><strong>12 第一阶段闭环验收</strong></td><td><span class="status todo">未开始</span></td><td>通过真实API验证本地资料和联网研究、大纲多轮编辑、完整/残缺模板反馈、生成、下载及修改分派。</td><td>实际在Windows打开PPTX并检查页数、内容、来源、主要文本可编辑和版本对应。覆盖完整与残缺模板、内容与视觉修改、取消及明确失败；报告限制，不以工具测试替代端到端验收。</td></tr>
+</tbody></table></div>
+<h2 id="dependencies">依赖与推进顺序</h2>
+<pre>01–03 基础已完成
+    ↓
+04 工具开发（当前，具体顺序见Agent工具清单）
+    ↓
+05 按用途上传与文件分析 + 06 技能/提示词
+    ↓
+07 LangChain内容与大纲        08 Harness运行时
+            └──────────┬──────────┘
+                       ↓
+               09 Harness模板与制作
+                       ↓
+          10 LangGraph确认、反馈和修改路由
+                       ↓
+              11 项目API与产物交付
+                       ↓
+                 12 端到端验收</pre>
+<p>编号表示主要交付顺序，不要求某一大任务一次写完。04中的工具与05、06、08中的宿主或运行时能力有依赖时，先完成最小可调用实现，再接线；不要为了提前把04标记完成而制造假数据流。10的最小编排和人工反馈可在07、09验证时提前接入，不能拖到模板生成结束后才发现无法反馈。每次仍只推进一个双方明确的小步骤。</p>
+<h2 id="later">后续调优与增强</h2>
+<table><tr><th>方向</th><th>安排</th></tr>
+<tr><td>性能与成本</td><td>统一记录到<a href="../optimization/README.md">optimization目录</a>。OPT-001比较自动读取与选择后读取；OPT-002评估正文缓存分段读取及提前停止。目前均未执行比较实验，当前仍完整下载后提取截断。</td></tr>
+<tr><td>预览与视觉增强</td><td>页面图片、LibreOffice/Harness Office渲染、复杂模板和更完整视觉检查为可选增强，不作为首个可打开PPTX的前置条件。</td></tr>
+<tr><td>模板资源与技能扩展</td><td>少量授权和兼容验证的内置模板、用户上传为首版范围；在线模板搜索后续考虑。PPT Master的全部流程或部分资源是否复用需实测，不预先承诺兼容。</td></tr>
+<tr><td>持久化与部署</td><td>数据库、跨重启检查点、任务队列、完整版本恢复、多用户部署后续引入；第一阶段仅本地文件与进程内存。</td></tr></table>
+<div class="note"><strong>维护规则：</strong>项目级任务状态在本页维护，工具级状态在工具清单维护。实现一个工具或做一次重构，不再在本页增加插入编号；更新所属任务的简短进度及对应专业文档。每步完成后说明关键代码、验证结果与限制，等待用户讨论后再继续。规则见<a href="../AGENTS.md">AGENTS.md</a>。</div>
+<p><a href="技术文档.html">技术文档</a> · <a href="Agent工具清单.html">Agent工具清单</a> · <a href="Store清单.html">字段清单</a> · <a href="产品文档.html">产品文档</a></p></main></body></html>

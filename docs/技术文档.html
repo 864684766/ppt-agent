@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜技术设计文档</title><style>
 :root{color-scheme:light;--ink:#1b2932;--muted:#596c72;--line:#d7e0e2;--accent:#12675f;--wash:#edf6f4;--orange:#a2541d}*{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:var(--ink);font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:white;padding:42px max(24px,calc((100% - 1100px)/2))}header p{color:#cfe3df;margin:5px 0}h1{font-size:32px;line-height:1.3;margin:8px 0}h2{font-size:23px;margin:42px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px}h3{font-size:18px;margin:25px 0 8px}main{max-width:1100px;margin:auto;padding:8px 24px 70px}nav{background:white;border:1px solid var(--line);padding:16px 22px;margin:22px 0}nav a{display:inline-block;margin:4px 18px 4px 0}a{color:var(--accent)}p{margin:10px 0}ul,ol{padding-left:24px}li{margin:5px 0}.note{border-left:4px solid var(--accent);background:var(--wash);padding:12px 18px;margin:18px 0}.warn{border-color:var(--orange);background:#fff4e9}table{width:100%;border-collapse:collapse;background:white;margin:12px 0}th,td{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}.scroll{overflow-x:auto}code{background:#e9efee;padding:1px 4px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#182b30;color:#e5f5f2;padding:18px;line-height:1.55;font:14px/1.6 Consolas,monospace}pre code{background:none;padding:0;color:inherit}.flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin:18px 0}.flow span{background:white;border:1px solid var(--line);padding:9px 12px}.flow span:not(:last-child):after{content:' →';color:var(--accent)}.meta{color:var(--muted)}@media(max-width:650px){h1{font-size:26px}main{padding-inline:16px}header{padding:30px 16px}table{min-width:680px}}@media print{body{background:white}header{background:white;color:black;padding:10px 0}header p{color:#555}main{padding:0}nav{display:none}h2{break-after:avoid}table,.note{break-inside:avoid}pre{background:#f2f2f2;color:black}}
-</style></head><body><header><p>TECHNICAL DESIGN · DRAFT 0.1 · 2026-10-30</p><h1>AI PPT 工作台<br>技术设计文档</h1><p>Python 后端优先 · Agent 编排 · 模板分析与可编辑 PPTX</p></header><main><nav><strong>目录</strong><br><a href="#architecture">架构</a><a href="#workflow">运行流程</a><a href="#agents">子智能体</a><a href="#template">模板</a><a href="#skills">技能与工具</a><a href="#api">API 与数据</a><a href="#ops">运行与验证</a><a href="#sources">参考资料</a></nav>
+</style></head><body><header><p>TECHNICAL DESIGN · DRAFT 0.2 · 2026-11-04</p><h1>AI PPT 工作台<br>技术设计文档</h1><p>Python 后端优先 · Agent 编排 · 模板分析与可编辑 PPTX</p></header><main><div class="note"><strong>当前版本范围覆盖说明（2026-11-04）：</strong>按用户最新决定，当前先做一次性任务：上传文件及用途类型，仅按业务资料/模板分派分析；技能手动放入本地目录，由独立加载模块读取，本版无技能上传接口或市场，不建设项目、独立会话或历史版本管理。本文后续Project、Conversation、历史版本及对应项目接口是后续设计参考，不是当前验收条件。本次运行仍需临时上下文和来源定位；现有工具内部字段尚未改动，不表示已实现项目系统。延期需求见<a href="../optimization/多项目会话与历史版本管理.md">OPT-003</a>，当前任务安排见<a href="开发任务列表.html">开发任务列表</a>。</div><nav><strong>目录</strong><br><a href="#architecture">架构</a><a href="#workflow">运行流程</a><a href="#agents">子智能体</a><a href="#template">模板</a><a href="#skills">技能与工具</a><a href="#api">API 与数据</a><a href="#ops">运行与验证</a><a href="#sources">参考资料</a></nav>
 <div class="note"><strong>状态：</strong>讨论稿。第一阶段以 Windows 本机为目标，必须实现完整大纲对话编辑、上传完整或残缺模板、识别不全时的人工反馈与继续生成。项目最终有前后端，本阶段只实现 Python 后端；接口、存储和组件名称是建议设计，待原型及讨论确认。不会将未经验证的 Harness、PPT Master 和模板能力视为已实现。</div>
 <div class="note"><strong>字段说明审查（2026-11-03）：</strong>已补齐资料实体、目录/检索/读取内部结果、四个工具公开输出及网页候选的逐字段中文注释；输入沿用Field描述，健康响应补充OpenAPI字段说明，配置与SSE事件载荷补充语义。条数、字符偏移、空值、版本与编号需明确区分。模型可见的工具description需解释关键返回字段，源码注释不自动成为模型Schema。后续作为开发规则执行。</div>
+<div class="note"><strong>2026-11-04 已确认职责调整：</strong>LangChain内容子智能体负责上传业务资料分析、联网搜索与筛选、来源整理和逐页大纲编辑；Harness制作子智能体负责模板分析与选择、内容映射、排版和PPTX制作；LangGraph维护权威状态、人工确认及修改路由。此处是目标设计，不代表子智能体、路由或生成链路已接线。重点审阅第1–4节；模板分析不再归LangChain负责。</div>
 <h2 id="structure">项目目录与职责</h2>
 <p>当前采用根目录直接放置 Python 功能包的布局。根目录 <code>main.py</code> 已提供 FastAPI 应用工厂和应用对象。项目根目录不作为 Python 包使用，不放置 <code>__init__.py</code>。</p>
 <pre><code>ppt-agent/
@@ -77,7 +78,8 @@
 ├── workflows/                            # 编排预留包，尚无业务实现
 ├── optimization/                         # 后续调优需求及实验记录
 │   ├── README.md
-│   └── 搜索与网页读取效率对比.md
+│   ├── 搜索与网页读取效率对比.md
+│   └── 网页分段读取与提前停止.md
 ├── docs/                                 # 技术、产品、任务和调试说明
 ├── AGENTS.md                             # 开发规则
 ├── pyproject.toml                        # uv依赖声明
@@ -165,39 +167,102 @@ api/sse_encoder → 标准库 json
 <h3>第三个Agent工具：read_material（2026-11-02）</h3>
 <p>material_reader.py负责按source_id、version、block_id精确定位当前项目ready来源中的正文块，offset默认0，max_chars默认2000且为1–8000个Python字符。返回原文片段、原定位、实际字符范围、总字符数和next_offset；块尾为null。MaterialReadResult是内部结果，工具只选择公开字段返回。一次只读一个块，不包含相邻块，不按页读取，不访问原文件或进行OCR。</p>
 <p>模型契约见models/materials/read_material_contract.py；公共正文关联校验迁入domain/materials/material_validator.py并命名为validate_material_content_data，读取与检索不互相依赖。新工具的2项测试通过，与前两个工具合跑共6项通过。未接HTTP、聊天工具循环、真实上传或解析；无新增依赖或持久化。详见<a href="read_material调试说明.md">读取工具调试说明</a>。</p>
-<h2 id="architecture">1. 总体架构</h2><pre><code>未来 Web 前端 / 当前 API 客户端
-            │ HTTP + SSE
-            ▼
- FastAPI：API、上传、鉴权扩展点、事件、下载
-            │
-            ▼
- LangGraph：项目状态、流程编排、检查点、人工中断
-     ┌──────┼─────────────────────┐
-     ▼      ▼                     ▼
-资料与大纲  LangChain 模板识别     Harness 模板使用子智能体
-模型/工具   子智能体               Python SDK → 独立运行时
-     │      │                     │
-     └──────┴──────────┬──────────┘
-                       ▼
-       Python 工具：解析、检索、技能脚本、PPTX、渲染、检查
-                       │
-       本地文件与内存状态 ─── 可选 LangSmith 追踪（数据库后续引入）</code></pre><p>识别结果先返回 LangGraph 状态，经过校验及必要的用户确认，再由 LangGraph 调用 Harness 传入确认结果。LangGraph 是业务状态的权威来源；Harness 保留子任务会话，但不能独立改变已确认的大纲或模板映射。LangChain 与 Harness 分别管理模型调用，使用同一代理不代表共享模型对象。Harness SDK 通过子进程 JSON-RPC 控制独立运行时；直接控制 LangChain 模型对象不是文档确认的开箱能力。</p><div class="scroll"><table><tr><th>组件</th><th>选择及职责</th></tr><tr><td>API / 运行</td><td>Python、FastAPI、Pydantic；SSE 推送进度，后台任务执行器独立于请求生命周期。</td></tr><tr><td>智能体</td><td>LangGraph 编排；LangChain 识别模板；Harness Python SDK 驱动模板使用子智能体。固定版本并通过适配层隔离。</td></tr><tr><td>PPTX</td><td><code>python-pptx</code> 为首选候选；必要时读取 Open XML。复杂样例页复制、<code>.potx</code> 和母版继承以实测为准。</td></tr><tr><td>渲染</td><td>渲染将 PPTX 转成 PDF 或页面图片供预览检查，不负责生成 PPTX。Harness SDK 提供可选 Office 本地 API，文档示例是 DOCX，PPTX 渲染支持和 Windows 效果需实测；也可评估 LibreOffice。</td></tr><tr><td>存储 / 追踪</td><td>第一阶段采用本地文件和内存状态，重启后不保证恢复任务；数据库与持久化检查点后续引入。LangSmith 可配置启用及脱敏。</td></tr></table></div>
-<h2 id="versions">技术栈与版本候选</h2><div class="note">2026-10-30 本机安装记录：Windows 64 位，Python 3.13.9，uv 0.12.9；uv.lock 已锁定依赖，uv sync --locked 安装 105 个包，uv pip check 通过，核心包与 MCPAdapter 导入通过。Harness SDK 及运行时为 0.2.1rc2，LangChain MCP 为 Beta。此结果仅验证安装与导入，尚未验证模型、Harness 会话、MCP 互通或 Office 渲染。</div><div class="note">开发时重新查询官方来源，优先采用当时最新稳定版本，并检查最新预发布版本；以下是 2026-10-30 查询结果，并非安装后锁定结果。任务 01 需验证 Windows、Python、依赖及接口兼容性，生成锁文件并记录实际版本。最新版本冲突或缺少稳定版时，记录问题并与用户讨论，不静默降级。具体执行规则见 <a href="../AGENTS.md">项目开发规则</a>。</div><div class="scroll"><table><tr><th>技术</th><th>当前环境 / 候选</th><th>用途与说明</th></tr><tr><td>Windows / Python</td><td>本机及 .venv：Python 3.13.9；项目要求 &gt;=3.13</td><td>Windows 本机优先；版本兼容性以安装测试为准。</td></tr><tr><td>FastAPI / Uvicorn / Pydantic</td><td>0.162.0 / 0.54.0 / 2.14.2</td><td>API、ASGI 服务器及输入输出校验；候选待联合解析。</td></tr><tr><td>LangChain / LangGraph / LangSmith</td><td>1.4.7 / 1.2.18 / 0.14.16</td><td>Agent、图编排及可选追踪；选择实际安装版本后锁定。</td></tr><tr><td>LangChain MCP</td><td>langchain[mcp] 1.4.7 候选</td><td>官方 langchain.mcp.MCPAdapter；文档标注 Beta。旧 langchain-mcp-adapters 仓库已声明不再积极维护。</td></tr><tr><td>DeepSeek Harness Python SDK</td><td>0.2.1rc2（预发布；查询时未找到可用稳定版）</td><td>独立运行时，Windows wheel、provider 和工具协议必须实测；稳定版及兼容版本待确认。</td></tr><tr><td>python-pptx</td><td>1.0.2</td><td>PPTX 读写；复杂模板兼容性待实测。</td></tr><tr><td>MCP 服务端</td><td>已安装并锁定 2.3.0</td><td>依赖解析和导入通过；与 LangChain、Harness 的实际 MCP 通信仍待验证。</td></tr><tr><td>渲染工具</td><td>LibreOffice 或 Harness Office 运行时，版本待验证</td><td>Windows 上验证安装、PPTX 渲染、字体和产物后决定。</td></tr></table></div><p>Python 业务模块负责模板解析和 PPTX 生成；MCP Server 暴露需要模型调用的工具；LangChain 与 Harness 分别作为 MCP Client 接入。固定 LangGraph 节点也可直接调用 Python 模块。stdio 下两个客户端可能各自启动服务进程，连接生命周期与取消需要验证。</p><p>开发进度见 <a href="开发任务列表.html">后端开发任务列表</a>。参考 <a href="https://docs.langchain.com/oss/python/langchain/mcp">LangChain MCP 文档</a>、<a href="https://github.com/langchain-ai/langchain-mcp-adapters">旧适配器维护说明</a> 和 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md">Harness MCP 文档</a>。</p><h2 id="workflow">2. 运行流程与状态</h2><div class="flow"><span>创建项目</span><span>导入资料 / 模板 / 技能</span><span>研究与生成大纲</span><span>编辑与确认</span><span>识别与确认模板</span><span>生成 / 渲染 / 检查</span><span>下载或修改</span></div><pre><code>CREATED → RESEARCHING → OUTLINE_DRAFT ↔ OUTLINE_EDITING
-                                      ↓ 用户确认
-                           TEMPLATE_ANALYZING
-                                      ↓
-                    WAITING_FOR_USER ↔ TEMPLATE_READY
-                                      ↓
-                        GENERATING → CHECKING → COMPLETED
-                                      ↓
-                           REVISING → 新的生成版本
-任意可取消阶段 → CANCELLING → CANCELLED；错误 → FAILED（可重试）</code></pre><p>上图是产品状态示意，<code>WAITING_FOR_USER</code> 可由资料不足、模板歧义或修改需求不明确等节点进入；答案恢复对应节点。任务状态与项目状态分开存储。生成只读取已确认的大纲和模板映射快照；每次修改产生新版本，写入采用乐观版本控制。</p><h3>人工介入</h3><p>第一阶段人工问题在当前进程内等待并恢复；进程重启后需重新发起。持久化检查点后续引入。Harness 的短时提问回调可桥接到前端，但跨重启恢复能力须实测。长时间等待优先由子任务返回结构化问题，结束子任务后保存问题并根据答案继续；跨重启持久化属于后续阶段；不得假设 SDK 回调在重启后自动恢复。</p>
-<h2 id="agents">3. 子智能体与模型</h2><div class="scroll"><table><tr><th>子智能体</th><th>输入与工具</th><th>输出</th></tr><tr><td>LangChain 模板识别</td><td>模板文件、结构解析、占位符、文本及页面缩略图；可调用视觉模型（仅在确认支持图片输入时）。</td><td>候选角色、版式／样例页与槽位映射、依据、缺失项、需用户回答的问题。</td></tr><tr><td>Harness 模板使用</td><td>确认的大纲、来源、模板映射、技能快照与被授权的 Python 工具。</td><td>生成产物、预览、检查结果、错误或需用户决策的问题。不能修改业务权威状态。</td></tr></table></div><p>子任务采用结构化协议：<code>task_id</code>、输入快照版本、可用技能／工具、超时与预算；结果包含状态、产物引用、证据、问题及错误。后端校验结果后才写入项目状态。视觉模型不可用时，退回结构与文本分析加人工确认。</p><h3>模型路由</h3><p>按任务配置模型、上下文限制、图片能力、预算及重试策略。候选包括用户现有的 GLM、DeepSeek、Kimi 系列，但具体模型能力、代理名称和价格不在本文臆测。使用任务样本比较内容质量、来源准确性、速度和费用后再确定默认值。百舸基础调用能力已由用户确认，不作为原型验证项；Harness 对该代理的 provider 配置仍需验证。</p>
-<h2 id="template">4. 模板识别和使用</h2><p>识别结合 Open XML、母版／占位符、页面对象几何、文本语义和可用时的视觉模型。区分<strong>母版版式</strong>与<strong>实际样例页</strong>，记录证据而非依赖页面索引。目录或来源等业务角色通常没有可靠的通用标签。</p><pre><code>模板上传 → 类型和安全检查 → 解析母版、版式、占位符、样例页
-        → 渲染缩略图 → LangChain 子智能体提出角色与槽位
-        → 缺失 / 歧义 → 用户选择或自由输入
-        → 保存经确认的模板映射 → Harness 子智能体使用</code></pre><p>映射记录模板文件哈希、版本、版式／页面标识、角色、标题与内容槽位、用户确认状态、兼容性警告及识别依据。模板变化时重新检查。缺少页面时允许用户补充文件、复用版式、AI 补全或省略可选角色；补全须预览确认。</p><p>内置模板来自逐项确认许可及兼容性的候选资源；PPT Master 是候选来源，不承诺资源均为可直接使用的 PPTX。检查字体、图标、图片及品牌使用条件，保存来源与许可证记录。首版不做在线模板搜索。</p>
-<h2 id="skills">5. 技能与工具</h2><p>支持标准技能目录：<code>SKILL.md</code>、可选 <code>scripts/</code>、<code>references/</code>、<code>assets/</code>。技能注册表保存元数据、版本、哈希、依赖和兼容性；更新对新任务生效，运行中任务锁定快照。技能可引用并执行脚本，运行记录关联任务与版本。兼容通用格式不代表所有 ClawHub／OpenClaw 专属工具可直接运行。</p><p>脚本在受控工作目录中运行，提供明确的文件与网络权限、时间／资源限制和依赖说明；记录执行命令及结果，并支持取消。导入时展示来源、脚本与所需权限。技能文本和外部资料视为数据，不自动授予新工具权限。</p><div class="scroll"><table><tr><th>工具</th><th>用途</th></tr><tr><td>搜索与网页提取</td><td>可替换搜索服务；抓取正文、标题、URL 和访问时间，限制网络目标、大小及超时。</td></tr><tr><td>文件解析与引用</td><td>解析 PDF、DOCX、TXT、Markdown，保存片段、文件名与可获得页码；OCR 后续增强。</td></tr><tr><td>模板分析与渲染</td><td>解析结构、槽位、主题、文本；输出缩略图及兼容性报告。</td></tr><tr><td>PPTX 与质检</td><td>写入原生对象，渲染预览，检查页数、可打开性、空内容、越界与字体问题。</td></tr><tr><td>技能执行</td><td>发现技能、加载指令和资源、运行脚本、捕获日志及产物。</td></tr></table></div><p><strong>PPT Master：</strong>包含技能、Python 脚本、模板和制作流程，使用项目约定的 SVG 中间表示及转换工具链。原型评估 Harness 加载该技能、Windows 依赖、模板使用和输出质量；是否复用全部流程或局部脚本，待结果决定。</p>
-<h2 id="api">6. API 与数据设计</h2><div class="note">结构化数据、Graph State、Checkpointer、LangGraph Store 与文件存储的职责和阶段安排见 <a href="Store清单.html">Store 与结构化状态清单</a>。第一阶段不要求数据库或跨重启恢复。</div><p>以下为建议接口，具体请求和响应模式在实现时通过 OpenAPI 固化。所有写操作均需项目隔离；修改大纲和映射时携带版本号，冲突返回明确错误。</p><div class="scroll"><table><tr><th>接口</th><th>用途</th></tr><tr><td><code>POST /projects</code> · <code>GET /projects/{id}</code></td><td>创建、查看项目与当前状态。</td></tr><tr><td><code>POST /projects/{id}/files</code></td><td>上传资料或模板，返回文件标识及解析状态。</td></tr><tr><td><code>POST /projects/{id}/messages</code></td><td>提交用户消息，触发大纲或修改工作流。</td></tr><tr><td><code>GET/PATCH /projects/{id}/outline</code> · <code>POST .../outline/confirm</code></td><td>获取、编辑和确认大纲快照。</td></tr><tr><td><code>POST /templates/{id}/analyze</code> · <code>PUT /templates/{id}/mapping</code></td><td>分析模板，保存用户确认的角色及槽位映射。</td></tr><tr><td><code>POST /skills</code> · <code>POST /skills/{id}/activate</code></td><td>导入、检查并启用技能版本；项目显式绑定技能。</td></tr><tr><td><code>POST /projects/{id}/generations</code></td><td>基于确认的快照启动生成或修订。</td></tr><tr><td><code>GET /tasks/{id}</code> · <code>GET /tasks/{id}/events</code> · <code>POST /tasks/{id}/cancel</code></td><td>查询、SSE 事件和取消；事件支持重连及顺序标识。</td></tr><tr><td><code>POST /questions/{id}/answers</code> · <code>GET /artifacts/{id}</code></td><td>提交人工答案；查看或下载生成文件和预览。</td></tr></table></div><p>核心实体：Project、Conversation/Message、Source/SourceFragment、OutlineVersion/Item、Template/TemplateMapping、Skill/SkillVersion、Task/TaskEvent、UserQuestion/Answer、GenerationVersion/Artifact。引用外键和文件哈希，避免把二进制文件直接嵌入状态；模型密钥不进入业务状态或日志。</p>
+<h2 id="architecture">1. 总体架构</h2>
+<pre><code>未来Web前端 / 当前API客户端
+               │ HTTP + SSE
+               ▼
+FastAPI：请求校验、上传、事件推送、产物下载
+               │
+               ▼
+LangGraph：流程与权威状态、版本校验、人工确认、修改分派
+       │                                  │
+       ▼                                  ▼
+LangChain 内容子智能体                 Harness 制作子智能体
+上传资料分析 / 联网搜索与筛选           模板分析与选择 / 内容映射
+来源整理 / 大纲生成与对话编辑            排版 / PPTX制作 / 视觉修改
+       │                                  │
+       └──候选结果返回LangGraph──校验及确认──┘
+               │
+               ▼
+独立Python业务模块与工具：资料读取、搜索、解析、模板映射、PPTX生成及检查
+               │
+本地文件 + 进程内存状态；可选LangSmith追踪；数据库后续引入</code></pre>
+<p>LangChain与Harness是两类子智能体的实现框架，职责由本项目划定，不是框架自身强制的能力边界。两者通过LangGraph交接明确的任务输入与结构化结果，不直接修改对方会话或把框架内部对象当作业务协议。确认的大纲、模板映射、用户决定及产物版本由LangGraph外层维护；子智能体只能提出变更，后端校验后才提交。</p>
+<p>内容交接路径为：LangChain输出候选大纲和逐页内容 → LangGraph校验、必要时组织用户确认并保存版本 → Harness读取确认快照进行制作。修改后使用新的版本重新交付。Harness可以保留自己的子任务会话，但它不是业务状态权威来源。Harness SDK通过独立运行时完成子任务；本设计不假设它能直接控制LangChain模型对象。</p>
+<div class="scroll"><table><tr><th>组件</th><th>职责与边界</th></tr>
+<tr><td>FastAPI</td><td>提供HTTP/SSE入口，负责边界校验与资源组装。完整项目任务和后台执行仍待实现。</td></tr>
+<tr><td>LangChain</td><td>内容研究：读取上传业务材料、联网搜索筛选、组织证据、生成与修改大纲。不承担模板选择与排版。</td></tr>
+<tr><td>Harness Python SDK</td><td>演示文稿制作：模板分析和选择、逐页内容映射、排版、文件生成与视觉修订。不擅自补充事实或改变确认结论。</td></tr>
+<tr><td>LangGraph</td><td>组织节点、维护状态与版本、暂停和恢复人工问题、根据分类结果分派修改。框架本身不自动理解用户修改意图。</td></tr>
+<tr><td>独立Python模块 / MCP</td><td>资料解析、模板结构分析和PPTX生成保持可独立调用；Agent工具是适配入口，MCP是可选接入协议，均不替代业务模块。</td></tr>
+<tr><td>PPTX / 可选渲染</td><td>python-pptx与Open XML为候选实现基础。优先生成可打开、内容准确且主要文本可编辑的PPTX。页面预览和渲染为低优先级可选能力；Harness Office与LibreOffice兼容性需单独实测。</td></tr>
+<tr><td>存储 / 追踪</td><td>第一阶段本地文件与进程内存，跨重启恢复和数据库后续实现。LangSmith仅用于追踪，不作为项目状态存储。</td></tr></table></div>
+<h2 id="versions">技术栈与版本候选</h2><div class="note">2026-10-30 本机安装记录：Windows 64 位，Python 3.13.9，uv 0.12.9；uv.lock 已锁定依赖，uv sync --locked 安装 105 个包，uv pip check 通过，核心包与 MCPAdapter 导入通过。Harness SDK 及运行时为 0.2.1rc2，LangChain MCP 为 Beta。此结果仅验证安装与导入，尚未验证模型、Harness 会话、MCP 互通或 Office 渲染。</div><div class="note">开发时重新查询官方来源，优先采用当时最新稳定版本，并检查最新预发布版本；以下是 2026-10-30 查询结果，并非安装后锁定结果。任务 01 需验证 Windows、Python、依赖及接口兼容性，生成锁文件并记录实际版本。最新版本冲突或缺少稳定版时，记录问题并与用户讨论，不静默降级。具体执行规则见 <a href="../AGENTS.md">项目开发规则</a>。</div><div class="scroll"><table><tr><th>技术</th><th>当前环境 / 候选</th><th>用途与说明</th></tr><tr><td>Windows / Python</td><td>本机及 .venv：Python 3.13.9；项目要求 &gt;=3.13</td><td>Windows 本机优先；版本兼容性以安装测试为准。</td></tr><tr><td>FastAPI / Uvicorn / Pydantic</td><td>0.162.0 / 0.54.0 / 2.14.2</td><td>API、ASGI 服务器及输入输出校验；候选待联合解析。</td></tr><tr><td>LangChain / LangGraph / LangSmith</td><td>1.4.7 / 1.2.18 / 0.14.16</td><td>Agent、图编排及可选追踪；选择实际安装版本后锁定。</td></tr><tr><td>LangChain MCP</td><td>langchain[mcp] 1.4.7 候选</td><td>官方 langchain.mcp.MCPAdapter；文档标注 Beta。旧 langchain-mcp-adapters 仓库已声明不再积极维护。</td></tr><tr><td>DeepSeek Harness Python SDK</td><td>0.2.1rc2（预发布；查询时未找到可用稳定版）</td><td>独立运行时，Windows wheel、provider 和工具协议必须实测；稳定版及兼容版本待确认。</td></tr><tr><td>python-pptx</td><td>1.0.2</td><td>PPTX 读写；复杂模板兼容性待实测。</td></tr><tr><td>MCP 服务端</td><td>已安装并锁定 2.3.0</td><td>依赖解析和导入通过；与 LangChain、Harness 的实际 MCP 通信仍待验证。</td></tr><tr><td>渲染工具</td><td>LibreOffice 或 Harness Office 运行时，版本待验证</td><td>Windows 上验证安装、PPTX 渲染、字体和产物后决定。</td></tr></table></div><p>Python 业务模块负责模板解析和 PPTX 生成；MCP Server 暴露需要模型调用的工具；LangChain 与 Harness 分别作为 MCP Client 接入。固定 LangGraph 节点也可直接调用 Python 模块。stdio 下两个客户端可能各自启动服务进程，连接生命周期与取消需要验证。</p><p>开发进度见 <a href="开发任务列表.html">后端开发任务列表</a>。参考 <a href="https://docs.langchain.com/oss/python/langchain/mcp">LangChain MCP 文档</a>、<a href="https://github.com/langchain-ai/langchain-mcp-adapters">旧适配器维护说明</a> 和 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md">Harness MCP 文档</a>。</p><h2 id="workflow">2. 运行流程与修改分派</h2>
+<div class="flow"><span>用户主题与业务资料</span><span>LangChain研究与大纲编辑</span><span>LangGraph组织内容确认</span><span>Harness选择分析模板</span><span>人工处理缺失或歧义</span><span>Harness制作并检查PPTX</span><span>交付与修改</span></div>
+<pre><code>用户主题 + 上传业务资料 / 联网研究要求
+                    ↓
+LangGraph安排 → LangChain研究、来源整理、生成大纲
+                    ↓
+           用户对话编辑 ↔ 大纲草稿
+                    ↓ 用户确认可制作的逐页内容
+LangGraph保存确认的大纲版本与来源快照
+                    ↓
+Harness分析与选择内置模板 / 上传模板
+                    ↓
+      模板缺失或歧义？──是──→ LangGraph人工问题 → 用户决定
+                    ↓ 否 / 答案已恢复
+Harness映射内容、排版、生成 → 结构与内容检查 → 新PPTX版本
+                    ↓
+              用户提出修改
+                    ↓
+LangGraph修改分类节点（明确操作用规则；自由文本可调用模型）
+   ├─ 内容修改 → LangChain修改 → 确认新内容 → Harness更新受影响页面
+   ├─ 视觉修改 → Harness调整模板 / 配色 / 字号 / 布局
+   ├─ 混合修改 → LangChain处理内容 → Harness制作
+   └─ 意图不清 → 人工澄清 → 回到分类与分派
+
+资料不足、模板不全、权限或修改歧义 → WAITING_FOR_USER → 答案恢复对应节点
+可取消任务 → CANCELLING → CANCELLED；执行失败 → FAILED（是否重试由策略决定）</code></pre>
+<p>以上为目标流程，不是已经运行的图。LangGraph以结构化分类结果选择分支；分类模型仅提出建议，程序检查类别、目标页面和版本。不能让模型回答中的一段自然语言直接决定任意节点或脚本执行。视觉修改若发现必须删改关键内容，返回内容调整请求，不能直接覆盖确认大纲。</p>
+<table><tr><th>修改类别</th><th>例子</th><th>执行与限制</th></tr>
+<tr><td>内容</td><td>结论错误、补充最新法规、重组论点或来源</td><td>LangChain核查并修改内容；确认新版本后Harness同步PPTX。</td></tr>
+<tr><td>视觉</td><td>背景、配色、字体、图片位置或布局</td><td>Harness处理；不改变事实、引用对应关系或关键结论。</td></tr>
+<tr><td>混合</td><td>合并两页、精简论点后重排</td><td>LangChain负责内容取舍，Harness负责重新排版，不并行写同一权威状态。</td></tr>
+<tr><td>需澄清</td><td>“不专业”“重新做”“太挤”但没有明确内容或视觉目标</td><td>LangGraph组织选择题或自由输入，取得答案后分派；不武断归类。</td></tr></table>
+<h3>人工介入与版本</h3>
+<p>第一阶段人工问题在当前进程内等待并恢复，不承诺跨重启续接。子智能体提交问题、选项、依据和阻塞步骤；LangGraph保存问题及用户答案，再以新任务输入或恢复节点继续。不能假设Harness回调自动具备持久化。模板缺失时提供补充上传、按当前风格补全或复用版式等选项，按用户决定执行。</p>
+<p>生成任务固定读取已确认的大纲版本和模板映射版本。制作结果记录本次实际使用的版本；大纲变化时旧PPTX仍属于旧版本，不把它显示成已更新成品。变更仅重做受影响页面是目标优化，第一版可先重新生成，须正确记录版本并保留旧产物。</p>
+<h2 id="agents">3. 子智能体职责与交接契约</h2>
+<div class="scroll"><table><tr><th>组件</th><th>输入与能力</th><th>输出</th><th>责任边界</th></tr>
+<tr><td>LangChain内容子智能体</td><td>用户要求、上传业务资料、已登记正文、联网条件、通用与专业技能；调用目录、检索、正文读取及搜索工具。</td><td>大纲草稿、逐页内容、来源定位、资料缺口、内容修改建议。</td><td>检索筛选不等于摘要拼接，重要结论需核对正文；不负责模板选择或直接操作PPTX文件。</td></tr>
+<tr><td>Harness制作子智能体</td><td>确认的逐页内容与来源、可用模板、用户风格要求、模板分析与PPTX工具、制作技能。</td><td>模板角色和槽位建议、确认问题、内容到页面的映射、PPTX及制作检查结果。</td><td>不擅自研究补充事实、修改结论或删除关键要点；版面容纳不了时反馈内容调整或拆页建议。</td></tr>
+<tr><td>LangGraph编排</td><td>用户消息、两个子智能体结果、规则、修改分类结果及当前版本。</td><td>受校验的状态变更、下一任务、人工问题、有效产物版本。</td><td>流程与状态控制；具体内容研究、模板判断和文件制作由相应子智能体及工具执行。</td></tr></table></div>
+<h3>LangChain交付的“大纲”包含什么</h3>
+<p>用户编辑时可展示简洁列表；进入制作前需要形成逐页内容快照，不只提供“第3页：健康饮食”这样的标题。以下为待实现契约设计，字段定义与持久化方案在对应任务落实；在开发实现字段时同步到<a href="Store清单.html">字段清单</a>；LangGraph状态待对应任务讨论，不提前冻结。</p>
+<table><tr><th>信息</th><th>含义及使用方</th></tr>
+<tr><td>大纲版本与确认状态</td><td>由后端记录，LangGraph确认；Harness只读取明确允许制作的版本。</td></tr>
+<tr><td>页面ID、顺序和角色</td><td>页面ID在修订中稳定，角色为封面、目录、章节、内容、来源或结尾等，用于模板匹配和修改定位。</td></tr>
+<tr><td>标题、核心结论、要点及数据</td><td>由LangChain组织，提供足够制作的内容；缺失信息明确标记，不让Harness自行编造。</td></tr>
+<tr><td>来源与原文定位</td><td>关联已登记来源和可获得页码/块位置；未登记网页只可保留URL和抓取证据，不冒充source_id。</td></tr>
+<tr><td>呈现建议与未决问题</td><td>可建议对比、时间线或图表，属于建议而非最终版式；影响事实或页数的未决问题进入人工确认。</td></tr></table>
+<p>Harness可在保留原意时调整换行和精简措辞；凡影响事实、结论、关键要点或引用关系的变更，交回LangChain及确认流程。语义等价不能只靠字符数判断，内容核对需在制作检查中体现。</p>
+<h3>子任务与模型边界</h3>
+<p>子任务交接携带任务ID、任务类型、输入快照版本、可用工具/技能及超时预算；结果包含完成状态、候选变更、产物引用、问题、依据和错误。后端先校验归属与版本再提交。LangChain与Harness分别管理模型调用，不直接共享模型实例。</p>
+<p>按内容研究、模板分析、文件制作任务选择模型，结合真实样本考察准确性、上下文、工具调用、速度和费用；不以框架名称推断模型能力。当前LLM_OUTLINE_MODEL、LLM_TEMPLATE_ANALYSIS_MODEL、LLM_PPT_GENERATION_MODEL仍是现有配置名；模板分析任务归Harness后，模型配置由制作侧适配器在接线时使用。本次不改变量名或配置行为，尚未实现业务路由。图片能力未确认时只用结构与文本分析加人工确认。</p>
+<h2 id="template">4. 模板识别和使用</h2><p>模板分析与模板应用是两个独立模块，统一归Harness制作子智能体负责，第一版不再拆为两个框架各自管理的子智能体。模板分析负责识别与证据，模板应用负责内容映射和文件操作；共享数据契约，不互相借用内部实现。</p><p>识别结合 Open XML、母版／占位符、页面对象几何、文本语义和可用时的视觉模型。区分<strong>母版版式</strong>与<strong>实际样例页</strong>，记录证据而非依赖页面索引。目录或来源等业务角色通常没有可靠的通用标签。</p><pre><code>模板上传 → 类型和安全检查 → 解析母版、版式、占位符、样例页
+        → Harness制作子智能体结合结构与文本提出角色与槽位（视觉预览可选）
+        → 缺失 / 歧义 → LangGraph组织用户选择或自由输入
+        → LangGraph保存确认映射 → Harness调用独立Python模块应用模板</code></pre><p>映射记录模板文件哈希、版本、版式／页面标识、角色、标题与内容槽位、用户确认状态、兼容性警告及识别依据。模板变化时重新检查。缺少页面时允许用户补充文件、复用版式、AI 补全或省略可选角色；补全须预览确认。</p><p>内置模板来自逐项确认许可及兼容性的候选资源；PPT Master 是候选来源，不承诺资源均为可直接使用的 PPTX。检查字体、图标、图片及品牌使用条件，保存来源与许可证记录。首版不做在线模板搜索。</p>
+<h2 id="skills">5. 技能与工具</h2>
+<h3>技能接入、技能编写与使用的边界（2026-11-04）</h3>
+<table><tr><th>层次</th><th>内容与例子</th><th>任务归属</th></tr>
+<tr><td>基础提示词</td><td>始终适用的职责、来源不得伪造、资料不足反馈、工具调用约束；搜索引擎范围从配置生成，不复制硬编码列表。</td><td>任务06组织，任务07使用。</td></tr>
+<tr><td>通用内容研究技能</td><td>可复用的资料研究方法：明确受众和目的，搜索筛选并核对正文，保留引用，组织逐页大纲。技能编排已有能力，不替代搜索或读取工具。</td><td>任务06编写或选用一个最小示例验证接入，不把所有提示规则拆成技能。</td></tr>
+<tr><td>专业内容技能</td><td>如劳动法律培训研究的来源优先级、适用地区、效力状态、法律依据与案例组织。领域规则由具体技能提供，不能凭加载机制声称专业可靠。</td><td>用户按需手动提供；具体编写独立列需求，不属于任务07的默认交付。</td></tr>
+<tr><td>制作技能</td><td>模板映射、排版、字体配色和PPTX制作方法。</td><td>Harness制作侧使用；不因本地可发现就把全部技能交给内容子智能体。</td></tr></table>
+<p>任务06负责加载与运行时接入，任务07负责使用已加载的内容研究技能产出大纲，两者都不包含技能市场或自动生成专业技能。加载成功、脚本可执行、模型正确选择并遵循技能是不同的验证项。示例技能可以仅含Markdown和参考资源；含脚本的技能仍需要验证相应运行时执行接线，不能以纯文本示例通过代替。</p>
+<p>按名称和用途发现候选，再按需读取完整说明及资源；不预先把全部技能正文塞进模型上下文。不强制每次调用都使用专业技能；无匹配技能时可用基础提示词与通用能力，明确能力限制。自定义技能编写与自动生成的后续范围见<a href="../optimization/自定义专业技能编写与生成.md">OPT-005</a>。本节为设计说明，未创建技能文件或实现加载器。</p>
+<p><strong>当前版本：</strong>用户手动将技能包放入代码仓库下约定的本地目录，例如skills/；实际目录及配置项在技能加载任务实现，不在本次预建空目录或声明已支持加载。不提供技能上传、在线安装或市场接口。单个技能仍采用SKILL.md及可选scripts/、references/、assets/，可以包含执行脚本，不将技能降为纯提示词。</p><p><strong>解耦边界：</strong>本地技能加载模块负责发现与读取技能，运行时负责按指令使用工具或执行脚本；LangChain与Harness通过统一描述获取所需内容。业务不依赖市场URL、账户、下载与安装实现，也不把所有技能全文预先塞进提示词。后续市场适配器只负责获取包并提供给本地加载边界，升级、依赖与兼容检查规则单独定义。按实际接入需求选择小型协议，不提前建设插件平台。</p><p>运行任务使用已加载内容的固定快照；重新加载不静默改变正在执行的任务。加载模块和热更新尚未实现，兼容技能目录结构不代表支持所有第三方运行时专属工具。后续需求见<a href="../optimization/技能市场与外部技能来源接入.md">OPT-004</a>。</p><p>脚本在受控工作目录中运行，提供明确的文件与网络权限、时间／资源限制和依赖说明；记录执行命令及结果，并支持取消。本地加载时记录来源、脚本与所需运行条件。技能文本和外部资料视为数据，不自动授予新工具权限。</p><div class="scroll"><table><tr><th>工具</th><th>用途</th></tr><tr><td>搜索与网页提取</td><td>可替换搜索服务；抓取正文、标题、URL 和访问时间，限制网络目标、大小及超时。</td></tr><tr><td>文件解析与引用</td><td>解析 PDF、DOCX、TXT、Markdown，保存片段、文件名与可获得页码；扫描件OCR为第一阶段所需能力，解析与OCR接线尚未实现。</td></tr><tr><td>模板分析与渲染</td><td>解析结构、槽位、主题、文本；输出缩略图及兼容性报告。</td></tr><tr><td>PPTX 与质检</td><td>写入原生对象，渲染预览，检查页数、可打开性、空内容、越界与字体问题。</td></tr><tr><td>技能执行</td><td>发现技能、加载指令和资源、运行脚本、捕获日志及产物。</td></tr></table></div><p><strong>PPT Master：</strong>包含技能、Python 脚本、模板和制作流程，使用项目约定的 SVG 中间表示及转换工具链。原型评估 Harness 加载该技能、Windows 依赖、模板使用和输出质量；是否复用全部流程或局部脚本，待结果决定。</p>
+<h2 id="api">6. API 与数据设计</h2><div class="note">当前已实现实体、工具、接口及配置字段见 <a href="Store清单.html">当前实体与工具字段说明</a>。第一阶段不要求数据库或跨重启恢复。</div><p>以下为建议接口，具体请求和响应模式在实现时通过 OpenAPI 固化。所有写操作均需项目隔离；修改大纲和映射时携带版本号，冲突返回明确错误。</p><div class="scroll"><table><tr><th>接口</th><th>用途</th></tr><tr><td><code>POST /projects</code> · <code>GET /projects/{id}</code></td><td>创建、查看项目与当前状态。</td></tr><tr><td><code>POST /projects/{id}/files</code></td><td>上传资料或模板，返回文件标识及解析状态。</td></tr><tr><td><code>POST /projects/{id}/messages</code></td><td>提交用户消息，触发大纲或修改工作流。</td></tr><tr><td><code>GET/PATCH /projects/{id}/outline</code> · <code>POST .../outline/confirm</code></td><td>获取、编辑和确认大纲快照。</td></tr><tr><td><code>POST /templates/{id}/analyze</code> · <code>PUT /templates/{id}/mapping</code></td><td>分析模板，保存用户确认的角色及槽位映射。</td></tr><tr><td><code>POST /projects/{id}/generations</code></td><td>基于确认的快照启动生成或修订。</td></tr><tr><td><code>GET /tasks/{id}</code> · <code>GET /tasks/{id}/events</code> · <code>POST /tasks/{id}/cancel</code></td><td>查询、SSE 事件和取消；事件支持重连及顺序标识。</td></tr><tr><td><code>POST /questions/{id}/answers</code> · <code>GET /artifacts/{id}</code></td><td>提交人工答案；查看或下载生成文件和预览。</td></tr></table></div><p>核心实体：Project、Conversation/Message、Source/SourceFragment、OutlineVersion/Item、Template/TemplateMapping、Skill/SkillVersion、Task/TaskEvent、UserQuestion/Answer、GenerationVersion/Artifact。引用外键和文件哈希，避免把二进制文件直接嵌入状态；模型密钥不进入业务状态或日志。</p>
 <h2 id="ops">7. 运行、质量与原型</h2><h3>配置与运行</h3><p>使用环境变量或本地未提交的配置管理模型地址、模型名称、密钥、存储路径及追踪开关；示例配置不包含密钥。之前聊天中暴露的密钥应在对应平台轮换。上传文件、生成结果和日志按项目分离；LangSmith 默认关闭或经明确配置启用，注意资料可能被发送至外部服务。</p><h3>验证与验收</h3><ol><li>原型验证 Harness 的百舸 provider、Python SDK 调用、取消、错误、提问桥接、技能发现和脚本运行；记录无法保证的跨重启行为。</li><li>检验模板样本：标准母版、多母版、普通样例页、图片背景及特殊字体；分别记录识别、生成、渲染和许可。</li><li>评估 PPT Master 技能及依赖，验证能否与项目协议、确认流程和 Python 运行环境对接。</li><li>单元测试版本冲突、映射、来源和状态；集成测试 API、持久化恢复、取消与任务结果；端到端验证 8–12 页、打开、可编辑、预览及修订版本。</li><li>对渲染结果检查溢出和遮挡；视觉质量不能只靠程序断言，提供可供人工查看的页面预览。</li></ol><div class="note warn"><strong>关键风险：</strong>Harness 为快速演进的独立运行时；第三方技能依赖和脚本能力各异；复杂模板不可保证无损；渲染依赖字体与 Office 环境；视觉模型可用性及模型成本尚未确认。以上均通过可替换适配层、原型和兼容性报告处理。</div>
 <h2 id="sources">8. 参考资料</h2><ul><li><a href="https://docs.langchain.com/oss/python/langchain/agents">LangChain Agents</a>、<a href="https://docs.langchain.com/oss/python/langgraph/overview">LangGraph</a></li><li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md">DeepSeek Harness Python SDK</a>、<a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md">Harness 架构</a></li><li><a href="https://github.com/hugohe3/ppt-master">PPT Master</a>、<a href="https://github.com/hugohe3/ppt-master/blob/main/docs/technical-design.md">PPT Master 技术设计</a></li><li><a href="https://agentskills.io/specification">Agent Skills 规范</a>、<a href="https://docs.openclaw.ai/tools/skills">OpenClaw 技能</a></li><li><a href="https://python-pptx.readthedocs.io/">python-pptx</a>、<a href="https://learn.microsoft.com/en-us/office/open-xml/presentation/working-with-slide-layouts">Microsoft Open XML 版式</a></li></ul><p class="meta">关联文档：<a href="产品文档.html">产品需求文档</a>。本文件为讨论稿，不包含真实密钥。</p></main></body></html>
