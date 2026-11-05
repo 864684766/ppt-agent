@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     llm_outline_model: str = ""
     # 模板识别模型，空值回退llm_model；业务尚未接线，名称不保证视觉能力。
     llm_template_analysis_model: str = ""
+    # 图片理解模型，当前用于独立视觉验证；不代表已接入Harness模板分析。
+    llm_vision_model: str = Field(
+        default="glm-5.3-flash", min_length=1,
+        description="视觉验证模型名称，默认glm-5.3-flash；代理与密钥沿用LLM连接配置。",
+    )
     # PPT生成任务模型，空值回退llm_model；Harness业务尚未接线。
     llm_ppt_generation_model: str = ""
 
