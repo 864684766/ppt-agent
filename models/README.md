@@ -29,6 +29,8 @@
 | 模板 | inspect_template输入与公开输出 | InspectTemplateInput、InspectTemplateOutput | [inspect_template_contract.py](templates/inspect_template_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
+| 人工交互 | 预留问题正文（未接线） | UserQuestion | [user_question.py](interaction/user_question.py) |
+| 人工交互 | 预留提问输入输出（工具已移除） | AskUserInput、AskUserOutput | [ask_user_contract.py](interaction/ask_user_contract.py) |
 
 ## 一条资料与三种不同用途
 
@@ -134,3 +136,9 @@ Gotenberg转换（2026-11-05）：输入pptx_bytes: bytes及file_name: str，输
 ## 日志诊断字段（2026-11-05）
 
 request_id、operation_id等是diagnostics管理的运行上下文与日志摘要，不是业务实体或LangGraph状态，不新建数据模型。HTTP响应头X-Request-ID仅用于查日志；字段解释见[字段清单](../docs/Store清单.html)及[日志说明](../docs/日志使用说明.md)。本次未改变工具输入输出字段。
+
+## 人工提问数据定义（2026-11-05，仅预留）
+
+按用户决定移除ask_user工具、内存收集器与对应测试。仅保留UserQuestion、AskUserInput、AskUserOutput及其共享字段校验，当前没有实际创建/提交/存储/回答流程。UserQuestion.question_id只要求非空字符串，未来由实际接入方分配，不限制UUID格式或提前冻结图状态。
+
+这些类型不会自动提问、显示界面或暂停程序；后续在子智能体与LangGraph开发中讨论真实交互，再决定如何复用字段。无新增环境变量或依赖，字段说明见[Store清单](../docs/Store清单.html)。
