@@ -1,8 +1,10 @@
 """扫描宿主传入目录的一级技能包，只读取SKILL.md头部，不执行代码。"""
 
+
 import logging
 from pathlib import Path
 
+from diagnostics.operation_logging import log_operation
 from domain.skills.skill_catalog_contract import SkillCatalogError
 from integrations.skills.skill_metadata_parser import parse_skill_metadata
 from integrations.skills.skill_header_reader import read_skill_header
@@ -19,6 +21,7 @@ class LocalSkillCatalog:
         """仅保存根目录，不在创建工具或模块导入时扫描。"""
         self._directory = directory.resolve()
 
+    @log_operation("skills.scan")
     def load(self) -> tuple[SkillSummary, ...]:
         """返回可读取介绍的技能；格式不合要求时记录日志并跳过。
 
@@ -33,7 +36,7 @@ class LocalSkillCatalog:
         for folder in folders:
             # 跳过普通文件；不跨链接/junction寻找技能，保持约定的本地目录边界。
             if folder.is_symlink() or folder.is_junction():
-                logger.warning("跳过技能目录 %s：不读取链接目录。", folder.name)
+                logger.warning("跳过技能目录 %r：不读取链接目录。", folder.name)
                 continue
             if not folder.is_dir():
                 continue
@@ -44,7 +47,8 @@ class LocalSkillCatalog:
                 header = read_skill_header(path)
                 items.append(parse_skill_metadata(header, skill_id=folder.name))
             except (OSError, UnicodeError):
-                logger.warning("跳过技能 %s：SKILL.md缺失、不可读或不是UTF-8文本。", folder.name)
+                logger.warning("跳过技能 %r：SKILL.md缺失、不可读或不是UTF-8文本。", folder.name)
             except ValueError as error:
-                logger.warning("跳过技能 %s：%s", folder.name, error)
+                logger.warning("跳过技能 %r：%s", folder.name, error)
+        logger.info("event=skill_scan_result accepted_count=%s", len(items))
         return tuple(items)

@@ -1,14 +1,20 @@
 """静态网页HTTP适配器：有限下载、编码处理和HTML文本提取。"""
 
+import logging
+
 from datetime import datetime, timezone
 import re
 import ssl
 
 import httpx
 
+from diagnostics.operation_logging import log_operation
 from domain.web.webpage_reader_contract import WebpageReadError
 from integrations.web.html_text_extractor import HtmlTextExtractor
 from models.web.webpage_content import WebpageContent
+
+
+logger = logging.getLogger(__name__)
 
 
 class HttpWebpageReader:
@@ -31,6 +37,7 @@ class HttpWebpageReader:
         self._timeout_seconds = timeout_seconds
         self._max_download_bytes = max_download_bytes
 
+    @log_operation("web.fetch")
     async def read(self, *, url: str) -> WebpageContent:
         """读取一个HTML页面，失败抛安全错误；不捕获取消异常。"""
         try:
@@ -53,6 +60,7 @@ class HttpWebpageReader:
         except httpx.TimeoutException:
             raise WebpageReadError("网页读取超时，请稍后重试或选择其他来源。") from None
         except httpx.HTTPStatusError as error:
+            logger.warning("event=upstream_status service=webpage http_status=%s", error.response.status_code)
             raise WebpageReadError(f"网页返回HTTP {error.response.status_code}，无法读取。") from None
         except httpx.TooManyRedirects:
             raise WebpageReadError("网页重定向次数过多，无法读取。") from None
@@ -74,6 +82,7 @@ class HttpWebpageReader:
         title, text = parser.result()
         if not text:
             raise WebpageReadError("网页没有可提取文本，可能需要JavaScript、登录或其他读取方式。")
+        logger.info("event=webpage_result downloaded_bytes=%s text_chars=%s", len(body), len(text))
         return WebpageContent(
             final_url=final_url, title=title, text=text,
             fetched_at=datetime.now(timezone.utc).isoformat(),
@@ -92,4 +101,6 @@ def decode_html(body: bytes, *, header_encoding: str | None) -> str:
     try:
         return body.decode(encoding, errors="replace")
     except LookupError:
+        # 网页声明了未知编码，记录降级发生，不将网页内容或编码原文写入日志。
+        logger.debug("event=webpage_encoding_fallback encoding=utf-8")
         return body.decode("utf-8", errors="replace")

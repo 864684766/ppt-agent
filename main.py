@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from api.api_router import api_router
+from api.request_logging_middleware import RequestLoggingMiddleware
 from config.logging_config import configure_logging
 from config.settings import PROJECT_ROOT, Settings
 
@@ -32,7 +33,10 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     )
     # 将控制权交回FastAPI开始处理请求；不是向HTTP客户端返回数据。
     # 服务退出时从这里恢复，后续有资源清理需求可放在try/finally中。
-    yield
+    try:
+        yield
+    finally:
+        logging.getLogger(__name__).info("FastAPI服务关闭。")
 
 
 def create_app() -> FastAPI:
@@ -53,6 +57,7 @@ def create_app() -> FastAPI:
     )
     # API 层统一组装各模块，应用入口只挂载总路由。
     application.include_router(api_router)
+    application.add_middleware(RequestLoggingMiddleware)
     return application
 
 

@@ -1,11 +1,13 @@
 """search_materials的LangChain入口：绑定快照、执行查询并选择公开字段。"""
 
+
 from collections.abc import Sequence
 from typing import Literal
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.materials.material_search import search_project_materials
 from domain.materials.material_validator import validate_material_content_data
 from models.materials.material_fragment import MaterialFragment
@@ -47,6 +49,7 @@ def create_search_materials_tool(
             "不存在、未ready或正文未载入会明确报错，与空matches不同。"
         ),
     )
+    @log_operation("tool.search_materials")
     def search_materials(
         queries: list[str], source_ids: list[str] | None = None,
         origin: Literal["all", "uploaded", "web"] = "all",

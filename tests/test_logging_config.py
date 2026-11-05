@@ -17,11 +17,19 @@ def restore_logging_after_test() -> Iterator[None]:
     root_logger = logging.getLogger()
     original_handlers = tuple(root_logger.handlers)
     original_level = root_logger.level
+    # 暂时取下应用处理器，避免测试中的重新配置将会话级文件句柄关闭。
+    # pytest自己的捕获处理器仍保留，测试结束后再挂回原来的应用处理器。
+    for handler in original_handlers:
+        if handler.name in {"ppt-agent.file", "ppt-agent.console"}:
+            root_logger.removeHandler(handler)
     yield
     for handler in tuple(root_logger.handlers):
         if handler not in original_handlers:
             root_logger.removeHandler(handler)
             handler.close()
+    for handler in original_handlers:
+        if handler not in root_logger.handlers:
+            root_logger.addHandler(handler)
     root_logger.setLevel(original_level)
 
 

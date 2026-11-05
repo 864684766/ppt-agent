@@ -1,6 +1,7 @@
 """HTTP 依赖组装：连接配置、外部客户端与路由。"""
 
 from collections.abc import AsyncIterator
+import logging
 
 import httpx
 from fastapi import HTTPException
@@ -10,6 +11,9 @@ from config.settings import Settings
 from domain.chat_client_contract import ChatClient
 from integrations.llm.langchain_chat_client import create_chat_client
 from integrations.llm.langchain_model_factory import ModelConfigurationError
+
+
+logger = logging.getLogger(__name__)
 
 
 async def get_chat_client() -> AsyncIterator[ChatClient]:
@@ -22,6 +26,7 @@ async def get_chat_client() -> AsyncIterator[ChatClient]:
     try:
         settings = Settings()
     except ValidationError:
+        logger.error("event=configuration_invalid component=chat_settings")
         # Pydantic 原始错误可能携带配置值，因此仅公开固定提示。
         raise HTTPException(503, "模型配置格式不正确，请检查本地环境变量。") from None
 

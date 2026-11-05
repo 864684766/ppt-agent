@@ -5,12 +5,14 @@
 这个文件只连接它们，不承担文件上传、解析、HTTP 或存储职责。
 """
 
+
 from collections.abc import Sequence
 from typing import Literal
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool
 
+from diagnostics.operation_logging import log_operation
 from models.materials.material_source import MaterialSummary
 from domain.materials import list_project_materials
 from models.materials.list_materials_contract import (
@@ -54,6 +56,7 @@ def create_list_materials_tool(
         ),
         args_schema=ListMaterialsInput,
     )
+    @log_operation("tool.list_materials")
     def list_materials(
         origin: Literal["all", "uploaded", "web"] = "all",
         name_contains: str = "",

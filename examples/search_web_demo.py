@@ -8,7 +8,8 @@ import json
 
 import httpx
 
-from config.settings import Settings
+from config.settings import PROJECT_ROOT, Settings
+from config.logging_config import configure_logging
 from integrations.web.searxng_search_client import SearxngSearchClient
 from tools.web import create_search_web_tool
 
@@ -16,6 +17,7 @@ from tools.web import create_search_web_tool
 async def main() -> None:
     """组装配置、连接和工具；执行结束或异常退出时自动关闭连接。"""
     settings = Settings()
+    configure_logging(directory=PROJECT_ROOT / "log", level=settings.log_level, output=settings.log_output)
     arguments = {"query": "中国居民膳食指南 健康饮食", "max_results": 5}
     async with httpx.AsyncClient() as http_client:
         search_client = SearxngSearchClient(

@@ -1,10 +1,12 @@
 """技能发现的LangChain薄入口：异步扫描、纯业务筛选及公开字段组装。"""
 
+
 import asyncio
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.skills.skill_catalog import filter_skills
 from domain.skills.skill_catalog_contract import SkillCatalog, SkillCatalogError
 from models.skills.list_skills_contract import ListSkillsInput, ListSkillsOutput, SkillListItem
@@ -21,6 +23,7 @@ def create_list_skills_tool(*, catalog: SkillCatalog) -> BaseTool:
         "仅扫描并返回SKILL.md的介绍元数据；不检查依赖、不分析脚本或执行流程，也不判断技能可用性。"
         "需要完整指令时使用read_skill并传入skill_id。当前使用项目内置skills目录，不能传任意本机路径。"
     ))
+    @log_operation("tool.list_skills")
     async def list_skills(keyword: str = "") -> ListSkillsOutput:
         """文件扫描放入线程，避免阻塞HTTP事件循环；结果不建立全局缓存。"""
         try:

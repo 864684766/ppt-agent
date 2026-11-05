@@ -126,3 +126,11 @@ ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协�
 配置更新（2026-11-05）：Gotenberg根地址为config/settings.py中的Settings.gotenberg_base_url，字段说明见Store清单；Settings仍放config，不新增或移动数据模型。当前仅完成配置与服务健康检查，转换适配器未实现。
 
 Gotenberg转换（2026-11-05）：输入pptx_bytes: bytes及file_name: str，输出PDF bytes，没有为单一字节结果增加实体。Settings新增gotenberg_timeout_seconds，配置仍放config，协议和错误放domain/templates，字段见Store清单。
+
+## PDF页面图片（2026-11-05）
+
+[PdfPageImage、PdfRenderResult](templates/pdf_page_image.py)：渲染器创建的不可变内部结果，测试及未来页面分析使用；定义PNG字节、PDF页码、像素尺寸、文件指纹、总页数和DPI，不包含PPT页码或磁盘路径。标准库dataclass不依赖PDFium、Pillow或Agent。不是Agent工具输入输出。字段详见Store清单，操作见[PDF页面图片调试说明](../docs/PDF页面图片调试说明.md)。
+
+## 日志诊断字段（2026-11-05）
+
+request_id、operation_id等是diagnostics管理的运行上下文与日志摘要，不是业务实体或LangGraph状态，不新建数据模型。HTTP响应头X-Request-ID仅用于查日志；字段解释见[字段清单](../docs/Store清单.html)及[日志说明](../docs/日志使用说明.md)。本次未改变工具输入输出字段。

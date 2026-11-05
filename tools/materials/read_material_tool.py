@@ -1,10 +1,12 @@
 """read_material的LangChain薄入口：绑定快照、调用业务读取、选择公开字段。"""
 
+
 from collections.abc import Sequence
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.materials.material_reader import read_project_material
 from domain.materials.material_validator import validate_material_content_data
 from models.materials.material_fragment import MaterialFragment
@@ -37,6 +39,7 @@ def create_read_material_tool(
         "长块用next_offset续读，null表示到块尾；完整块不等于整份文件。"
         "来源未登记、未ready、版本过期或块不存在会报错，不伪装为空结果。"
     ))
+    @log_operation("tool.read_material")
     def read_material(
         source_id: str, version: str, block_id: str,
         offset: int = 0, max_chars: int = 2000,

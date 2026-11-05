@@ -1,10 +1,12 @@
 """向模型暴露模板结构检查，实际文件由宿主登记和绑定。"""
 
+
 import asyncio
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.templates.template_inspector_contract import TemplateInspectionError, TemplateInspector
 from models.templates.inspect_template_contract import InspectTemplateInput, InspectTemplateOutput
 
@@ -30,6 +32,7 @@ def create_inspect_template_tool(*, inspector: TemplateInspector) -> BaseTool:
         "不做OCR或视觉分析，不展开图表数据、SmartArt、背景与主题字体；不判断封面/目录等角色，"
         "不得只按页序或版式名确定角色；不确定时应请求用户指导。不修改文件，不生成预览。"
     ))
+    @log_operation("tool.inspect_template")
     async def inspect_template(template_id: str) -> InspectTemplateOutput:
         """结构事实已是公开契约；显式展开以返回普通字典，不传SDK对象。"""
         try:

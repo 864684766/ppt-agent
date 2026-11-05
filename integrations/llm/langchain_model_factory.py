@@ -4,15 +4,23 @@
 不是全局单例；不同任务仍可传入不同模型名、超时和输出预算。
 """
 
+import logging
+
 import httpx
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
+
+from diagnostics.operation_logging import log_operation
+
+
+logger = logging.getLogger(__name__)
 
 
 class ModelConfigurationError(ValueError):
     """连接参数缺失或无效；由入口转换为HTTP错误或测试失败。"""
 
 
+@log_operation("model.create")
 def create_langchain_model(
     *, base_url: str, api_key: SecretStr, model_name: str,
     timeout_seconds: float, max_tokens: int, http_client: httpx.AsyncClient,
@@ -38,6 +46,7 @@ def create_langchain_model(
         raise ModelConfigurationError("模型基础地址必须是有效的HTTP或HTTPS地址。")
     if timeout_seconds <= 0 or max_tokens <= 0:
         raise ModelConfigurationError("模型超时秒数和输出token预算必须大于0。")
+    logger.debug("event=model_configuration model=%r timeout_seconds=%s max_tokens=%s", model_name, timeout_seconds, max_tokens)
     return ChatOpenAI(
         base_url=base_url, api_key=api_key, model=model_name,
         timeout=timeout_seconds, max_tokens=max_tokens, max_retries=0,

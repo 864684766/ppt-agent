@@ -1,5 +1,7 @@
 """把图片和独立提示词转换成LangChain请求，并校验模型返回的JSON。"""
 
+import logging
+
 import base64
 import json
 from typing import Literal
@@ -9,8 +11,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from openai import APIConnectionError, APIError, APITimeoutError
 from pydantic import ValidationError
 
+from diagnostics.operation_logging import log_operation
 from domain.templates.template_vision_contract import TemplateVisionError
 from models.templates.template_visual_analysis import TemplateVisualAnalysis
+
+
+logger = logging.getLogger(__name__)
 
 
 class LangChainTemplateVisionAnalyzer:
@@ -32,6 +38,7 @@ class LangChainTemplateVisionAnalyzer:
         self._model = model
         self._prompt = prompt
 
+    @log_operation("template.vision")
     async def analyze(
         self, *, image_bytes: bytes, mime_type: Literal["image/png", "image/jpeg"],
     ) -> TemplateVisualAnalysis:
@@ -45,6 +52,7 @@ class LangChainTemplateVisionAnalyzer:
 
         # base64把二进制转换成可放进JSON的ASCII字符串；不是压缩或加密。
         # 图片由调用方保证是真实PNG/JPEG；此处不做解码或分辨率检查。
+        logger.info("event=vision_input image_bytes=%s mime_type=%s", len(image_bytes), mime_type)
         encoded = base64.b64encode(image_bytes).decode("ascii")
         # schema描述字段类型、枚举和中文含义。运行时自动附加，修改提示词时
         # 不必手工重复维护完整字段表；这不是Agent的tool-calling定义。
@@ -64,7 +72,8 @@ class LangChainTemplateVisionAnalyzer:
             raise TemplateVisionError("视觉模型响应超时，请稍后重试。") from None
         except APIConnectionError:
             raise TemplateVisionError("无法连接视觉模型，请检查代理地址和网络。") from None
-        except APIError:
+        except APIError as error:
+            logger.warning("event=upstream_status service=vision_model http_status=%s", getattr(error, "status_code", None))
             raise TemplateVisionError("视觉模型调用失败，请检查权限、模型名称及图片支持。") from None
 
         # 某些模型会用Markdown代码块包住JSON，只去掉完整的最外层围栏。
@@ -75,7 +84,9 @@ class LangChainTemplateVisionAnalyzer:
         elif text.startswith("```\n") and text.endswith("\n```"):
             text = text[len("```\n"):-len("\n```")].strip()
         try:
-            return TemplateVisualAnalysis.model_validate_json(text, strict=True)
+            result = TemplateVisualAnalysis.model_validate_json(text, strict=True)
+            logger.info("event=vision_result page_role=%s readable_text_count=%s limitation_count=%s", result.page_role, len(result.visible_texts), len(result.limitations))
+            return result
         except ValidationError:
             # 不透传ValidationError，它可能把模型正文包含在错误信息中。
             raise TemplateVisionError("视觉模型未返回符合约定的JSON，请重试或调整提示词。") from None

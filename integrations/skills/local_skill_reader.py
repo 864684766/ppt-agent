@@ -1,8 +1,10 @@
 """从宿主绑定的本地技能目录读取入口，不检查依赖或执行附属文件。"""
 
+
 import logging
 from pathlib import Path
 
+from diagnostics.operation_logging import log_operation
 from domain.skills.skill_reader_contract import SkillReadError
 from integrations.skills.skill_header_reader import read_skill_header
 from integrations.skills.skill_metadata_parser import parse_skill_metadata
@@ -18,6 +20,7 @@ class LocalSkillReader:
         """保存根目录，不在构造或导入时读取文件。"""
         self._directory = directory.resolve()
 
+    @log_operation("skills.read")
     def read(self, *, skill_id: str) -> str:
         """校验定位与介绍格式，返回完整UTF-8正文；失败记录安全日志。
 
@@ -37,10 +40,12 @@ class LocalSkillReader:
                 raise ValueError("技能文件不在约定目录内。")
             # 只确认标准介绍可读，不分析正文中的工具、依赖或执行要求。
             parse_skill_metadata(read_skill_header(path), skill_id=skill_id)
-            return path.read_text(encoding="utf-8-sig")
+            content = path.read_text(encoding="utf-8-sig")
+            logger.info("event=skill_read_result content_chars=%s", len(content))
+            return content
         except (OSError, UnicodeError):
             reason = "SKILL.md不存在、不可读或不是UTF-8文本。"
         except ValueError as error:
             reason = str(error)
-        logger.warning("未读取技能 %s：%s", skill_id, reason)
+        logger.warning("未读取技能 %r：%s", skill_id, reason)
         raise SkillReadError(f"无法读取技能：{reason}") from None

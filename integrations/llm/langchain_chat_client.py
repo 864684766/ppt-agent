@@ -1,5 +1,7 @@
 """模型适配层：把 LangChain/OpenAI 的细节隔离在 HTTP 接口之外。"""
 
+import logging
+
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import cast
@@ -10,8 +12,12 @@ from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APIError, APITimeoutError
 from pydantic import SecretStr
 
+from diagnostics.operation_logging import log_operation
 from domain.chat_client_contract import ChatClient, ModelCallError
 from integrations.llm.langchain_model_factory import create_langchain_model
+
+
+logger = logging.getLogger(__name__)
 
 
 class LangChainChatClient:
@@ -20,6 +26,7 @@ class LangChainChatClient:
     def __init__(self, model: ChatOpenAI) -> None:
         self._model = model
 
+    @log_operation("model.chat_stream")
     async def stream_reply(self, message: str) -> AsyncGenerator[str, None]:
         """逐段交付正文，不在服务端拼接完整回答。
 
@@ -28,6 +35,8 @@ class LangChainChatClient:
         不逐块 strip，因为空格和换行可能是 Markdown、代码或句子的一部分。
         """
         has_visible_text = False
+        chunk_count = 0
+        character_count = 0
         try:
             # 当前锁定版本的 ChatOpenAI.astream 源码是包含 yield 的 async def，
             # 实际返回 AsyncGenerator，具有 aclose；但公开注解只写 AsyncIterator。
@@ -42,15 +51,19 @@ class LangChainChatClient:
                 async for chunk in chunks:
                     text = chunk.text
                     if text:
+                        chunk_count += 1
+                        character_count += len(text)
                         has_visible_text = has_visible_text or bool(text.strip())
                         yield text
         except APITimeoutError:
             raise ModelCallError("模型响应超时，请稍后重试。", timed_out=True) from None
         except APIConnectionError:
             raise ModelCallError("无法连接模型服务，请检查代理地址和网络。") from None
-        except APIError:
+        except APIError as error:
+            logger.warning("event=upstream_status service=chat_model http_status=%s", getattr(error, "status_code", None))
             raise ModelCallError("模型服务调用失败，请检查密钥、模型名称或服务状态。") from None
 
+        logger.info("event=chat_stream_result chunks=%s text_chars=%s", chunk_count, character_count)
         if not has_visible_text:
             raise ModelCallError("模型未返回可用的文本回答。")
 

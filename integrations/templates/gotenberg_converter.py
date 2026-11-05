@@ -1,10 +1,16 @@
 """Gotenberg的PPTX转PDF适配器，不依赖Settings、FastAPI或Agent框架。"""
 
+import logging
+
 import math
 
 import httpx
 
+from diagnostics.operation_logging import log_operation
 from domain.templates.presentation_pdf_converter_contract import PresentationConversionError
+
+
+logger = logging.getLogger(__name__)
 
 
 class GotenbergPdfConverter:
@@ -38,6 +44,7 @@ class GotenbergPdfConverter:
         self._convert_url = str(address).rstrip("/") + "/forms/libreoffice/convert"
         self._timeout_seconds = timeout_seconds
 
+    @log_operation("template.convert_pdf")
     async def convert(self, *, pptx_bytes: bytes, file_name: str) -> bytes:
         """发送一次转换请求，返回初步检查通过的PDF，不自动重试。
 
@@ -52,6 +59,7 @@ class GotenbergPdfConverter:
         # multipart/form-data是上传文件的HTTP格式。files是Gotenberg规定的字段名，
         # 元组依次为“上传文件名、文件字节、文件媒体类型”。不要手动设置multipart
         # Content-Type：httpx会生成分隔各部分所需的boundary并写入请求头。
+        logger.info("event=conversion_input input_bytes=%s timeout_seconds=%s", len(pptx_bytes), self._timeout_seconds)
         files = {"files": (
             file_name, pptx_bytes,
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -68,6 +76,7 @@ class GotenbergPdfConverter:
         except httpx.HTTPStatusError as error:
             # 只公开状态码，不转发上游错误正文（可能带有文档内容或内部路径）。
             status = error.response.status_code
+            logger.warning("event=upstream_status service=gotenberg http_status=%s", status)
             raise PresentationConversionError(
                 f"Gotenberg返回HTTP {status}，请检查文件、LibreOffice状态和服务端超时配置。"
             ) from None
@@ -81,4 +90,5 @@ class GotenbergPdfConverter:
         if (content_type != "application/pdf" or not pdf_bytes.startswith(b"%PDF-")
                 or b"%%EOF" not in pdf_bytes[-1024:]):
             raise PresentationConversionError("转换服务未返回符合基本格式的PDF，未保存结果。")
+        logger.info("event=conversion_result http_status=%s output_bytes=%s", response.status_code, len(pdf_bytes))
         return pdf_bytes

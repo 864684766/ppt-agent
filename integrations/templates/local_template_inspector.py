@@ -1,5 +1,6 @@
 """宿主登记文件到模板编号，使用python-pptx只读解析，不调用Office或模型。"""
 
+
 import hashlib
 import logging
 from collections.abc import Mapping
@@ -10,6 +11,7 @@ from zipfile import BadZipFile
 from pptx import Presentation
 from pptx.exc import PackageNotFoundError
 
+from diagnostics.operation_logging import log_operation
 from domain.templates.template_inspector_contract import TemplateInspectionError
 from integrations.templates.pptx_shape_extractor import extract_shapes
 from models.templates.template_structure import (
@@ -27,6 +29,7 @@ class LocalTemplateInspector:
         """复制宿主登记结果，不扫描硬盘；目前不承担上传目录或持久化管理。"""
         self._templates = {key: path.resolve() for key, path in templates.items()}
 
+    @log_operation("template.inspect")
     def inspect(self, *, template_id: str) -> TemplateStructure:
         """一次读取同一份字节计算hash与解析，不保存或覆盖原文件。
 
@@ -82,6 +85,7 @@ class LocalTemplateInspector:
                         slide.shapes, part_id=str(slide.part.partname), warnings=warnings,
                     ),
                 })
+            logger.info("event=template_structure slides=%s layouts=%s masters=%s warnings=%s", len(slides), len(layouts), len(masters), len(warnings))
             return {
                 "template_id": template_id, "file_name": path.name,
                 "sha256": hashlib.sha256(payload).hexdigest(),

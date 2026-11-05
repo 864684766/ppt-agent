@@ -1,10 +1,12 @@
 """read_skill的LangChain入口，读取能力通过协议注入。"""
 
+
 import asyncio
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.skills.skill_reader_contract import SkillReadError, SkillReader
 from models.skills.read_skill_contract import ReadSkillInput, ReadSkillOutput
 
@@ -20,6 +22,7 @@ def create_read_skill_tool(*, reader: SkillReader) -> BaseTool:
         "技能不规范或无法读取时记录日志并报错，不返回虚构内容；可重新发现或选择其他技能。"
         "附属资源读取及技能执行尚未接线；读取成功不表示已执行技能。"
     ))
+    @log_operation("tool.read_skill")
     async def read_skill(skill_id: str) -> ReadSkillOutput:
         """线程执行本地读取以避免阻塞事件循环，公开错误转换为ToolException。"""
         try:

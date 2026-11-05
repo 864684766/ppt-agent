@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from config.daily_file_handler import DailyFileHandler
+from diagnostics.log_context import LogContextFilter
 
 
 def configure_logging(
@@ -26,7 +27,9 @@ def configure_logging(
     if output not in {"file", "console", "both"}:
         raise ValueError("日志输出必须为file、console或both。")
 
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | request_id=%(request_id)s | operation_id=%(operation_id)s | %(message)s"
+    )
     handlers: list[logging.Handler] = []
     log_path: Path | None = None
     if output in {"file", "both"}:
@@ -44,6 +47,7 @@ def configure_logging(
     for handler in handlers:
         handler.setLevel(level)
         handler.setFormatter(formatter)
+        handler.addFilter(LogContextFilter())
 
     root_logger = logging.getLogger()
     # 名称标识本项目拥有的处理器，不能使用clear()破坏pytest等宿主的配置。
@@ -54,4 +58,8 @@ def configure_logging(
     root_logger.setLevel(level)
     for handler in handlers:
         root_logger.addHandler(handler)
+    # SDK的DEBUG可能包含请求正文、图片base64或密钥；应用DEBUG不同时打开SDK调试。
+    # 这里只设这些logger阈值，不接管它们自己的处理器或Uvicorn日志。
+    for name in ("httpx", "httpcore", "openai", "langchain", "langchain_core", "langchain_openai"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     return log_path

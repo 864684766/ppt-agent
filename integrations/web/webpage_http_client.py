@@ -1,6 +1,11 @@
 """网页HTTP连接的TLS策略与重定向配置，不依赖环境变量读取。"""
 
+import logging
+
 import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_webpage_http_client(*, verify_tls: bool = True) -> httpx.AsyncClient:
@@ -10,4 +15,8 @@ def create_webpage_http_client(*, verify_tls: bool = True) -> httpx.AsyncClient:
     网站的证书身份校验，不保证连接对端身份。不维护特定网站名单。
     只影响使用此连接的请求；不能解决登录、验证码、JS渲染或服务器拒绝访问。
     """
+    # 只记录策略，不记录目标URL；排查证书问题时可核对本次是否启用校验。
+    logger.debug("event=webpage_client_configuration verify_tls=%s max_redirects=5", verify_tls)
+    if not verify_tls:
+        logger.warning("event=tls_verification_disabled service=webpage")
     return httpx.AsyncClient(verify=verify_tls, max_redirects=5)

@@ -1,8 +1,10 @@
 """search_web的LangChain适配：描述工具、调用业务、选择公开字段。"""
 
+
 from langchain.tools import tool
 from langchain_core.tools import BaseTool, ToolException
 
+from diagnostics.operation_logging import log_operation
 from domain.web.web_search import search_web_candidates
 from domain.web.web_search_contract import WebSearchClient, WebSearchError
 from models.web.search_web_contract import SearchWebInput, SearchWebOutput, WebSearchItem
@@ -24,6 +26,7 @@ def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
         "查询已上传或已登记资料应使用search_materials；不搜索PPT设计模板。"
         "每次只搜索一次，不自动扩词、重试或循环；空items表示本次没有候选。"
     ))
+    @log_operation("tool.search_web")
     async def search_web(query: str, max_results: int = 5) -> SearchWebOutput:
         """异步等待外部搜索，避免阻塞其他请求；业务错误转换成工具错误。"""
         try:

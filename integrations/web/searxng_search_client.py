@@ -4,13 +4,19 @@
 连接由调用方创建和关闭，因此单元测试可以直接注入 HTTP 替身。
 """
 
+import logging
+
 from hashlib import sha256
 from urllib.parse import urlsplit
 
 import httpx
 
+from diagnostics.operation_logging import log_operation
 from domain.web.web_search_contract import WebSearchError
 from models.web.web_search_candidate import WebSearchCandidate
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearxngSearchClient:
@@ -40,10 +46,12 @@ class SearxngSearchClient:
         self._engines = ",".join(name.strip() for name in engines.split(",") if name.strip())
         self._timeout_seconds = timeout_seconds
 
+    @log_operation("web.search")
     async def search(self, *, query: str, max_results: int) -> tuple[WebSearchCandidate, ...]:
         """请求 JSON，再转换为统一候选；取消异常不捕获，由调用栈传播。"""
         # categories=general 避免把图片、视频列表混进普通网页结果。
         # SearXNG 没有这里所需的统一条数参数，max_results 在解析后本地截取。
+        logger.info("event=search_input query_chars=%s max_results=%s", len(query), max_results)
         params = {"q": query, "format": "json", "categories": "general"}
         if self._engines:
             params["engines"] = self._engines
@@ -55,7 +63,8 @@ class SearxngSearchClient:
             response.raise_for_status()
         except httpx.TimeoutException:
             raise WebSearchError("搜索服务响应超时，请稍后重试。") from None
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as error:
+            logger.warning("event=upstream_status service=searxng http_status=%s", error.response.status_code)
             raise WebSearchError("搜索服务返回异常状态，请检查服务及 JSON 接口配置。") from None
         except httpx.RequestError:
             raise WebSearchError("无法连接搜索服务，请检查地址和网络。") from None
@@ -63,7 +72,9 @@ class SearxngSearchClient:
             payload = response.json()
         except ValueError:
             raise WebSearchError("搜索服务未返回有效 JSON，请检查 JSON 接口配置。") from None
-        return parse_searxng_results(payload, max_results=max_results)
+        results = parse_searxng_results(payload, max_results=max_results)
+        logger.info("event=search_result returned_count=%s", len(results))
+        return results
 
 
 def parse_searxng_results(payload: object, *, max_results: int) -> tuple[WebSearchCandidate, ...]:
