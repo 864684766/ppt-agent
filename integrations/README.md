@@ -8,7 +8,7 @@
 | llm/ | 共用模型构造及聊天SDK适配 | langchain_model_factory.py、langchain_chat_client.py |
 | web/ | 搜索引擎、HTTP网页读取和HTML提取 | searxng_search_client.py、webpage_http_client.py、http_webpage_reader.py、html_text_extractor.py |
 | skills/ | 本地技能介绍扫描、头部解析和完整读取 | local_skill_catalog.py、local_skill_reader.py、skill_header_reader.py、skill_metadata_parser.py |
-| templates/ | PPTX结构解析和页面视觉模型适配 | local_template_inspector.py、pptx_shape_extractor.py、langchain_template_vision.py |
+| templates/ | PPTX结构解析和页面视觉模型适配 | local_template_inspector.py、pptx_shape_extractor.py、langchain_template_vision.py、gotenberg_converter.py |
 
 ## 如何选择位置
 
@@ -35,3 +35,5 @@ from integrations.templates.langchain_template_vision import LangChainTemplateVi
 包移动后`logging.getLogger(__name__)`的日志来源会包含新的子包路径，日志输出配置不变。
 
 2026-11-05：仅调整模块位置、导入、代码注释中的路径及关联文档；无依赖、配置、公开字段或业务行为变化。
+
+GotenbergPdfConverter为PPTX转PDF具体适配器，返回PDF字节；协议位于domain/templates/presentation_pdf_converter_contract.py。真实配置、磁盘读写和HTTP资源生命周期在外层组装。详见[转换调试说明](../docs/Gotenberg转换调试说明.md)。

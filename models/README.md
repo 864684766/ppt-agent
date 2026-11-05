@@ -122,3 +122,7 @@ ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协�
 ## 视觉识别模块（2026-11-05）
 
 [TemplateVisualAnalysis](templates/template_visual_analysis.py)：Pydantic结构化视觉结果，由模型适配器创建并校验，供示例和未来Harness使用；与TemplateStructure的确定性结构事实区分。没有新增工具输入输出或Graph状态。字段为page_role、role_evidence、visible_texts、layout_description、main_colors、limitations；详见Store清单和视觉识别模块调试说明。
+
+配置更新（2026-11-05）：Gotenberg根地址为config/settings.py中的Settings.gotenberg_base_url，字段说明见Store清单；Settings仍放config，不新增或移动数据模型。当前仅完成配置与服务健康检查，转换适配器未实现。
+
+Gotenberg转换（2026-11-05）：输入pptx_bytes: bytes及file_name: str，输出PDF bytes，没有为单一字节结果增加实体。Settings新增gotenberg_timeout_seconds，配置仍放config，协议和错误放domain/templates，字段见Store清单。

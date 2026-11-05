@@ -88,7 +88,7 @@ D. 生成文件与检查
 <p><strong>建议优先复用运行时已有的执行工具。</strong>如果选用的 Harness 运行配置已有可调用的命令执行工具，就让该工具承担脚本运行，不重复添加同职责入口；具体名称与可用性在 Harness 接线时按实际 SDK 文档和配置核对，本文不把它写成已接入能力。LangChain 侧也必须显式提供执行工具或执行适配器，单纯读取 Markdown 不会自动获得执行能力。</p>
 <p>如果两个子智能体都需要执行脚本，可在底层共用一个独立 Python 进程执行模块，分别由各运行时适配。它处理解释器、工作目录、参数、依赖缺失、超时、取消和执行结果；这是内部模块。模型可调用的命令入口则属于<strong>运行时工具</strong>，必须在实际工具清单中列明，不能把它隐藏成“模型自己就会 exec”。只有现有执行入口不能满足实际需求时，再讨论专门的脚本工具。</p>
 <p>你说的“exec 一下”如果指运行命令，理解正确。Python 的 <code>exec()</code> 是在当前 Python 进程执行代码字符串；启动技能的 Python/其他脚本通常使用进程调用，例如 <code>subprocess</code>，二者不是同一个概念。执行应遵循技能要求的时机和参数，结果返回 Agent 后继续；不是 read_skill 在内部顺便执行脚本。</p>
-<div class="note"><strong>页面渲染降为低优先级可选项：</strong><code>render_pptx</code> 指把已有 PPTX 转成图片，可供未来页面预览或视觉分析。第一阶段不要求实现，不计入上述 11 个候选工具，也不作为生成、检查或交付的依赖。目标是完整、可打开、内容经来源核实的 PPTX。模板首版依靠结构、占位符、文本语义和人工反馈；遇到纯图片或角色不明的页面，请用户指定，不假装已完成视觉判断。</div>
+<div class="note"><strong>页面图像导出与预览分开（2026-11-05）：</strong>前端预览继续延期。为让现有视觉模块分析真实PPT页面，拟采用Gotenberg将PPTX转为PDF，再逐页生成图片；这些是内部接入能力，不自动新增render_pptx工具，也不是PPTX生成与确定性检查的必需步骤。已完成服务配置、健康检查与独立PPTX转PDF真实验证；字体效果待人工核对，页面图片生成与Agent接线尚未实现。</div>
 <h2 id="examples">6. 用法示例</h2>
 <p>用户上传《劳动合同法.pdf》《员工手册.docx》《案例扫描件.pdf》，要求制作解除劳动合同培训 PPT。Agent 可以跨三份资料检索，但只读取命中的具体范围：</p>
 <div class="flow">list_materials → search_materials（解除、辞退等相关词）→ read_material（具体来源和位置）→ 必要时换词再搜 → 根据原文生成带来源的大纲</div>
@@ -179,7 +179,7 @@ D. 生成文件与检查
 <li><strong>模板与反馈阶段：</strong>inspect_template、ask_user。完整或残缺模板均须允许人工判断；ask_user 不推迟到首版之后。</li>
 <li><strong>PPT 生成阶段：</strong>build_presentation、check_presentation，完成 Windows PowerPoint 打开验收，不依赖图片渲染。</li>
 <li><strong>技能阶段：</strong>list_skills、read_skill，以及可复用的运行时脚本执行能力，按用户确认的技能能力接入，不把带代码技能缩减成仅 Markdown。</li></ol>
-<p>开发顺序与运行顺序不同：可以先开发资料工具，完整任务运行时却可能先读专业技能。上面的工具编号按运行阶段排列；本节是建议实施次序。这是讨论建议，不改变现有任务状态，也不代表下一轮要一次实施这些工具。页面图片渲染不排入首版必需任务；只有后续出现明确需要时再讨论。每次只开发已讨论清楚的一个小任务。</p>
+<p>开发顺序与运行顺序不同：可以先开发资料工具，完整任务运行时却可能先读专业技能。上面的工具编号按运行阶段排列；本节是建议实施次序。这是讨论建议，不改变现有任务状态，也不代表下一轮要一次实施这些工具。页面图像导出已作为模板自动视觉分析的后续接入项；前端预览继续延期，不能把配置或健康检查当作转换已完成。每次只开发已讨论清楚的一个小任务。</p>
 <ul><li>按任务只提供所需工具；不会把这 11 个项目工具定义全部塞给每次模型调用。</li>
 <li>工具结果有长度上限和截断标记；保留来源/版本/位置；明确区分无命中、范围无效和执行失败。</li>
 <li>读取工具不得越过项目或技能资源范围；带副作用的生成、提问和脚本操作需关联任务，避免重试时重复执行。</li>
@@ -194,4 +194,4 @@ D. 生成文件与检查
 <p>第二个工具独立运行：<code>uv run --locked python -m pytest tests/test_search_materials.py -s -q</code>，两项通过；两个工具合跑共四项通过。样本命中两个来源，返回完整来源定位，详见<a href="search_materials调试说明.md">第二个工具调试说明</a>。</p>
 <p>工具定义JSON是提供给模型的能力说明，不是模型产生的调用请求；单元测试直接invoke，不需要真实模型、密钥或互联网。当前测试样本不是已上传资料，也不写入应用状态。具体步骤见<a href="list_materials调试说明.md">调试说明</a>。</p>
 <p class="muted">本次推进第一个工具list_materials：已添加领域查询、LangChain工具入口、单元测试和调试说明，并更新技术文档、任务状态及Store契约清单。第二个工具search_materials现已独立实现，相关数据模型、技术文档、任务状态和Store清单已更新；未改依赖、配置或聊天接口，未开发第三个工具。</p>
-<h2>视觉识别模块（2026-11-05）</h2><p>已完成独立视觉模块、结构化契约及真实图片测试入口（不保留离线替身测试）；未增加Agent工具或子Agent，未接入Harness/LangGraph、HTTP或PPT页面渲染。输入为调用方提供的PNG/JPEG字节，输出为基于图片的判断，不包含对象编号或可编辑性结论。详见<a href="视觉识别模块调试说明.md">调试说明</a>。</p><p>本次实现的是内部可调用模块analyze，不是模型可选择的Agent工具，因此没有新增工具编号或tool-calling JSON定义。后续包装为工具时再明确图片来源编号和参数Schema。</p></main></body></html>
+<h2>视觉识别模块（2026-11-05）</h2><p>已完成独立视觉模块、结构化契约及真实图片测试入口（不保留离线替身测试）；未增加Agent工具或子Agent，未接入Harness/LangGraph、HTTP或PPT页面渲染。输入为调用方提供的PNG/JPEG字节，输出为基于图片的判断，不包含对象编号或可编辑性结论。详见<a href="视觉识别模块调试说明.md">调试说明</a>。</p><p>本次实现的是内部可调用模块analyze，不是模型可选择的Agent工具，因此没有新增工具编号或tool-calling JSON定义。后续包装为工具时再明确图片来源编号和参数Schema。</p><h2>Gotenberg PPTX转PDF适配器（2026-11-05）</h2><p>已实现domain/templates/presentation_pdf_converter_contract.py协议及错误、integrations/templates/gotenberg_converter.py具体适配、tests/test_gotenberg_converter.py真实测试。配置由外层读取，HTTP连接由调用方关闭；上传PPTX后检查状态、PDF媒体类型和文件头尾，返回PDF字节。测试保存到data/gotenberg-test/独立运行目录供人工检查，无模型调用、前端接口或Agent工具。未实现PDF逐页图片、视觉接线及自动视觉一致性检查。新增GOTENBERG_TIMEOUT_SECONDS默认120秒，范围(0,600]；无新依赖。操作见<a href="Gotenberg转换调试说明.md">转换调试说明</a>。</p></main></body></html>

@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     # PPT生成任务模型，空值回退llm_model；Harness业务尚未接线。
     llm_ppt_generation_model: str = ""
 
+    # Gotenberg服务根地址，对应GOTENBERG_BASE_URL；不是转换接口的完整路径。
+    # 空字符串表示未配置。真实转换测试读取后注入适配器，启动服务不自动转换。
+    gotenberg_base_url: str = Field(
+        default="",
+        description="Gotenberg HTTP(S)服务根地址，不含/forms/libreoffice/convert；默认空，真实转换测试使用。",
+    )
+    # Gotenberg客户端HTTP各阶段等待上限（秒）；与服务端API超时分别设置。
+    gotenberg_timeout_seconds: float = Field(
+        default=120, gt=0, le=600,
+        description="Gotenberg转换HTTP等待超时秒数，默认120，范围(0,600]；不是整体转换时限。",
+    )
+
     # SearXNG根地址，空值表示未配置；仅在外层创建搜索适配器时使用。
     searxng_base_url: str = Field(default="", description="SearXNG服务根地址，留空不启用。")
     # 普通网页默认引擎name，英文逗号分隔；空值使用服务器默认引擎。
