@@ -11,10 +11,7 @@ from openai import APIConnectionError, APIError, APITimeoutError
 from pydantic import SecretStr
 
 from domain.chat_client_contract import ChatClient, ModelCallError
-
-
-class ModelConfigurationError(ValueError):
-    """模型连接参数缺失或无效，由组装层转换为对应入口的错误。"""
+from integrations.llm.langchain_model_factory import create_langchain_model
 
 
 class LangChainChatClient:
@@ -86,26 +83,9 @@ def create_chat_client(
     配置来源和客户端生命周期由外层组装。独立脚本可直接传参复用，
     无需携带 FastAPI、Settings 或项目目录；仍需安装本适配器的 SDK 依赖。
     """
-    if not all((base_url, api_key.get_secret_value(), model_name)):
-        raise ModelConfigurationError("模型基础地址、密钥和模型名称不能为空。")
-    try:
-        endpoint = httpx.URL(base_url)
-    except httpx.InvalidURL:
-        raise ModelConfigurationError("模型基础地址必须是有效的 HTTP 或 HTTPS 地址。") from None
-    if endpoint.scheme not in ("http", "https") or not endpoint.host:
-        raise ModelConfigurationError("模型基础地址必须是有效的 HTTP 或 HTTPS 地址。")
-
-    model = ChatOpenAI(
-        base_url=base_url,
-        # 当前版本接受 SecretStr；直接传入，避免提前展开成明文字符串。
-        api_key=api_key,
-        model=model_name,
-        timeout=timeout_seconds,
-        # 学习阶段一次请求只尝试一次，便于理解错误和控制调用次数。
-        max_retries=0,
-        max_tokens=max_tokens,
-        http_async_client=http_client,
-        # 固定使用 OpenAI 兼容的 Chat Completions 接口。
-        use_responses_api=False,
+    # 这里只有“聊天适配器”的组装；SDK实例构造与校验统一交给模型工厂。
+    model = create_langchain_model(
+        base_url=base_url, api_key=api_key, model_name=model_name,
+        timeout_seconds=timeout_seconds, max_tokens=max_tokens, http_client=http_client,
     )
     return LangChainChatClient(model)

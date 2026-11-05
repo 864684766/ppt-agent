@@ -61,7 +61,7 @@ uv run --locked python -m pytest tests/test_search_web.py -s -q
 | models/web/web_search_candidate.py | 内部候选网页实体 |
 | domain/web/web_search_contract.py | 可替换搜索接口与安全错误 |
 | domain/web/web_search.py | 查询参数校验及一次业务调用 |
-| integrations/searxng_search_client.py | HTTP请求、响应结构检查、SearXNG字段转换 |
+| integrations/web/searxng_search_client.py | HTTP请求、响应结构检查、SearXNG字段转换 |
 | tools/web/search_web_tool.py | LangChain入口及公开输出组装 |
 | config/settings.py | 环境变量读取 |
 | examples/search_web_demo.py | 独立真实调用与资源组装，适合断点 |

@@ -8,7 +8,8 @@ from pydantic import ValidationError
 
 from config.settings import Settings
 from domain.chat_client_contract import ChatClient
-from integrations.langchain_chat_client import ModelConfigurationError, create_chat_client
+from integrations.llm.langchain_chat_client import create_chat_client
+from integrations.llm.langchain_model_factory import ModelConfigurationError
 
 
 async def get_chat_client() -> AsyncIterator[ChatClient]:

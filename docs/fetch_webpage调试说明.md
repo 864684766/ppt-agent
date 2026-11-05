@@ -66,9 +66,9 @@ PyCharm选择pytest运行此文件，附加参数-s。在`result = await fetch_t
 | models/web/webpage_content.py | 适配器内容与业务读取结果，标准库dataclass |
 | domain/web/webpage_reader_contract.py | 可替换读取协议与安全异常 |
 | domain/web/webpage_reader.py | URL、字符范围校验与文本截断 |
-| integrations/webpage_http_client.py | 通用TLS策略和HTTP连接创建，外层负责关闭 |
-| integrations/http_webpage_reader.py | HTTP读取、下载限制、编码处理 |
-| integrations/html_text_extractor.py | 静态HTML的标题及文本提取 |
+| integrations/web/webpage_http_client.py | 通用TLS策略和HTTP连接创建，外层负责关闭 |
+| integrations/web/http_webpage_reader.py | HTTP读取、下载限制、编码处理 |
+| integrations/web/html_text_extractor.py | 静态HTML的标题及文本提取 |
 | tools/web/fetch_webpage_tool.py | LangChain工具入口 |
 | tests/test_fetch_webpage.py | JSON检查及真实search_web→读取验证 |
 

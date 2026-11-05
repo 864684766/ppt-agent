@@ -9,7 +9,7 @@ import json
 import httpx
 
 from config.settings import Settings
-from integrations.searxng_search_client import SearxngSearchClient
+from integrations.web.searxng_search_client import SearxngSearchClient
 from tools.web import create_search_web_tool
 
 

@@ -11,7 +11,7 @@ from pptx import Presentation
 from pptx.exc import PackageNotFoundError
 
 from domain.templates.template_inspector_contract import TemplateInspectionError
-from integrations.pptx_shape_extractor import extract_shapes
+from integrations.templates.pptx_shape_extractor import extract_shapes
 from models.templates.template_structure import (
     TemplateLayout, TemplateMaster, TemplateSlide, TemplateStructure,
 )

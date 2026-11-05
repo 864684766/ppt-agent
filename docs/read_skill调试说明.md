@@ -38,9 +38,9 @@ result = await tool.ainvoke(arguments)
 | --- | --- |
 | models/skills/read_skill_contract.py | Input与公开Output定义；Field描述进入tool-calling Schema |
 | domain/skills/skill_reader_contract.py | SkillReader协议与可公开的SkillReadError |
-| integrations/local_skill_reader.py | 本地定位、链接与目录边界检查、介绍格式校验、完整文件读取 |
-| integrations/skill_header_reader.py | 发现和读取共用的64KiB头部读取，原先从目录扫描实现中提取 |
-| integrations/skill_metadata_parser.py | 共用YAML解析与name/description等元数据检查 |
+| integrations/skills/local_skill_reader.py | 本地定位、链接与目录边界检查、介绍格式校验、完整文件读取 |
+| integrations/skills/skill_header_reader.py | 发现和读取共用的64KiB头部读取，原先从目录扫描实现中提取 |
+| integrations/skills/skill_metadata_parser.py | 共用YAML解析与name/description等元数据检查 |
 | tools/skills/read_skill_tool.py | LangChain薄入口、asyncio.to_thread调度、公开结果及错误转换 |
 | tests/test_read_skill.py | 两项验证，打印JSON、调用参数及完整结果 |
 

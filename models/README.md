@@ -111,10 +111,14 @@ LocalSkillCatalog扫描项目根目录skills/，parse_skill_metadata创建SkillS
 
 ## 技能完整读取（2026-11-04）
 
-ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协议返回普通str，工具显式组装ReadSkillOutput（skill_id/resource_path/content）。输入来源为list_skills编号，输出供模型阅读，不含本机绝对路径。正文包含YAML头部，不截断、不展开资源、不执行脚本；无新内部结果实体、缓存或状态。共享头部读取位于integrations/skill_header_reader.py。详见[read_skill调试说明](../docs/read_skill调试说明.md)。
+ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协议返回普通str，工具显式组装ReadSkillOutput（skill_id/resource_path/content）。输入来源为list_skills编号，输出供模型阅读，不含本机绝对路径。正文包含YAML头部，不截断、不展开资源、不执行脚本；无新内部结果实体、缓存或状态。共享头部读取位于integrations/skills/skill_header_reader.py。详见[read_skill调试说明](../docs/read_skill调试说明.md)。
 
 ## 模板结构数据流（2026-11-04）
 
 宿主登记template_id到Path映射→LocalTemplateInspector读取真实文件并创建TemplateStructure→工具沿用公开事实返回InspectTemplateOutput。TemplateStructure及嵌套TypedDict本身不包含内部路径或SDK对象，因而共用于协议与输出，不复制同形内部实体。Pydantic仅校验工具输入，TypedDict输出不自动校验。模型通过说明理解坐标、关联和限制；页面角色留给后续Agent判断。真实样本登记目前在测试入口，正式上传登记尚未接线。详见[inspect_template调试说明](../docs/inspect_template调试说明.md)。
 
 模板阅读提示（2026-11-05）：`TemplateSlide`是实际页面，`TemplateLayout`是可复用版式，`TemplateMaster`是管理版式的上层设计；三者数量无需一致。详见模板结构文件的逐字段注释及模板调试说明中的初学者章节。本次仅补充说明，类型及公开字段未改变。
+
+## 视觉识别模块（2026-11-05）
+
+[TemplateVisualAnalysis](templates/template_visual_analysis.py)：Pydantic结构化视觉结果，由模型适配器创建并校验，供示例和未来Harness使用；与TemplateStructure的确定性结构事实区分。没有新增工具输入输出或Graph状态。字段为page_role、role_evidence、visible_texts、layout_description、main_colors、limitations；详见Store清单和视觉识别模块调试说明。

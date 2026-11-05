@@ -4,8 +4,8 @@ import logging
 from pathlib import Path
 
 from domain.skills.skill_catalog_contract import SkillCatalogError
-from integrations.skill_metadata_parser import parse_skill_metadata
-from integrations.skill_header_reader import read_skill_header
+from integrations.skills.skill_metadata_parser import parse_skill_metadata
+from integrations.skills.skill_header_reader import read_skill_header
 from models.skills.skill_summary import SkillSummary
 
 

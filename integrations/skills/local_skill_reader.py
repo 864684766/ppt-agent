@@ -4,8 +4,8 @@ import logging
 from pathlib import Path
 
 from domain.skills.skill_reader_contract import SkillReadError
-from integrations.skill_header_reader import read_skill_header
-from integrations.skill_metadata_parser import parse_skill_metadata
+from integrations.skills.skill_header_reader import read_skill_header
+from integrations.skills.skill_metadata_parser import parse_skill_metadata
 
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,7 @@ import ssl
 import httpx
 
 from domain.web.webpage_reader_contract import WebpageReadError
-from integrations.html_text_extractor import HtmlTextExtractor
+from integrations.web.html_text_extractor import HtmlTextExtractor
 from models.web.webpage_content import WebpageContent
 
 

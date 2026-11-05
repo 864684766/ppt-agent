@@ -11,7 +11,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from config.settings import PROJECT_ROOT, Settings
 from config.logging_config import configure_logging
-from integrations.local_skill_catalog import LocalSkillCatalog
+from integrations.skills.local_skill_catalog import LocalSkillCatalog
 from tools.skills.list_skills_tool import create_list_skills_tool
 
 

@@ -14,7 +14,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from config.logging_config import configure_logging
 from config.settings import PROJECT_ROOT, Settings
-from integrations.local_template_inspector import LocalTemplateInspector
+from integrations.templates.local_template_inspector import LocalTemplateInspector
 from models.templates.template_structure import TemplateShape
 from tools.templates.inspect_template_tool import create_inspect_template_tool
 

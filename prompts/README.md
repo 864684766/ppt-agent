@@ -4,6 +4,6 @@
 
 | 文件 | 调用方 | 状态 |
 | --- | --- | --- |
-| vision_template_analysis.md | examples/vision_model_demo.py | 独立图片输入验证；未接正式Agent |
+| template_visual_analysis.md | integrations/templates/langchain_template_vision.py（外层读取并注入） | 当前视觉识别模块使用；真实测试入口为tests/test_template_vision.py |
 
-当前提示词请求识别文字、布局、页面用途与不确定项，不含预期图片答案、密钥或供应商配置。正式子Agent提示词后续逐项增加。
+该提示词定义视觉观察规则。输出字段Schema由适配器根据TemplateVisualAnalysis动态附加，避免提示词与数据模型重复维护字段定义。正式子Agent提示词后续按任务增加。

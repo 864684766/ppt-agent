@@ -194,4 +194,4 @@ D. 生成文件与检查
 <p>第二个工具独立运行：<code>uv run --locked python -m pytest tests/test_search_materials.py -s -q</code>，两项通过；两个工具合跑共四项通过。样本命中两个来源，返回完整来源定位，详见<a href="search_materials调试说明.md">第二个工具调试说明</a>。</p>
 <p>工具定义JSON是提供给模型的能力说明，不是模型产生的调用请求；单元测试直接invoke，不需要真实模型、密钥或互联网。当前测试样本不是已上传资料，也不写入应用状态。具体步骤见<a href="list_materials调试说明.md">调试说明</a>。</p>
 <p class="muted">本次推进第一个工具list_materials：已添加领域查询、LangChain工具入口、单元测试和调试说明，并更新技术文档、任务状态及Store契约清单。第二个工具search_materials现已独立实现，相关数据模型、技术文档、任务状态和Store清单已更新；未改依赖、配置或聊天接口，未开发第三个工具。</p>
-</main></body></html>
+<h2>视觉识别模块（2026-11-05）</h2><p>已完成独立视觉模块、结构化契约及真实图片测试入口（不保留离线替身测试）；未增加Agent工具或子Agent，未接入Harness/LangGraph、HTTP或PPT页面渲染。输入为调用方提供的PNG/JPEG字节，输出为基于图片的判断，不包含对象编号或可编辑性结论。详见<a href="视觉识别模块调试说明.md">调试说明</a>。</p><p>本次实现的是内部可调用模块analyze，不是模型可选择的Agent工具，因此没有新增工具编号或tool-calling JSON定义。后续包装为工具时再明确图片来源编号和参数Schema。</p></main></body></html>

@@ -49,7 +49,7 @@ async def chat(
     """将校验后的消息交给模型适配器，以 SSE 格式逐段返回正文。
 
     Depends 告诉 FastAPI：client 由 get_chat_client 提供，不从 JSON 读取。
-    接口负责 HTTP 协议转换，具体如何调用模型由 integrations/langchain_chat_client.py 负责。
+    接口负责 HTTP 协议转换，具体如何调用模型由 integrations/llm/langchain_chat_client.py 负责。
     """
     # 返回生成器而不是完整回答；Starlette 在响应期间持续迭代并发送内容。
     # 默认 request 作用域的 yield 依赖会在流发送完后才释放 HTTP 客户端。

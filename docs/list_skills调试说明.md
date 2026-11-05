@@ -34,7 +34,7 @@ list_skills只扫描项目内置skills/目录，读取SKILL.md介绍并返回摘
 
 支持的基本结构为一级技能目录中的UTF-8 SKILL.md，以---包围YAML头部，必需非空字符串name与description；不会从不规范正文猜测或修复介绍。不做完整技能包规范/执行有效性审查。可选版本无法识别时返回null，不因无关可选字段拒绝介绍。
 
-日志由integrations.local_skill_catalog模块的logger记录，仅包含目录名和安全原因。宿主入口读取LOG_LEVEL（默认INFO）和LOG_OUTPUT（默认both），统一组装日志；file写项目log/ppt-agent-YYYY-MM-DD.log，console写stderr且不创建文件，both两者。导入工具不初始化日志；独立结果测试已在入口接线。pytest自带输出及print不受本项目输出目标控制。详见[日志使用说明](日志使用说明.md)。不符合格式的技能记录WARNING后忽略；根目录不可用仍报错。
+日志由integrations.skills.local_skill_catalog模块的logger记录，仅包含目录名和安全原因。宿主入口读取LOG_LEVEL（默认INFO）和LOG_OUTPUT（默认both），统一组装日志；file写项目log/ppt-agent-YYYY-MM-DD.log，console写stderr且不创建文件，both两者。导入工具不初始化日志；独立结果测试已在入口接线。pytest自带输出及print不受本项目输出目标控制。详见[日志使用说明](日志使用说明.md)。不符合格式的技能记录WARNING后忽略；根目录不可用仍报错。
 
 只读SKILL.md的开头YAML头部，最多64KiB，支持UTF-8 BOM、Windows换行、多行description和嵌套metadata.version；使用yaml.safe_load，不执行文件或导入技能代码。其他头部字段暂不映射为可执行能力。缺失SKILL.md、非法YAML、缺少非空name/description等通过Python logging记录WARNING后跳过该技能；根目录整体不可访问则工具报错。
 
@@ -64,9 +64,9 @@ LOG_LEVEL接入后：日志及技能测试3 passed（0.66秒），验证WARNING�
 | models/skills/list_skills_contract.py | 工具输入与公开输出 |
 | domain/skills/skill_catalog_contract.py | 可替换目录协议和安全异常 |
 | domain/skills/skill_catalog.py | 纯筛选与排序，无文件系统和框架依赖 |
-| integrations/local_skill_catalog.py | 实际目录扫描 |
-| integrations/skill_header_reader.py | 发现与完整读取共用的有界头部读取 |
-| integrations/skill_metadata_parser.py | YAML元数据解析与字段检查 |
+| integrations/skills/local_skill_catalog.py | 实际目录扫描 |
+| integrations/skills/skill_header_reader.py | 发现与完整读取共用的有界头部读取 |
+| integrations/skills/skill_metadata_parser.py | YAML元数据解析与字段检查 |
 | tools/skills/list_skills_tool.py | LangChain薄入口与公开字段组装 |
 | config/settings.py | 提供已有PROJECT_ROOT定位；技能目录不属于Settings环境配置 |
 | config/logging_config.py | 统一日志输出组装与级别控制，工具不承担日志文件管理 |

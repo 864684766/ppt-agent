@@ -10,7 +10,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from config.logging_config import configure_logging
 from config.settings import PROJECT_ROOT, Settings
-from integrations.local_skill_reader import LocalSkillReader
+from integrations.skills.local_skill_reader import LocalSkillReader
 from tools.skills.read_skill_tool import create_read_skill_tool
 
 

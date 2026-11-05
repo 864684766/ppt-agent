@@ -47,8 +47,8 @@ object_id由包内part路径和shape_id组成，shape_id仅在所属part内唯�
 | models/templates/template_structure.py | 公开结构事实，标准库TypedDict，不自动校验 |
 | models/templates/inspect_template_contract.py | 输入Pydantic与输出契约；Output沿用事实字段，不重复定义同形内部实体 |
 | domain/templates/template_inspector_contract.py | 可替换解析协议与公开错误 |
-| integrations/local_template_inspector.py | 宿主编号映射、读取字节、hash、页面/母版/版式结构提取 |
-| integrations/pptx_shape_extractor.py | 形状、占位符、文本、表格和组合递归 |
+| integrations/templates/local_template_inspector.py | 宿主编号映射、读取字节、hash、页面/母版/版式结构提取 |
+| integrations/templates/pptx_shape_extractor.py | 形状、占位符、文本、表格和组合递归 |
 | tools/templates/inspect_template_tool.py | LangChain薄入口，线程执行与错误转换 |
 | tests/test_inspect_template.py | 两项验证：tool-calling JSON及实际样本结果 |
 
