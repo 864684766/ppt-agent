@@ -1,0 +1,192 @@
+Cls:
+  cls_batch_num: 6
+  cls_image_shape:
+  - 3
+  - 48
+  - 192
+  cls_thresh: 0.9
+  engine_type: onnxruntime
+  label_list:
+  - '0'
+  - '180'
+  lang_type: ch
+  model_dir: null
+  model_path: null
+  model_type: mobile
+  ocr_version: PP-OCRv4
+  task_type: cls
+Det:
+  box_thresh: 0.5
+  engine_type: onnxruntime
+  lang_type: ch
+  limit_side_len: 736
+  limit_type: min
+  max_candidates: 1000
+  mean:
+  - 0.5
+  - 0.5
+  - 0.5
+  model_dir: null
+  model_path: null
+  model_type: small
+  ocr_version: PP-OCRv6
+  score_mode: fast
+  std:
+  - 0.5
+  - 0.5
+  - 0.5
+  task_type: det
+  thresh: 0.3
+  unclip_ratio: 1.6
+  use_dilation: true
+EngineConfig:
+  mnn: {}
+  onnxruntime:
+    cann_ep_cfg:
+      arena_extend_strategy: kNextPowerOfTwo
+      device_id: 0
+      enable_cann_graph: true
+      npu_mem_limit: 21474836480
+      op_select_impl_mode: high_performance
+      optypelist_for_implmode: Gelu
+    coreml_ep_cfg:
+      AllowLowPrecisionAccumulationOnGPU: 0
+      EnableOnSubgraphs: 0
+      MLComputeUnits: ALL
+      ModelCacheDirectory: /tmp/RapidOCR
+      ModelFormat: MLProgram
+      ProfileComputePlan: 0
+      RequireStaticInputShapes: 0
+      SpecializationStrategy: FastPrediction
+    cpu_ep_cfg:
+      arena_extend_strategy: kSameAsRequested
+    cuda_ep_cfg:
+      arena_extend_strategy: kNextPowerOfTwo
+      cudnn_conv_algo_search: EXHAUSTIVE
+      device_id: 0
+      do_copy_in_default_stream: true
+    dml_ep_cfg: null
+    enable_cpu_mem_arena: false
+    inter_op_num_threads: -1
+    intra_op_num_threads: -1
+    use_cann: false
+    use_coreml: false
+    use_cuda: false
+    use_dml: false
+  openvino:
+    enable_cpu_pinning: null
+    enable_hyper_threading: null
+    inference_num_threads: -1
+    num_streams: -1
+    performance_hint: null
+    performance_num_requests: -1
+    scheduling_core_type: null
+  paddle:
+    cpu_math_library_num_threads: -1
+    cuda_ep_cfg:
+      device_id: 0
+      gpu_mem: 500
+    npu_ep_cfg:
+      device_id: 0
+      envs:
+        CUSTOM_DEVICE_BLACK_LIST: pad3d,pad3d_grad,set_value,set_value_with_tensor
+        FLAGS_allocator_strategy: auto_growth
+        FLAGS_npu_jit_compile: 0
+        FLAGS_npu_scale_aclnn: 'True'
+        FLAGS_npu_split_aclnn: 'True'
+        FLAGS_use_stride_kernel: 0
+    use_cuda: false
+    use_npu: false
+  tensorrt:
+    cache_dir: null
+    cls_profile:
+      max_shape:
+      - 6
+      - 3
+      - 48
+      - 192
+      min_shape:
+      - 1
+      - 3
+      - 48
+      - 32
+      opt_shape:
+      - 6
+      - 3
+      - 48
+      - 192
+    det_profile:
+      max_shape:
+      - 1
+      - 3
+      - 2048
+      - 2048
+      min_shape:
+      - 1
+      - 3
+      - 32
+      - 32
+      opt_shape:
+      - 1
+      - 3
+      - 736
+      - 736
+    device_id: 0
+    force_rebuild: false
+    rec_profile:
+      max_shape:
+      - 6
+      - 3
+      - 48
+      - 2048
+      min_shape:
+      - 1
+      - 3
+      - 48
+      - 32
+      opt_shape:
+      - 6
+      - 3
+      - 48
+      - 320
+    use_fp16: true
+    use_int8: false
+    workspace_size: 1073741824
+  torch:
+    cuda_ep_cfg:
+      device_id: 0
+    npu_ep_cfg:
+      device_id: 0
+    use_cuda: false
+    use_mps: false
+    use_npu: false
+Global:
+  font_path: null
+  log_level: info
+  max_side_len: 2000
+  min_height: 30
+  min_side_len: 30
+  model_root_dir: E:\test\ppt-agent\data\ocr-models
+  return_single_char_box: false
+  return_word_box: false
+  text_score: 0.5
+  use_cls: true
+  use_det: true
+  use_preprocess_img: true
+  use_rec: true
+  use_vertical_padding: true
+  width_height_ratio: 8
+Rec:
+  engine_type: onnxruntime
+  lang_type: ch
+  model_dir: null
+  model_path: null
+  model_type: small
+  ocr_version: PP-OCRv6
+  rec_batch_num: 6
+  rec_img_shape:
+  - 3
+  - 48
+  - 320
+  rec_keys_path: null
+  task_type: rec

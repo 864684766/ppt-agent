@@ -309,4 +309,18 @@ nav a{display:inline-block;margin:5px 18px 5px 0}h3{margin-top:30px}code{overflo
 <tr><td>ChatTemplateResponse.object_key</td><td>&lt;class &#x27;str&#x27;&gt;；实际读取的桶内完整对象标识，与请求template_key一致；不是公开URL。</td></tr>
 <tr><td>Settings.s3_template_max_file_bytes / S3_TEMPLATE_MAX_FILE_BYTES</td><td>int，默认52428800字节（50 MiB），范围1024–209715200；OSS下载声明/实际字节及PPTX原文件检查，系统环境优先.env，缺失默认、空值无效。普通上传仍用UPLOAD_MAX_FILE_BYTES。</td></tr>
 <tr><td>read_file.object_key / max_bytes / 返回值</td><td>str完整对象标识 / int上限字节 / bytes原文件，由宿主传入并持有，不包含URL和存储凭据。TemplateFileReader协议不依赖HTTP/SDK。</td></tr>
-</table><p>模板错误：template_not_found→404，template_too_large→413，template_format_invalid→422，template_empty→400，storage_access_denied→502，配置错误503。任何一份文件失败整个chat返回错误，未承诺部分成功。</p><p>日志storage.read_template及chat.read_template记录生命周期；template_downloaded.size_bytes为真实原文件大小，不记录对象标识/正文；后续解析数量沿用文档读取日志。无新模型状态或持久化字段。</p></main></body></html>
+</table><p>模板错误：template_not_found→404，template_too_large→413，template_format_invalid→422，template_empty→400，storage_access_denied→502，配置错误503。任何一份文件失败整个chat返回错误，未承诺部分成功。</p><p>日志storage.read_template及chat.read_template记录生命周期；template_downloaded.size_bytes为真实原文件大小，不记录对象标识/正文；后续解析数量沿用文档读取日志。无新模型状态或持久化字段。</p><h2 id="ocr-fields">公共图片OCR字段（2026-11-06）</h2>
+<p>models/ocr/ocr_result.py由本地识别适配器创建，供独立测试及后续文件读取器使用；内部数据，不是HTTP响应、Agent工具或LangGraph状态。无环境变量、来源ID或页码；来源关联由调用方完成。</p>
+<table><tr><th>字段/参数</th><th>类型、含义与边界</th></tr>
+<tr><td>recognize.image_bytes</td><td>非空bytes，完整图片文件字节，不是路径/URL/base64；宿主持有。支持PNG/JPEG/WEBP/BMP/单页TIFF，多帧拒绝；适配器关闭解码资源，不存原图。</td></tr>
+<tr><td>OcrResult.width_px / height_px</td><td>int，EXIF方向校正后的原图宽/高，单位像素，文字坐标同属此空间。</td></tr>
+<tr><td>OcrResult.regions</td><td>tuple[OcrTextRegion,...]，按引擎顺序返回，不保证复杂分栏阅读顺序；未检出文字为空元组，不等于图片一定无文字。</td></tr>
+<tr><td>OcrResult.text</td><td>str只读属性，各区域文字以换行连接，空结果为空字符串，不重复存正文。</td></tr>
+<tr><td>OcrTextRegion.text</td><td>str，实际识别的非空文字，不经大模型补写；低于引擎固定0.5识别阈值的区域可能被滤掉。</td></tr>
+<tr><td>OcrTextRegion.polygon_px</td><td>四个(x,y)浮点数顶点的tuple，原点在校正后原图左上角，单位像素；保留引擎顺序及倾斜四边形，不是EMU/PDF坐标，不保证顶点都在画布内。</td></tr>
+<tr><td>OcrTextRegion.confidence</td><td>float，0~1，引擎文字识别置信分，不是事实正确率。</td></tr>
+<tr><td>RapidOcrTextRecognizer.model_directory</td><td>必填Path，由宿主注入；必须存在当前锁定版本需要的三份本地ONNX模型，缺失报OcrError，不自动下载。</td></tr>
+<tr><td>max_image_bytes / max_image_pixels</td><td>构造参数，正整数，默认20971520压缩字节（20MiB）/25000000像素（宽×高）；Pillow自身图片安全规则也生效。不是已接线的环境变量。</td></tr>
+<tr><td>cpu_threads</td><td>构造参数，正整数，默认2，ONNX intra-op计算线程；inter-op固定1、CPU执行，同一实例加锁串行。不是系统并发限制。</td></tr>
+</table><p>OcrError为协议模块的安全运行错误，不混入数据模型。独立OCR尚未接入chat/PDF，不新增上传格式。详见<a href="OCR模块调试说明.md">OCR模块调试说明</a>。</p>
+</main></body></html>

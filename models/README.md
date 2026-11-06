@@ -170,3 +170,7 @@ api/chat_dependencies.py及路由SSE分支移除，独立模型工厂/SDK/SSE编
 
 ChatTemplateResponse位于chat/chat_response.py，复用文件元数据/内容字段并增加object_key。chat_template_processing从下载和现有读取结果创建，API公开返回为ChatReadResponse.template；没有模板时null。
 S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模型、文件路径或Store；字节由本次宿主持有，解析后不承诺可再次取回。
+
+## 公共图片OCR（2026-11-06）
+
+[ocr/ocr_result.py](ocr/ocr_result.py)定义OcrTextRegion和OcrResult。由integrations/ocr的识别器创建，供测试与未来文档读取器使用，当前为内部返回数据，不是HTTP、Agent或LangGraph状态。字段包括文字、四边形像素位置、置信分、EXIF校正后尺寸；text属性派生全文。来源ID/页码由调用方关联，不塞入OCR结果。协议与OcrError位于domain/ocr，不放进models。详见[字段清单](../docs/Store清单.html#ocr-fields)与[OCR调试说明](../docs/OCR模块调试说明.md)。

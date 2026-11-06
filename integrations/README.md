@@ -9,6 +9,7 @@
 | web/ | 搜索引擎、HTTP网页读取和HTML提取 | searxng_search_client.py、webpage_http_client.py、http_webpage_reader.py、html_text_extractor.py |
 | skills/ | 本地技能介绍扫描、头部解析和完整读取 | local_skill_catalog.py、local_skill_reader.py、skill_header_reader.py、skill_metadata_parser.py |
 | storage/ | RustFS/S3只读模板目录及字节下载 | s3_template_catalog.py、s3_template_file_reader.py |
+| ocr/ | 公共单张图片本地OCR，与PDF/Word/PPT解耦 | rapidocr_text_recognizer.py、ocr_image_decoder.py |
 | documents/ | 各格式内存正文读取及PDFium共享锁 | text/pdf/docx/xlsx/pptx_document_reader.py、document_reader_registry.py、pdfium_runtime.py |
 | templates/ | PPTX结构解析和页面视觉模型适配 | local_template_inspector.py、pptx_shape_extractor.py、langchain_template_vision.py、gotenberg_converter.py、pdfium_page_renderer.py |
 
@@ -66,3 +67,8 @@ S3TemplateFileReader实现TemplateFileReader协议，接收宿主client/bucket�
 对get_object.Body使用closing；ContentLength预检查与流式实际下载上限同时执行，失败/超限也关闭流。SDK客户端仍由api/template_resource_dependencies.py的open_template_storage_client管理，目录与下载复用连接组装。
 不解析文件或返回HTTP，不写磁盘/Store；API模板处理取得字节后复用已有PPTX校验和读取器。未增加外部依赖。
 独立模块测试tests/test_s3_template_file_reader.py（SDK Stubber，非HTTP测试）覆盖读取、关闭、实际超限和不存在；真实chat已从OSS读取公司/暑期两份模板。
+
+## 公共图片OCR（2026-11-06）
+
+RapidOcrTextRecognizer实现ImageTextRecognizer协议，接收图片字节，返回models/ocr中的文字区域、位置及置信分。模型目录由宿主注入，本地模型预先准备，不读取.env、不自动下载或保存图片。实例内复用引擎并加锁，异步线程桥接由调用方负责。ocr_image_decoder仅负责图片格式、限额、方向及透明背景处理。
+rapidocr3.10.0/onnxruntime1.31.1已锁定实装，Windows真实图片验证通过；PDF/聊天尚未接线。详见[OCR模块调试说明](../docs/OCR模块调试说明.md)。
