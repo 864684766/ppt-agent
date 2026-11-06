@@ -28,6 +28,9 @@
 | 模板 | 模板结构事实与嵌套对象 | TemplateStructure、TemplateSlide、TemplateLayout、TemplateMaster、TemplateShape | [template_structure.py](templates/template_structure.py) |
 | 模板 | inspect_template输入与公开输出 | InspectTemplateInput、InspectTemplateOutput | [inspect_template_contract.py](templates/inspect_template_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
+| 对话 | 接收层内部问题与附件 | ChatSubmission、ChatAttachmentInput | [chat_request.py](chat/chat_request.py) |
+| 对话 | 附件读取公开响应和安全错误 | ChatReadResponse、ChatAttachmentResponse、ChatErrorDetail、ChatErrorResponse | [chat_response.py](chat/chat_response.py) |
+| 文档读取 | 正文块、读取结果、读取规模限制 | DocumentBlock、DocumentContent、DocumentReadLimits | [document_content.py](documents/document_content.py) |
 | 健康检查 | HTTP 健康响应 | HealthResponse | [health_response.py](health/health_response.py) |
 | 人工交互 | 预留问题正文（未接线） | UserQuestion | [user_question.py](interaction/user_question.py) |
 | 人工交互 | 预留提问输入输出（工具已移除） | AskUserInput、AskUserOutput | [ask_user_contract.py](interaction/ask_user_contract.py) |
@@ -72,14 +75,16 @@ list_project_materials 执行查询 → MaterialPage
 5. 同一操作的输入输出放在同一契约文件；相关内部查询结果集中在 material_query_results.py。按职责、依赖和实际复用需求拆分，不按类数量机械拆文件，不强制复用HTTP与工具类型。
 6. __init__.py不批量加载所有类型，使用时显式导入具体模块，避免依赖扩散。
 
-当前对话回复是SSE事件流，不存在普通JSON的ChatResponse；不要为了目录对称编造输出类。
+当前所有对话请求统一返回ChatReadResponse JSON；不调用模型/SSE。有附件返回读取内容，无附件attachment=null。template_key指定后实际下载并解析OSS模板，结果位于template。
 当前未开发大纲、模板识别等结构化Agent结果，它们尚无可供导航的类型定义。
 
-## 真实数据来源（已确认，登记模块尚未实现）
+## 当前附件数据来源（2026-11-05）
 
-上传业务文件 → 后端保存原文件到本地磁盘 → 读取实际元数据并创建MaterialSummary → 写入当前项目内存资料目录 → 宿主用目录快照创建list_materials工具。
-
-初始pending、未知页数None；解析/本机OCR成功后用新的不可变摘要替换为ready，失败则failed。正文与来源定位单独保存，不进入目录摘要。资料或状态更新后需重建工具；同轮分页固定快照。第一阶段目录不要求数据库，重启不承诺恢复。模板/技能单独登记。测试样本和正式摘要使用相同类型，但测试样本不作为正式资料写入应用。
+用户问题＋附件 → HTTP接收并关闭表单句柄 → 内容校验 → 按格式读取 → DocumentContent → ChatReadResponse。
+不长期保存原文件，不创建项目/会话/资料目录Store，也不直接调用模型。DocumentBlock编号仅本次读取唯一。
+之前的项目目录/落盘设计已按用户最新要求延期；MaterialSummary/MaterialFragment等既有工具结构暂时保留，尚未接收当前附件数据，不能当作已接线。
+ChatAttachmentInput由接收层创建，包含原始bytes（禁止序列化/日志）；ChatSubmission仅内部使用，JSON客户端只能提交ChatRequest（message、可选template_key）。
+各读取器创建DocumentBlock/DocumentContent；DocumentReadLimits由API宿主从Settings组装。ChatAttachmentResponse/ChatReadResponse由API创建并公开，读取数据模型不依赖API、SDK或执行层。
 
 ## 第二个工具：正文检索数据流（2026-11-02）
 
@@ -142,3 +147,26 @@ request_id、operation_id等是diagnostics管理的运行上下文与日志摘�
 按用户决定移除ask_user工具、内存收集器与对应测试。仅保留UserQuestion、AskUserInput、AskUserOutput及其共享字段校验，当前没有实际创建/提交/存储/回答流程。UserQuestion.question_id只要求非空字符串，未来由实际接入方分配，不限制UUID格式或提前冻结图状态。
 
 这些类型不会自动提问、显示界面或暂停程序；后续在子智能体与LangGraph开发中讨论真实交互，再决定如何复用字段。无新增环境变量或依赖，字段说明见[Store清单](../docs/Store清单.html)。
+
+## 对话附件读取（2026-11-05）
+
+旧models/uploads及FileUploadRequest/Response已移除；现由chat/chat_request.py、chat/chat_response.py和documents/document_content.py描述输入输出。
+实际读取器归integrations/documents，纯内容/Office包检查归domain/uploads；文件检查能力仍保留，移除的是独立上传HTTP入口。
+详见[对话附件读取说明](../docs/对话附件读取调试说明.md)。
+
+## RustFS模板资源（2026-11-06）
+
+[template_resource_response.py](templates/template_resource_response.py)集中定义TemplateResourceItem、TemplateResourceListResponse、TemplateResourceErrorDetail、TemplateResourceErrorResponse。
+存储适配器创建条目和分页结果，API公开返回；错误由HTTP边界选择。条目为候选，不含模板正文/凭据/下载URL，不承诺兼容或授权验证。object_key完整保留桶内路径，file_name仅展示，不能用文件名判唯一。
+聊天ChatAttachmentInput/ChatAttachmentResponse已删除purpose；multipart仅message和可选file，全部参考资料。template_key已接下载和PPTX解析，ChatTemplateResponse独立返回模板内容；没有跨请求模板选择状态。
+
+## 当前对话字段调整（2026-11-06）
+
+ChatRequest及其内部派生ChatSubmission新增template_key: str | None，默认None，1–1024字符，保留完整对象名（含目录/空格），不是URL；指定后真实下载读取。
+ChatReadResponse回显template_key，attachment改为可选，status为attachment_read、template_read、files_read或message_received，分别表示附件/模板/两份文件/只有消息。所有分支model_called=false。
+api/chat_dependencies.py及路由SSE分支移除，独立模型工厂/SDK/SSE编码保留，当前不接入AI。
+
+## OSS模板读取响应（2026-11-06）
+
+ChatTemplateResponse位于chat/chat_response.py，复用文件元数据/内容字段并增加object_key。chat_template_processing从下载和现有读取结果创建，API公开返回为ChatReadResponse.template；没有模板时null。
+S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模型、文件路径或Store；字节由本次宿主持有，解析后不承诺可再次取回。

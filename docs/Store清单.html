@@ -179,8 +179,9 @@ nav a{display:inline-block;margin:5px 18px 5px 0}h3{margin-top:30px}code{overflo
 </table></div>
 <h2 id="http">4. HTTP与SSE字段</h2>
 <p><strong>定义：</strong><a href="../models/chat/chat_request.py">models/chat/chat_request.py</a>。普通单轮流式对话请求，不是多轮大纲或项目会话模型。</p>
-<h3>ChatRequest</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
-<tr><td><code>message</code></td><td><code>str</code></td><td>必填</td><td>用户消息，最多 10000 字符 字段约束：最小长度 1；最大长度 10000。</td></tr>
+<h3>ChatRequest</h3><p>客户端请求字段；template_key来自对象列表，指定后实际下载并解析，不调用AI。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义</th></tr>
+<tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1), MaxLen(max_length=10000)</td><td>用户消息，1–10000字符；当前仅接收回显，不交给模型分析。</td></tr>
+<tr><td>template_key</td><td>typing.Optional[typing.Annotated[str, StringConstraints(strip_whitespace=False, to_upper=None, to_lower=None, strict=None, min_length=None, max_length=None, pattern=None, ascii_only=None)]]；None；MinLen(min_length=1), MaxLen(max_length=1024)</td><td>从模板列表object_key原样回填，如公司模板.pptx或business/模板.pptx；不是URL，不做URL编码。默认null不读取模板；指定时从服务端配置桶下载并解析PPTX，不调用AI。</td></tr>
 </table></div>
 <p><strong>定义：</strong><a href="../models/health/health_response.py">models/health/health_response.py</a>。健康检查返回，表示服务存活。</p>
 <h3>HealthResponse</h3><div class="scroll"><table><tr><th>字段</th><th>Python类型</th><th>必填 / 默认值</th><th>含义与约束</th></tr>
@@ -231,4 +232,81 @@ nav a{display:inline-block;margin:5px 18px 5px 0}h3{margin-top:30px}code{overflo
 <tr><td>UserQuestion.options</td><td>tuple[str,...]，必填，0–10项</td><td>不可变选项序列，单项与组合约束同输入；当前没有创建方或存储实现。</td></tr>
 <tr><td>UserQuestion.allow_free_text</td><td>bool，必填，无实体默认值</td><td>回答方式要求，不表示已收到答案。</td></tr>
 <tr><td>AskUserOutput.question_id</td><td>str，预留必填</td><td>未来提交结果的关联编号，目前没有执行代码返回此结构。</td></tr>
-<tr><td>AskUserOutput.status</td><td>Literal[waiting_for_user]，预留必填</td><td>拟表示尚待用户回答，不代表已提交、展示或暂停。TypedDict不执行运行时校验。</td></tr></table><p>共享校验仍被实体与输入定义使用，因此保留。没有收集器字典、问题提交日志或回答字段；后续真实接入时再调整契约与生命周期。</p></main></body></html>
+<tr><td>AskUserOutput.status</td><td>Literal[waiting_for_user]，预留必填</td><td>拟表示尚待用户回答，不代表已提交、展示或暂停。TypedDict不执行运行时校验。</td></tr></table><p>共享校验仍被实体与输入定义使用，因此保留。没有收集器字典、问题提交日志或回答字段；后续真实接入时再调整契约与生命周期。</p><h2 id="file-upload-fields">对话附件与分格式读取字段（2026-11-05）</h2>
+<p>POST /ppt-agent/v1/chat为HTTP入口，不是Agent工具。旧独立上传类型及/files接口已删除。JSON仅message；multipart为message与可选file/template_key；JSON为message与可选template_key。当前整个对话入口不调用模型，不长期保留，无项目/会话/版本Store；没有自动登记到资料检索工具。</p>
+<table><tr><th>multipart字段</th><th>约束</th><th>含义与边界</th></tr><tr><td>message</td><td>必填文本，去首尾空白后1–10000字符</td><td>用户问题；有附件时目前只回显，不参与正文选择。</td></tr><tr><td>file</td><td>可选单个文件，统一为参考资料</td><td>真实文件上传，不是路径/base64；HTTP层创建并关闭临时句柄。</td></tr><tr><td>template_key</td><td>可选文本，1–1024字符，默认null</td><td>选中OSS模板的完整object_key，不是URL；指定后下载并解析。</td></tr></table><h3>ChatRequest</h3><p>客户端创建，接收层校验；只用于JSON消息。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>中文含义</th></tr><tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1), MaxLen(max_length=10000)</td><td>用户消息，最多 10000 字符</td></tr></table><h3>ChatAttachmentInput</h3><p>接收层创建的内部文件字节，不从JSON直接接收，不记录正文。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义与边界</th></tr>
+<tr><td>file_name</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>通过名称检查、已去除客户端目录的文件名。</td></tr>
+<tr><td>format</td><td>typing.Literal[&#x27;txt&#x27;, &#x27;md&#x27;, &#x27;pdf&#x27;, &#x27;docx&#x27;, &#x27;xlsx&#x27;, &#x27;pptx&#x27;]；必填；</td><td>扩展名与声明MIME初检后的规范化格式；实际字节仍需内容校验。</td></tr>
+<tr><td>content</td><td>&lt;class &#x27;bytes&#x27;&gt;；必填；</td><td>请求内实际文件字节，由接收层创建，供读取器使用；不进入JSON响应或日志，不长期保存。</td></tr>
+</table><h3>ChatSubmission</h3><p>接收层内部结果，含可选上传附件。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义</th></tr>
+<tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1), MaxLen(max_length=10000)</td><td>用户消息，1–10000字符；当前仅接收回显，不交给模型分析。</td></tr>
+<tr><td>template_key</td><td>typing.Optional[typing.Annotated[str, StringConstraints(strip_whitespace=False, to_upper=None, to_lower=None, strict=None, min_length=None, max_length=None, pattern=None, ascii_only=None)]]；None；MinLen(min_length=1), MaxLen(max_length=1024)</td><td>从模板列表object_key原样回填，如公司模板.pptx或business/模板.pptx；不是URL，不做URL编码。默认null不读取模板；指定时从服务端配置桶下载并解析PPTX，不调用AI。</td></tr>
+<tr><td>attachment</td><td>models.chat.chat_request.ChatAttachmentInput | None；None；</td><td>接收层从multipart文件创建；JSON请求仅接受message/template_key，不能伪造附件对象。</td></tr>
+</table><h3>DocumentBlock</h3><p>各读取器通过内容构建器创建；HTTP公开，未来可交智能体。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>中文含义</th></tr><tr><td>block_id</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1)</td><td>本次读取内的块编号，如b000001；不是跨版本稳定编号或全局source_id。</td></tr><tr><td>kind</td><td>typing.Literal[&#x27;text&#x27;, &#x27;page&#x27;, &#x27;paragraph&#x27;, &#x27;table_row&#x27;, &#x27;sheet_row&#x27;, &#x27;slide_text&#x27;]；必填；</td><td>块类型：纯文本、PDF页、Word段落、表格行、Excel行或PPT文字。</td></tr><tr><td>text</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1)</td><td>实际提取文字；表格行使用制表符分隔单元格；不包含模型补写内容。</td></tr><tr><td>location</td><td>&lt;class &#x27;str&#x27;&gt;；必填；MinLen(min_length=1)</td><td>原文位置说明，如第2页、正文第3段、工作表销售第5行；不是猜测的Word页码。</td></tr><tr><td>page</td><td>int | None；None；Ge(ge=1)</td><td>PDF页码或PPT幻灯片序号，从1开始；Word/Excel/普通文本为null。</td></tr><tr><td>sheet_name</td><td>str | None；None；</td><td>Excel原工作表名称，其他格式为null。</td></tr><tr><td>row_number</td><td>int | None；None；Ge(ge=1)</td><td>原表格或工作表行号，从1开始；非行数据为null。</td></tr><tr><td>cells</td><td>tuple[str, ...]；()；</td><td>表格行的单元格文本，按列顺序保留空单元格；非表格块为空列表。公式保留公式文本，不计算。</td></tr></table><h3>DocumentContent</h3><p>读取器创建，HTTP附件响应使用；不等于资料目录Store。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>中文含义</th></tr><tr><td>blocks</td><td>tuple[models.documents.document_content.DocumentBlock, ...]；必填；</td><td>按读取顺序返回的正文块；可能为空，须结合warnings判断。</td></tr><tr><td>page_count</td><td>int | None；None；Ge(ge=0)</td><td>PDF总页数或PPT实际页数；Word/Excel无法可靠得出页数时为null。</td></tr><tr><td>pages_without_text</td><td>tuple[int, ...]；()；</td><td>未提取到文字的PDF/PPT页序号，可能为空白或图片；不等于已确认扫描件，本次不执行OCR。</td></tr><tr><td>warnings</td><td>tuple[str, ...]；()；</td><td>固定限制与读取提示；不是正文或模型推理，不代表全文所有元素均已提取。</td></tr></table><h3>DocumentReadLimits</h3><p>宿主从Settings组装并注入读取器，仅内部使用。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>中文含义</th></tr><tr><td>max_characters</td><td>&lt;class &#x27;int&#x27;&gt;；200000；Ge(ge=1), Le(le=2000000)</td><td>所有块text字符数之和上限，不是字节数；超限失败，不截断。</td></tr><tr><td>max_blocks</td><td>&lt;class &#x27;int&#x27;&gt;；5000；Ge(ge=1), Le(le=20000)</td><td>检查的段落/行/页等单元数上限，包含空单元。</td></tr><tr><td>max_cells</td><td>&lt;class &#x27;int&#x27;&gt;；100000；Ge(ge=1), Le(le=1000000)</td><td>累计访问的表格单元格数上限，包含空单元格。</td></tr></table><h3>ChatAttachmentResponse</h3><p>读取结果由API创建并公开返回。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义与边界</th></tr>
+<tr><td>file_name</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>去除客户端目录的文件名，可作为本次响应的来源名称。</td></tr>
+<tr><td>format</td><td>typing.Literal[&#x27;txt&#x27;, &#x27;md&#x27;, &#x27;pdf&#x27;, &#x27;docx&#x27;, &#x27;xlsx&#x27;, &#x27;pptx&#x27;]；必填；</td><td>通过校验后实际分派给读取器的格式。</td></tr>
+<tr><td>size_bytes</td><td>&lt;class &#x27;int&#x27;&gt;；必填；Gt(gt=0)</td><td>原附件实际字节数，不是解析文字长度。</td></tr>
+<tr><td>content</td><td>&lt;class &#x27;models.documents.document_content.DocumentContent&#x27;&gt;；必填；</td><td>正文块、位置、页数及读取限制；无正文须结合warnings和pages_without_text判断。</td></tr>
+</table><h3>ChatReadResponse</h3><p>HTTP公开响应，分别返回参考附件和OSS模板内容。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义</th></tr>
+<tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>本次用户问题，回显供核对；未交模型分析。</td></tr>
+<tr><td>template_key</td><td>str | None；None；</td><td>本次请求的OSS模板对象标识；未指定时null，读取失败整个请求返回错误，不伪造成功。</td></tr>
+<tr><td>status</td><td>typing.Literal[&#x27;attachment_read&#x27;, &#x27;template_read&#x27;, &#x27;files_read&#x27;, &#x27;message_received&#x27;]；&#x27;message_received&#x27;；</td><td>attachment_read仅上传附件已读；template_read仅OSS模板已读；files_read两者都已读；message_received未指定任何文件。均不表示OCR/AI分析完成。</td></tr>
+<tr><td>model_called</td><td>typing.Literal[False]；False；</td><td>固定false，当前整个对话接口都不会创建或调用模型。</td></tr>
+<tr><td>retained</td><td>typing.Literal[False]；False；</td><td>固定false，不提供附件/正文的跨请求缓存或后续取回接口。</td></tr>
+<tr><td>attachment</td><td>models.chat.chat_response.ChatAttachmentResponse | None；None；</td><td>单个附件及其读取内容；没有上传时null，每次最多一个。</td></tr>
+<tr><td>template</td><td>models.chat.chat_response.ChatTemplateResponse | None；None；</td><td>OSS模板下载和PPTX文字解析结果；未指定template_key时null，不是生成后的PPT。</td></tr>
+</table><h3>ChatErrorDetail</h3><p>API明确选择的安全错误字段。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义与边界</th></tr>
+<tr><td>code</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>固定错误分类，如invalid_fields、invalid_file、document_unreadable或document_limit_exceeded。</td></tr>
+<tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>可供用户理解的安全中文提示。</td></tr>
+</table><h3>ChatErrorResponse</h3><p>请求接收/读取失败的JSON错误，无流内错误。</p><table><tr><th>字段</th><th>类型、默认及约束</th><th>含义与边界</th></tr>
+<tr><td>detail</td><td>&lt;class &#x27;models.chat.chat_response.ChatErrorDetail&#x27;&gt;；必填；</td><td>错误分类及提示；HTTP状态说明请求失败性质。</td></tr>
+</table><h3>Settings读取配置与日志字段</h3><table><tr><th>配置/内部参数</th><th>类型、默认、范围</th><th>用途与边界</th></tr>
+<tr><td>upload_max_file_bytes / UPLOAD_MAX_FILE_BYTES</td><td>int，20971520字节，1024–104857600</td><td>单文件上限；请求总量另加65536字节开销。</td></tr>
+<tr><td>upload_max_uncompressed_bytes / UPLOAD_MAX_UNCOMPRESSED_BYTES</td><td>int，104857600字节，1024–1073741824</td><td>Office ZIP累计展开量，不是正文字符数。</td></tr>
+<tr><td>document_max_characters / DOCUMENT_MAX_CHARACTERS</td><td>int，200000字符，1–2000000</td><td>所有块text字符之和；超限失败，不截断。</td></tr>
+<tr><td>document_max_blocks / DOCUMENT_MAX_BLOCKS</td><td>int，5000，1–20000</td><td>访问的段落/行/页/PPT形状等单元数，含空单元；不等于输出非空块数。</td></tr>
+<tr><td>document_max_cells / DOCUMENT_MAX_CELLS</td><td>int，100000，1–1000000</td><td>访问的表格/工作表单元格，含空单元格。</td></tr>
+</table><p>以上配置系统环境优先于.env，缺失默认，空值无效；宿主读取后注入，不在业务核心读环境。内部content为bytes、file_format为规范格式、content_type为不可信MIME辅助信息；DocumentReadError/FileUploadError的code是安全分类，不带HTTP状态。DocumentContentBuilder每次read单独创建，不是全局Store。</p>
+<p>日志操作chat.parse_request、chat.read_attachment、document.read_text/pdf/docx/xlsx/pptx记录生命周期；attachment_read摘要format/size_bytes/blocks/pages/warnings分别为格式、字节数、块数、总页数或None、提示数；chat_request_rejected/attachment_rejected记录安全code。没有用户问题、正文、文件名或原始解析异常。详见<a href="对话附件读取调试说明.md">调试说明</a>。</p><h2 id="template-resources">RustFS模板资源列表（2026-11-06）</h2>
+<p>GET /ppt-agent/v1/templates，非Agent工具，无数据库/Store。前端读取候选并选择模板是目标流程；本次仅实现列表，聊天template_key已接对象下载和PPTX解析；未接模型、视觉或制作。purpose已从聊天请求/响应/校验删除；聊天附件统一参考资料。</p>
+<table><tr><th>Query字段</th><th>类型、默认、约束</th><th>含义</th></tr>
+<tr><td>prefix</td><td>str，默认空，最多1024字符</td><td>对象名前缀，如business/；不是全文搜索词。</td></tr>
+<tr><td>max_keys</td><td>int，默认100，1–1000</td><td>S3单页扫描对象上限，包含非PPTX；不等于模板返回数。</td></tr>
+<tr><td>continuation_token</td><td>str或None，默认None，非空且最多8192字符</td><td>上次下一页游标原样传入，第一页省略。</td></tr></table>
+<p>列表数据由S3TemplateCatalog从SDK结果创建，API公开使用；协议可独立替换。响应不含凭据、签名下载URL、模板正文或已验证兼容性结论。</p>
+<h3>TemplateResourceItem</h3><table><tr><th>字段</th><th>类型、默认和约束</th><th>含义与边界</th></tr>
+<tr><td>object_key</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>桶内完整对象标识，如business/蓝色模板.pptx；后续选择模板应保留完整值，不能只用文件名。</td></tr>
+<tr><td>file_name</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>对象标识最后一段，供列表展示；不同目录允许重名，不是唯一ID。</td></tr>
+<tr><td>size_bytes</td><td>&lt;class &#x27;int&#x27;&gt;；必填；Ge(ge=0)</td><td>S3返回的对象大小，单位字节；不是页数或读取内容长度。</td></tr>
+<tr><td>last_modified</td><td>datetime.datetime | None；None；</td><td>S3返回的最后修改时间（通常为UTC），缺失为null；不是本系统上传时间。</td></tr>
+</table><h3>TemplateResourceListResponse</h3><table><tr><th>字段</th><th>类型、默认和约束</th><th>含义与边界</th></tr>
+<tr><td>bucket</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>宿主配置的模板桶名，不由客户端任意选择。</td></tr>
+<tr><td>items</td><td>list[models.templates.template_resource_response.TemplateResourceItem]；必填；</td><td>本页扫描后按.pptx后缀筛选出的候选，不证明文件可打开；不含文件夹或其他格式。</td></tr>
+<tr><td>returned_count</td><td>&lt;class &#x27;int&#x27;&gt;；必填；Ge(ge=0)</td><td>本页实际返回的PPTX数量，等于items长度；不是桶中模板总数。</td></tr>
+<tr><td>scanned_count</td><td>&lt;class &#x27;int&#x27;&gt;；必填；Ge(ge=0)</td><td>S3本页扫描到的全部对象数量，包含其他格式；最多max_keys个。</td></tr>
+<tr><td>is_truncated</td><td>&lt;class &#x27;bool&#x27;&gt;；必填；</td><td>S3是否还有下一页对象；true时即使items为空也应继续翻页。</td></tr>
+<tr><td>next_continuation_token</td><td>str | None；None；</td><td>下一页不透明游标，原样作为continuation_token传回；末页null，不解析或自行生成。</td></tr>
+</table><h3>TemplateResourceErrorDetail</h3><table><tr><th>字段</th><th>类型、默认和约束</th><th>含义与边界</th></tr>
+<tr><td>code</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>稳定分类，如storage_access_denied、storage_unavailable、storage_configuration_invalid。</td></tr>
+<tr><td>message</td><td>&lt;class &#x27;str&#x27;&gt;；必填；</td><td>面向使用者的中文安全提示，不含凭据或服务端原文。</td></tr>
+</table><h3>TemplateResourceErrorResponse</h3><table><tr><th>字段</th><th>类型、默认和约束</th><th>含义与边界</th></tr>
+<tr><td>detail</td><td>&lt;class &#x27;models.templates.template_resource_response.TemplateResourceErrorDetail&#x27;&gt;；必填；</td><td>错误分类与提示。</td></tr>
+</table>
+<h3>S3配置及内部字段</h3><table><tr><th>配置</th><th>类型/默认/范围</th><th>用途</th></tr>
+<tr><td>s3_endpoint_url / S3_ENDPOINT_URL</td><td>str，默认空</td><td>HTTP(S) API根地址；无用户信息、查询或桶路径。空/非法列表503。用户给定8081端口，非8084控制台。</td></tr>
+<tr><td>s3_template_bucket / S3_TEMPLATE_BUCKET</td><td>str，默认ppts，3–63字符，小写桶名</td><td>后端固定桶；不作为前端查询参数。</td></tr>
+<tr><td>s3_access_key_id / S3_ACCESS_KEY_ID</td><td>SecretStr，默认空</td><td>访问密钥ID，与Secret成对；均空为匿名，不使用AWS默认凭据链。</td></tr>
+<tr><td>s3_secret_access_key / S3_SECRET_ACCESS_KEY</td><td>SecretStr，默认空</td><td>访问密钥Secret，不返回前端/日志，实际值只在组装SDK时读取。</td></tr>
+<tr><td>s3_region / S3_REGION</td><td>str，默认us-east-1，非空</td><td>S3签名区域，与服务端配置匹配。</td></tr>
+<tr><td>s3_timeout_seconds / S3_TIMEOUT_SECONDS</td><td>float，默认20秒，(0,120]</td><td>连接/读取阶段超时，不自动重试，不是整个请求总时限。</td></tr></table>
+<p>系统环境优先于.env，缺失默认；除可空端点/凭据外不能留空。宿主配置并注入SDK，适配器不读环境。TemplateResourceError.code为安全错误分类，HTTP映射留在路由。</p>
+<p>日志templates_listed：scanned_count/returned_count为非负整数，is_truncated为bool；均来自本页结果，不含对象标识、凭据或游标。模板目录不建立运行状态；匿名请求真实返回AccessDenied，成功清单待有权凭据验证。详见<a href="模板资源列表调试说明.md">调试说明</a>。</p>
+<h2>OSS模板字节读取与响应（2026-11-06）</h2><p>ChatTemplateResponse由chat_template_processing创建，API公开返回；下载适配只返回bytes，不创建HTTP响应或保存Store。</p><table><tr><th>字段</th><th>类型/含义</th></tr>
+<tr><td>ChatTemplateResponse.file_name</td><td>&lt;class &#x27;str&#x27;&gt;；去除客户端目录的文件名，可作为本次响应的来源名称。</td></tr>
+<tr><td>ChatTemplateResponse.format</td><td>typing.Literal[&#x27;txt&#x27;, &#x27;md&#x27;, &#x27;pdf&#x27;, &#x27;docx&#x27;, &#x27;xlsx&#x27;, &#x27;pptx&#x27;]；通过校验后实际分派给读取器的格式。</td></tr>
+<tr><td>ChatTemplateResponse.size_bytes</td><td>&lt;class &#x27;int&#x27;&gt;；原附件实际字节数，不是解析文字长度。</td></tr>
+<tr><td>ChatTemplateResponse.content</td><td>&lt;class &#x27;models.documents.document_content.DocumentContent&#x27;&gt;；正文块、位置、页数及读取限制；无正文须结合warnings和pages_without_text判断。</td></tr>
+<tr><td>ChatTemplateResponse.object_key</td><td>&lt;class &#x27;str&#x27;&gt;；实际读取的桶内完整对象标识，与请求template_key一致；不是公开URL。</td></tr>
+<tr><td>Settings.s3_template_max_file_bytes / S3_TEMPLATE_MAX_FILE_BYTES</td><td>int，默认52428800字节（50 MiB），范围1024–209715200；OSS下载声明/实际字节及PPTX原文件检查，系统环境优先.env，缺失默认、空值无效。普通上传仍用UPLOAD_MAX_FILE_BYTES。</td></tr>
+<tr><td>read_file.object_key / max_bytes / 返回值</td><td>str完整对象标识 / int上限字节 / bytes原文件，由宿主传入并持有，不包含URL和存储凭据。TemplateFileReader协议不依赖HTTP/SDK。</td></tr>
+</table><p>模板错误：template_not_found→404，template_too_large→413，template_format_invalid→422，template_empty→400，storage_access_denied→502，配置错误503。任何一份文件失败整个chat返回错误，未承诺部分成功。</p><p>日志storage.read_template及chat.read_template记录生命周期；template_downloaded.size_bytes为真实原文件大小，不记录对象标识/正文；后续解析数量沿用文档读取日志。无新模型状态或持久化字段。</p></main></body></html>

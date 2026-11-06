@@ -42,6 +42,34 @@ class Settings(BaseSettings):
         description="日志输出：file仅文件，console仅控制台标准错误，both两者；默认both。",
     )
 
+    # 上传原文件的实际字节上限；20 MiB=20×1024×1024字节，不是2000万字节。
+    upload_max_file_bytes: int = Field(
+        default=20 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024,
+        description="单文件上传上限，单位字节，默认20 MiB，范围1 KiB–100 MiB；不代表解析后的内存占用。",
+    )
+    # DOCX/XLSX/PPTX均是ZIP容器，还要限制展开规模，不能只看上传大小。
+    upload_max_uncompressed_bytes: int = Field(
+        default=100 * 1024 * 1024, ge=1024, le=1024 * 1024 * 1024,
+        description="DOCX/XLSX/PPTX所有ZIP条目累计解压上限，单位字节，默认100 MiB，范围1 KiB–1 GiB。",
+    )
+
+    # 附件读取结果与遍历规模上限，避免把很长文件无限装入响应或模型上下文。
+    document_max_characters: int = Field(default=200000, ge=1, le=2000000, description="单附件读取结果累计字符上限，默认20万；超限明确失败，不静默截断。")
+    document_max_blocks: int = Field(default=5000, ge=1, le=20000, description="单附件检查的段落/表格行/页面等单元上限，默认5000，包含空单元。")
+    document_max_cells: int = Field(default=100000, ge=1, le=1000000, description="单附件累计遍历表格单元格上限，默认10万，包含空单元格。")
+
+    # S3兼容对象存储：当前用于RustFS模板目录，具体连接只在接口请求时建立。
+    s3_endpoint_url: str = Field(default="", description="RustFS的S3 API根地址，如http://host:8081；不是管理控制台，空值时模板列表503。")
+    s3_template_bucket: str = Field(default="ppts", min_length=3, max_length=63, pattern=r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$", description="模板所在桶名，默认ppts，服务端固定配置；HTTP调用方不能任意切换。")
+    s3_access_key_id: SecretStr = Field(default=SecretStr(""), description="RustFS访问密钥ID，与Secret配对；两者均空则匿名，不使用AWS默认凭据链。")
+    s3_secret_access_key: SecretStr = Field(default=SecretStr(""), description="RustFS访问密钥Secret，仅后端保存，不返回前端；两者均空则匿名。")
+    s3_template_max_file_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024,
+        description="OSS模板下载与解析原文件上限，默认50 MiB，范围1 KiB–200 MiB；与普通上传20 MiB分开，Office展开及正文读取上限仍独立生效。",
+    )
+    s3_region: str = Field(default="us-east-1", min_length=1, description="S3签名区域，默认us-east-1；按RustFS配置填写，不是物理部署位置推断。")
+    s3_timeout_seconds: float = Field(default=20, gt=0, le=120, description="S3连接/读取阶段超时秒数，默认20，范围(0,120]；单次请求不自动重试，不是HTTP端到端总时限。")
+
     # 当前几个任务共用一个代理；密钥使用 SecretStr 避免常规打印时泄露。
     # OpenAI兼容代理基础地址，空值表示未配置；对应LLM_BASE_URL。
     llm_base_url: str = ""

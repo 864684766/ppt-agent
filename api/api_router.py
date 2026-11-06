@@ -4,13 +4,14 @@ from fastapi import APIRouter
 
 from api.routes.health_routes import router as health_router
 from api.routes.chat_routes import router as chat_router
+from api.routes.template_resource_routes import router as template_resource_router
 
 
 # 每个元素是一组接口，后续添加大纲、模板等路由时在此显式登记。
 # 显式列表便于检查启用范围，也便于定位模块导入与路由冲突问题。
 # 业务路由只声明自身路径，例如 /chat。公共前缀在此统一设置，
 # 后续新增项目、模板等接口时，将对应路由加入此清单即可。
-BUSINESS_ROUTERS: tuple[APIRouter, ...] = (chat_router,)
+BUSINESS_ROUTERS: tuple[APIRouter, ...] = (chat_router, template_resource_router)
 
 business_router = APIRouter(prefix="/ppt-agent/v1")
 for module_router in BUSINESS_ROUTERS:

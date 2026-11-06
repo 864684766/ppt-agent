@@ -1,64 +1,51 @@
-"""普通模型对话调试接口；尚不是带项目状态的大纲对话接口。"""
+"""当前对话只用于接收消息和解析文件，统一返回JSON，不接入AI。"""
 
-from collections.abc import AsyncGenerator
-from contextlib import aclosing
-import logging
 from typing import Annotated
-
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
 
-from api.chat_dependencies import get_chat_client
-from models.chat.chat_request import ChatRequest
-from api.sse_encoder import encode_event
-from domain.chat_client_contract import ChatClient, ModelCallError
+from api.chat_attachment_processing import read_chat_attachment
+from api.chat_template_processing import read_chat_template
+from api.chat_request_parser import get_chat_submission
+from api.chat_openapi import CHAT_REQUEST_BODY, CHAT_RESPONSES
+from diagnostics.operation_logging import log_operation
+from models.chat.chat_request import ChatSubmission
+from models.chat.chat_response import ChatReadResponse
 
-
-router = APIRouter(tags=["模型调试"])
-logger = logging.getLogger(__name__)
-
-
-async def stream_events(client: ChatClient, message: str) -> AsyncGenerator[str, None]:
-    """把模型增量转换为 delta / done / error 事件。
-
-    响应开始后无法将 HTTP 200 改成 502/504，因此调用错误写入 error 事件。
-    error 和 done 都是结束标志，失败后不会再发 done，已输出文本可保留供查看。
-    不捕获异步取消异常；StreamingResponse 取消消费时通过 finally 关闭上游流。
-    """
-    try:
-        async with aclosing(client.stream_reply(message)) as chunks:
-            async for text in chunks:
-                # text：本次新增的可见正文，客户端按顺序追加；不是完整回复或严格单个token。
-                yield encode_event("delta", {"text": text})
-    except ModelCallError as error:
-        logger.warning("event=sse_error code=%s", "model_timeout" if error.timed_out else "model_error")
-        yield encode_event("error", {
-            # code：稳定错误分类；message：可展示的安全提示，不含上游原始异常。
-            "code": "model_timeout" if error.timed_out else "model_error",
-            "message": str(error),
-        })
-        return
-    # finish_reason：本流正常结束原因；completed不表示PPT业务任务已经完成。
-    yield encode_event("done", {"finish_reason": "completed"})
-    logger.info("event=sse_completed")
+router = APIRouter(tags=["对话"])
 
 
-@router.post("/chat", response_class=StreamingResponse,
-             responses={200: {"content": {"text/event-stream": {"schema": {"type": "string"}}}}},
-             summary="调用默认模型进行单轮流式对话")
+@router.post(
+    "/chat", response_model=ChatReadResponse,
+    responses=CHAT_RESPONSES, openapi_extra=CHAT_REQUEST_BODY,
+    summary="接收消息与可选附件，只返回文件解析结果，不调用AI",
+)
+@log_operation("chat.receive_and_read")
 async def chat(
-    request: ChatRequest,
-    client: Annotated[ChatClient, Depends(get_chat_client)],
-) -> StreamingResponse:
-    """将校验后的消息交给模型适配器，以 SSE 格式逐段返回正文。
+    submission: Annotated[ChatSubmission, Depends(get_chat_submission)],
+) -> ChatReadResponse:
+    """分别读取上传参考附件和选中的OSS模板；两者可同时提供。
 
-    Depends 告诉 FastAPI：client 由 get_chat_client 提供，不从 JSON 读取。
-    接口负责 HTTP 协议转换，具体如何调用模型由 integrations/llm/langchain_chat_client.py 负责。
+    template_key必须是列表中的object_key，不是URL。指定后实际下载并解析PPTX，
+    未指定则不连接OSS。任一文件读取失败明确报错，不伪造部分成功。
     """
-    # 返回生成器而不是完整回答；Starlette 在响应期间持续迭代并发送内容。
-    # 默认 request 作用域的 yield 依赖会在流发送完后才释放 HTTP 客户端。
-    return StreamingResponse(
-        stream_events(client, request.message),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    result = None
+    template = None
+    if submission.attachment is not None:
+        result = await read_chat_attachment(submission.attachment)
+    if submission.template_key is not None:
+        template = await read_chat_template(submission.template_key)
+    if result is not None and template is not None:
+        status = "files_read"
+    elif template is not None:
+        status = "template_read"
+    elif result is not None:
+        status = "attachment_read"
+    else:
+        status = "message_received"
+    return ChatReadResponse(
+        message=submission.message,
+        template_key=submission.template_key,
+        status=status,
+        attachment=result,
+        template=template,
     )

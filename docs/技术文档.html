@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜技术设计文档</title><style>
 :root{color-scheme:light;--ink:#1b2932;--muted:#596c72;--line:#d7e0e2;--accent:#12675f;--wash:#edf6f4;--orange:#a2541d}*{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:var(--ink);font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:white;padding:42px max(24px,calc((100% - 1100px)/2))}header p{color:#cfe3df;margin:5px 0}h1{font-size:32px;line-height:1.3;margin:8px 0}h2{font-size:23px;margin:42px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px}h3{font-size:18px;margin:25px 0 8px}main{max-width:1100px;margin:auto;padding:8px 24px 70px}nav{background:white;border:1px solid var(--line);padding:16px 22px;margin:22px 0}nav a{display:inline-block;margin:4px 18px 4px 0}a{color:var(--accent)}p{margin:10px 0}ul,ol{padding-left:24px}li{margin:5px 0}.note{border-left:4px solid var(--accent);background:var(--wash);padding:12px 18px;margin:18px 0}.warn{border-color:var(--orange);background:#fff4e9}table{width:100%;border-collapse:collapse;background:white;margin:12px 0}th,td{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}.scroll{overflow-x:auto}code{background:#e9efee;padding:1px 4px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#182b30;color:#e5f5f2;padding:18px;line-height:1.55;font:14px/1.6 Consolas,monospace}pre code{background:none;padding:0;color:inherit}.flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin:18px 0}.flow span{background:white;border:1px solid var(--line);padding:9px 12px}.flow span:not(:last-child):after{content:' →';color:var(--accent)}.meta{color:var(--muted)}@media(max-width:650px){h1{font-size:26px}main{padding-inline:16px}header{padding:30px 16px}table{min-width:680px}}@media print{body{background:white}header{background:white;color:black;padding:10px 0}header p{color:#555}main{padding:0}nav{display:none}h2{break-after:avoid}table,.note{break-inside:avoid}pre{background:#f2f2f2;color:black}}
-</style></head><body><header><p>TECHNICAL DESIGN · DRAFT 0.2 · 2026-11-04</p><h1>AI PPT 工作台<br>技术设计文档</h1><p>Python 后端优先 · Agent 编排 · 模板分析与可编辑 PPTX</p></header><main><div class="note"><strong>当前版本范围覆盖说明（2026-11-04）：</strong>按用户最新决定，当前先做一次性任务：上传文件及用途类型，仅按业务资料/模板分派分析；技能手动放入本地目录，由独立加载模块读取，本版无技能上传接口或市场，不建设项目、独立会话或历史版本管理。本文后续Project、Conversation、历史版本及对应项目接口是后续设计参考，不是当前验收条件。本次运行仍需临时上下文和来源定位；现有工具内部字段尚未改动，不表示已实现项目系统。延期需求见<a href="../optimization/多项目会话与历史版本管理.md">OPT-003</a>，当前任务安排见<a href="开发任务列表.html">开发任务列表</a>。</div><nav><strong>目录</strong><br><a href="#architecture">架构</a><a href="#workflow">运行流程</a><a href="#agents">子智能体</a><a href="#template">模板</a><a href="#skills">技能与工具</a><a href="#api">API 与数据</a><a href="#ops">运行与验证</a><a href="#sources">参考资料</a></nav>
+</style></head><body><header><p>TECHNICAL DESIGN · DRAFT 0.2 · 2026-11-04</p><h1>AI PPT 工作台<br>技术设计文档</h1><p>Python 后端优先 · Agent 编排 · 模板分析与可编辑 PPTX</p></header><main><div class="note"><strong>2026-11-06最新接口范围：</strong>POST /chat接收message、可选file、可选template_key，统一JSON、不调用AI。template_key从GET /templates返回的object_key原样回填，已实现从配置的RustFS桶下载PPTX并提取文字/表格，响应template与上传attachment分开；不再接受template_url。此前仅回显地址或匿名403的段落为历史记录，最新真实chat已读取两份OSS模板成功。详见<a href="接口调试说明.md">当前调试方法</a>。</div><div class="note"><strong>当前版本范围覆盖说明（2026-11-04）：</strong>按用户最新决定，当前先做一次性任务：用户问题与参考附件一起发送，当前按文件格式校验并读取；后续再接模型分析；技能手动放入本地目录，由独立加载模块读取，本版无技能上传接口或市场，不建设项目、独立会话或历史版本管理。本文后续Project、Conversation、历史版本及对应项目接口是后续设计参考，不是当前验收条件。本次运行仍需临时上下文和来源定位；现有工具内部字段尚未改动，不表示已实现项目系统。延期需求见<a href="../optimization/多项目会话与历史版本管理.md">OPT-003</a>，当前任务安排见<a href="开发任务列表.html">开发任务列表</a>。</div><nav><strong>目录</strong><br><a href="#architecture">架构</a><a href="#workflow">运行流程</a><a href="#agents">子智能体</a><a href="#template">模板</a><a href="#skills">技能与工具</a><a href="#api">API 与数据</a><a href="#ops">运行与验证</a><a href="#sources">参考资料</a></nav>
 <div class="note"><strong>状态：</strong>讨论稿。第一阶段以 Windows 本机为目标，必须实现完整大纲对话编辑、上传完整或残缺模板、识别不全时的人工反馈与继续生成。项目最终有前后端，本阶段只实现 Python 后端；接口、存储和组件名称是建议设计，待原型及讨论确认。不会将未经验证的 Harness、PPT Master 和模板能力视为已实现。</div>
 <div class="note"><strong>字段说明审查（2026-11-03）：</strong>已补齐资料实体、目录/检索/读取内部结果、四个工具公开输出及网页候选的逐字段中文注释；输入沿用Field描述，健康响应补充OpenAPI字段说明，配置与SSE事件载荷补充语义。条数、字符偏移、空值、版本与编号需明确区分。模型可见的工具description需解释关键返回字段，源码注释不自动成为模型Schema。后续作为开发规则执行。</div>
 <div class="note"><strong>2026-11-04 已确认职责调整：</strong>LangChain内容子智能体负责上传业务资料分析、联网搜索与筛选、来源整理和逐页大纲编辑；Harness制作子智能体负责模板分析与选择、内容映射、排版和PPTX制作；LangGraph维护权威状态、人工确认及修改路由。此处是目标设计，不代表子智能体、路由或生成链路已接线。重点审阅第1–4节；模板分析不再归LangChain负责。</div>
@@ -24,11 +24,16 @@
 │   │   ├── fetch_webpage_contract.py      # 网页读取输入与公开输出
 │   │   └── webpage_content.py             # 网页内容及内部读取结果
 │   ├── chat/
-│   │   └── chat_request.py                # ChatRequest：HTTP请求，回复为SSE
+│   │   ├── chat_request.py                # JSON消息、内部问题及附件输入
+│   │   └── chat_response.py               # 统一JSON，含可选附件/模板地址与安全错误
+│   ├── documents/
+│   │   └── document_content.py            # 统一正文块、结果及限额
 │   └── health/
 │       └── health_response.py             # HealthResponse：HTTP响应
 ├── domain/                               # 业务操作与框架无关协议
 │   ├── chat_client_contract.py            # ChatClient协议与模型调用错误
+│   ├── documents/                         # 读取协议、内容构建、共用文本解码
+│   ├── uploads/                           # 名称/用途/内容/Office包校验，无独立HTTP入口
 │   ├── web/
 │   │   ├── web_search_contract.py         # 搜索能力协议和安全错误
 │   │   ├── web_search.py                  # 查询参数与搜索业务入口
@@ -53,12 +58,21 @@
 │       └── material_fragment_validator.py # 正文块非空及原页码校验
 ├── api/
 │   ├── api_router.py                     # 路由总组装
-│   ├── chat_dependencies.py              # 对话依赖组装与连接释放
+│   ├── chat_request_parser.py            # 统一JSON/multipart接收
+│   ├── chat_form_parser.py               # 表单限额及资源关闭
+│   ├── chat_attachment_processing.py     # 配置与共用读取器组装
+│   ├── chat_template_processing.py       # OSS模板下载及共用PPTX解析
+│   ├── chat_error_mapping.py             # 安全HTTP错误
+│   ├── chat_openapi.py                   # 两种请求媒体类型文档
+│   ├── template_resource_dependencies.py # S3配置及连接生命周期
 │   ├── sse_encoder.py                    # 通用SSE编码
 │   └── routes/
-│       ├── chat_routes.py                # 流式对话HTTP入口
+│       ├── chat_routes.py                # 对话：仅文件解析/消息回显，不调用AI
+│       ├── template_resource_routes.py   # RustFS模板列表HTTP入口
 │       └── health_routes.py              # 健康检查HTTP入口
 ├── integrations/                          # 外部SDK、文件及网络接入
+│   ├── documents/                         # 各格式读取器/注册表/PDFium共享锁
+│   ├── storage/                           # S3模板列表/字节下载适配器
 │   ├── llm/                              # 共用模型构造与聊天适配
 │   │   ├── langchain_model_factory.py     # 唯一ChatOpenAI构造入口
 │   │   └── langchain_chat_client.py       # 流式聊天与模型错误转换
@@ -125,8 +139,8 @@
 宿主资料 → MaterialSummary → 目录查询 → MaterialPage → 工具公开字段 → ListMaterialsOutput</pre>
 <p>输入边界通过Pydantic Field声明参数、默认值、限制与模型说明；实体校验由MaterialSummary.__post_init__委托material_metadata_validator，非法实体仍不能正常构造。项目范围筛选属于material_catalog；公共项目编号及多条资料的source_id唯一性校验属于material_validator。输出TypedDict只描述类型，不自动校验；类型标注不会自动发送给模型作为输出Schema。</p>
 <p>查询业务改名material_catalog.py，工具入口为list_materials_tool.py；同时将HTTP路由、SSE编码、对话依赖、客户端及协议命名为明确角色。依赖只向数据和纯规则模块流动：模型/校验不依赖工具、HTTP或模型SDK。只用业务实体时不会加载Pydantic或运行时。移植资料查询需携带对应models/materials业务数据文件与validators/materials规则，不必携带HTTP或LangChain。</p>
-<p>ChatRequest当前没有普通JSON的对称ChatResponse：实际输出是delta/done/error SSE流；尚未实现的结构化Agent结果也不预建虚假类型。工具description与Field.description保留，JSON工具定义和公开返回字段不变；当前两项测试通过，另外以假模型验证健康检查、OpenAPI与对话SSE。外部HTTP路径、环境变量、Store字段和依赖版本不变。文件迁移后，IDE中旧路径的断点需重新设置。</p>
-<h3>已确认待实现：真实上传资料如何进入目录（2026-11-02）</h3>
+<p>历史无附件SSE入口现已停用；当前所有请求返回ChatReadResponse JSON，预留template_key且不调用AI，详见文末最新说明；尚未实现的结构化Agent结果也不预建虚假类型。工具description与Field.description保留，JSON工具定义和公开返回字段不变；当前两项测试通过，另外以假模型验证健康检查、OpenAPI与对话SSE。外部HTTP路径、环境变量、Store字段和依赖版本不变。文件迁移后，IDE中旧路径的断点需重新设置。</p>
+<h3>历史目录设计（2026-11-02，已延期）</h3><p>下列项目隔离、原文件落盘及目录登记是历史方案，按用户最新决定不在当前版本实现。当前问题与附件只在单次HTTP请求内读取并返回，详见文末最新说明。</p>
 <p><strong>真实运行使用与测试相同的MaterialSummary类型，但字段值来自上传和解析的实际结果。</strong>样本只是手动构造，正式数据由登记模块构造；不是把文件转成“测试数据”。当前只实现了接收目录快照的工具，以下上传、登记及内存目录仍待开发。</p>
 <ol><li>用户按“业务资料”用途上传文件；后端确定所属项目、分配source_id、保存原文件到本地磁盘。</li><li>读取实际名称和格式等元数据，构造MaterialSummary并加入当前项目的进程内存资料目录。先标记pending，未知page_count为None；project_id不由模型选择。</li><li>解析文本，扫描件需要时使用本机OCR。成功后创建新的不可变摘要替换目录记录，标记ready并填入可获得页数；失败标记failed。文件上传成功不等于正文解析成功。</li><li>正文和原页/文本块定位按source_id及版本单独关联保存，MaterialSummary只保留目录摘要，不包含正文或本机路径。</li><li>宿主取得当前项目目录快照，传给create_list_materials_tool。工具查询后只返回允许公开的字段。</li><li>目录新增或解析状态更新后，宿主需重建工具供后续调用使用。旧工具不会自动看到新增记录；同一轮分页保持同一快照，避免位置漂移。</li></ol>
 <p>模板、技能和未关联历史文件不混入业务资料目录。第一阶段结构化目录保存在内存，原文件保存在磁盘；不要求先建数据库，也不承诺进程重启后恢复目录。后续网页正文抓取成功并登记时也构造相同资料摘要，origin为web并保留原URL。</p>
@@ -144,7 +158,7 @@
 <p>在项目根目录运行 <code>uv run --locked uvicorn main:app --host 127.0.0.1 --port 8000</code>。PyCharm 可使用模块 <code>uvicorn</code>、上述参数及项目虚拟环境启动 Debug；断点调试先不启用自动重载。操作步骤见 <a href="接口调试说明.md">接口调试说明</a>。</p>
 <p>2026-10-30 实际启动验证：GET /health 返回 200 和 status=ok，GET /openapi.json 与 /docs 返回 200；未知路径返回默认 404，POST /health 返回默认 405。当前优先用 Postman 和断点验证接口；健康检查只表示服务存活，不代表外部模型或 PPT 生成能力可用。</p>
 <h3>任务 03：模型流式对话（2026-11-02）</h3>
-<p>POST /ppt-agent/v1/chat 接收 {"message":"你好"}，返回 text/event-stream（UTF-8）。保留用户修改的 /ppt-agent/v1 前缀。请求不变，响应从单个 JSON 改为 SSE；不兼容旧 reply 字段。</p>
+<p>POST /ppt-agent/v1/chat 无附件时接收 {"message":"你好"}，返回 text/event-stream（UTF-8）。2026-11-05新增multipart问题与附件读取分支，返回application/json，详见文末。保留用户修改的 /ppt-agent/v1 前缀。请求不变，响应从单个 JSON 改为 SSE；不兼容旧 reply 字段。</p>
 <pre><code>Postman → FastAPI 校验及依赖注入 → LangChainChatClient.stream_reply
         → ChatOpenAI.astream → 模型代理流 → delta 事件 → done 或 error</code></pre>
 <p>每个 delta 的 JSON 数据包含 text，客户端顺序拼接。块大小由模型与网络决定，不保证一块一个 token；不是逐字节切割。不对块 strip，保留 Markdown 空白。正常结束发 done（finish_reason=completed，仅表示流结束，不保证内容未被额度截断）；已知调用错误发 error（code、message）且不发 done。HTTP 响应开始后仍为 200，客户端不能只依赖状态码。未知错误或取消可能直接断流，没有终止事件应视为不完整。</p>
@@ -297,4 +311,42 @@ tests/conftest.py                  # pytest会话统一初始化日志
 tests/test_operation_logging.py    # 日志安全、取消、并发和文件接线验证</pre>
 <p>已覆盖8个工具执行入口及模型构造/聊天/视觉、搜索/网页、技能扫描/读取、模板结构、Gotenberg转换、PDF渲染。记录开始、完成、失败、取消与毫秒耗时；结果选择状态、条数和字节数，DEBUG补充PDF逐页情况，不记录正文、密钥、图片base64或SDK异常原文。安全错误位置保留类型、文件名、行号及函数。取消继续传播，流式消费未结束不能标为完成。</p>
 <p>HTTP请求生成request_id并在可经本中间件发送的响应头写入X-Request-ID；外层框架生成的未处理500响应不保证带此头。operation_id关联同一操作，parent_operation_id关联嵌套调用，均不是业务会话字段。HTTP 4xx为WARNING、5xx为ERROR；SSE的HTTP 200须结合sse_error和模型失败事件判断。LOG_LEVEL/LOG_OUTPUT继续使用既有配置，文件每日追加；pytest自动初始化，独立脚本入口显式初始化。SDK的DEBUG正文转储不随应用DEBUG开启。</p>
-<p>完整配置、字段、排查及验证命令见<a href="日志使用说明.md">日志使用说明</a>。尚未实现的Harness/LangGraph与PPT制作没有运行日志；本次没有监控面板、指标、告警或多进程日志收集，不能以日志覆盖替代真实外部服务验证。</p><p><strong>本轮验证：</strong>2026-11-05，26 passed（5.83秒）：日志配置6项、诊断基础设施5项、既有资料/技能/模板工具12项、真实PDF正常渲染1项、联网工具JSON定义2项。未调用真实模型、搜索服务或Gotenberg；FastAPI导入及git diff --check通过。真实外部调用、前端及完整业务链路不在本轮验证范围。</p><h2 id="ask-user">人工提问数据定义（2026-11-05，仅预留）</h2><p>按用户决定，移除仅提交问题到内存的ask_user工具、UserQuestionCollector及对应测试和调试说明。当前保留models/interaction/user_question.py中的问题实体、ask_user_contract.py中的输入输出字段，以及validators/interaction/user_question_validator.py共享字段校验。实体只要求问题编号为非空字符串，不将UUID格式绑定到业务数据。</p><p>没有工具入口、收集器、回答API、前端展示或暂停/恢复功能。提示词何时要求模型提问、问题如何传递给用户、真实答案如何回到模型，到子智能体及LangGraph接入时按实际流程设计；保留类型不代表已实现人工反馈。模型索引与字段清单同步标为预留。移除后的既有工具与日志回归23项通过（1.14秒）；保留类型的导入、默认值及非UUID编号构造检查通过。模板结构、转换、渲染、视觉串联仍留到Harness子智能体阶段。</p></main></body></html>
+<p>完整配置、字段、排查及验证命令见<a href="日志使用说明.md">日志使用说明</a>。尚未实现的Harness/LangGraph与PPT制作没有运行日志；本次没有监控面板、指标、告警或多进程日志收集，不能以日志覆盖替代真实外部服务验证。</p><p><strong>本轮验证：</strong>2026-11-05，26 passed（5.83秒）：日志配置6项、诊断基础设施5项、既有资料/技能/模板工具12项、真实PDF正常渲染1项、联网工具JSON定义2项。未调用真实模型、搜索服务或Gotenberg；FastAPI导入及git diff --check通过。真实外部调用、前端及完整业务链路不在本轮验证范围。</p><h2 id="ask-user">人工提问数据定义（2026-11-05，仅预留）</h2><p>按用户决定，移除仅提交问题到内存的ask_user工具、UserQuestionCollector及对应测试和调试说明。当前保留models/interaction/user_question.py中的问题实体、ask_user_contract.py中的输入输出字段，以及validators/interaction/user_question_validator.py共享字段校验。实体只要求问题编号为非空字符串，不将UUID格式绑定到业务数据。</p><p>没有工具入口、收集器、回答API、前端展示或暂停/恢复功能。提示词何时要求模型提问、问题如何传递给用户、真实答案如何回到模型，到子智能体及LangGraph接入时按实际流程设计；保留类型不代表已实现人工反馈。模型索引与字段清单同步标为预留。移除后的既有工具与日志回归23项通过（1.14秒）；保留类型的导入、默认值及非UUID编号构造检查通过。模板结构、转换、渲染、视觉串联仍留到Harness子智能体阶段。</p><h2 id="file-upload">问题与附件读取（2026-11-05，05部分完成）</h2>
+<p>统一入口POST /ppt-agent/v1/chat：JSON接收message与可选template_key；multipart再允许可选file。所有分支统一JSON，不调用AI或SSE。原独立/files路由、上传请求响应类型及旧测试已移除。当前单个参考附件，支持TXT/MD/PDF/DOCX/XLSX/PPTX；不再传purpose。设计模板通过独立资源列表选择。附件分支不构造或调用模型，不按问题筛选内容；下一阶段才将读取结果交给内容智能体；template_key已按完整对象标识下载并解析PPTX，不调用AI。</p>
+<pre>chat_routes → chat_request_parser / chat_form_parser：收流、边界参数与资源关闭
+           → chat_attachment_processing：注入配置、内容校验、选择读取器
+           → domain/uploads：纯文件与Office包检查
+           → DocumentReader协议 → integrations/documents各格式读取器
+           → DocumentContent / DocumentBlock → ChatReadResponse
+无附件    → 直接回显message/template_key，attachment=null，不调用模型</pre>
+<p>chat_openapi.py单独声明两种请求媒体类型；chat_error_mapping.py统一安全HTTP错误。模型由models/chat与models/documents定义，读取协议/限额构建在domain/documents，具体SDK在integrations/documents。读取器不依赖HTTP、Settings或模型，接收bytes和DocumentReadLimits，不写持久化Store。同步读取通过asyncio.to_thread执行，取消等待不保证立即停止线程；读取器自行关闭资源。</p>
+<p>PDF逐页文字提取，记录无文字页并提示尚无OCR；Word按正文段落/顶层表格交错顺序返回，不猜页码；Excel按表/行保留空单元格与原始公式，不执行计算；PPT只读实际幻灯片文字、表格、组合，不将母版默认提示混入正文。TXT/MD为全文。模板结构/转换/渲染/视觉仍由后续Harness组装。PDFium文本和图片操作共用integrations/documents/pdfium_runtime.py进程锁，避免原生库并发访问。</p>
+<p>文件默认20 MiB、Office展开100 MiB；请求加64 KiB表单开销。新增DOCUMENT_MAX_CHARACTERS默认200000、DOCUMENT_MAX_BLOCKS默认5000（含空单元）、DOCUMENT_MAX_CELLS默认100000，超限413、不静默截断。结果含blocks、page_count、pages_without_text、warnings；状态attachment_read不保证所有图片/复杂元素已读，不等同OCR/模型分析完成。retained=false，没有跨请求取回机制。表单可能使用系统临时文件，正常/失败/取消负责关闭，不承诺全程零落盘。</p>
+<p>2026-11-05查询官方PyPI并新增精确版本：python-docx1.2.0（Python≥3.9）、openpyxl3.1.5（Python≥3.8），关联et-xmlfile2.0.0。最高可检索历史预发布为python-docx1.0.0rc1/openpyxl2.6.0b1，早于稳定版，未采用。pyproject/uv.lock/实装已同步，uv sync --locked --inexact保留无关本地包。其余解析依赖沿用锁定版本：python-multipart0.0.33、python-pptx1.0.2、pypdfium2 5.14.0；FastAPI0.162.0、Starlette1.10.0、AnyIO4.15.1未升级。</p>
+<p>按用户决定删除独立附件HTTP自动化测试文件，当前接口通过Postman与PyCharm断点手动验收；此前自动化结果仅为历史验证，不表示已完成人工验收。详细请求、模块路径、边界和命令见<a href="对话附件读取调试说明.md">对话附件读取调试说明</a>。新增字段见<a href="Store清单.html#file-upload-fields">字段清单</a>。</p>
+<h2 id="template-resource-api">RustFS模板列表与用途参数移除（2026-11-06）</h2>
+<p>模板由前端列出候选供用户选择，参考附件与设计模板分离。POST /chat的JSON为message与可选template_key，multipart再允许可选file，purpose从Schema/输入/输出/文件校验全部移除；旧purpose不再接受，返回4xx（表单字段数量超限时400）。已接收预留template_key字段，但不下载对象，不把候选清单当作可用模板验证结果。</p>
+<pre>前端 → GET /ppt-agent/v1/templates
+     → template_resource_routes：Query、异步线程桥接、HTTP错误
+     → template_resource_dependencies：Settings、S3客户端创建与close
+     → TemplateResourceCatalog协议 → S3TemplateCatalog
+     → RustFS S3 ListObjectsV2（ppts桶）→ PPTX候选与分页 → 前端
+后续计划：用户选中object_key → 后端下载/校验 → Harness模板分析与制作</pre>
+<p>SDK用path寻址和SigV4签名，凭据均空明确匿名，不读取宿主AWS默认凭据。只扫描一页再筛.pptx（大小写不敏感）；返回items、returned_count、scanned_count、is_truncated、next_continuation_token。空items且仍有下一页时前端应继续查询；不扫描整个桶、不承诺模板总数，不拼接公开下载URL。只读列举不修改桶策略/对象。</p>
+<p>新增models/templates/template_resource_response.py、domain/templates/template_resource_catalog_contract.py、integrations/storage/s3_template_catalog.py及API组装/路由。模块边界支持替换存储，资源由组装层closing关闭；同步SDK在线程执行，取消等待不保证底层请求立即停止。日志记录安全生命周期和数量，不记录对象名/游标/密钥，SDK DEBUG关闭。</p>
+<p>新增S3_ENDPOINT_URL、S3_TEMPLATE_BUCKET、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY、S3_REGION、S3_TIMEOUT_SECONDS，详见.env.example及字段清单。用户提供8081为API、8084为控制台；已补本机非敏感地址/桶，凭据需用户本机填写。2026-11-06真实匿名列举返回403 AccessDenied；接口将其映射502 storage_access_denied，不伪造空列表。成功列举及Postman验收尚待有权凭据。</p>
+<p>官方PyPI当日查询boto3最新稳定1.43.125、Python≥3.10、无预发布；uv声明/锁定/同步实装，botocore1.43.125同时作为直接依赖声明；关联s3transfer0.19.3、jmespath1.1.0、python-dateutil2.9.0.post0。Windows Python3.13.9导入/OpenAPI通过。SDK适配2项与既有资料/技能/模板工具及日志回归共25 passed，不保留新增HTTP接口测试；未运行Linux/Docker/完整模板链。请求方法、分页和错误详见<a href="模板资源列表调试说明.md">Postman调试说明</a>。</p>
+<h2>对话入口简化与实际HTTP验收（2026-11-06）</h2><p>路由只执行“接收→可选附件校验/读取→JSON”，不注入模型客户端，不创建SSE流。ChatRequest/ChatSubmission/ChatReadResponse新增template_key（str或None，默认None，最多8192字符，无URL格式验证），响应attachment允许null，status新增message_received。地址只是回填信息，不触发网络、OSS或模型调用。</p><p>实际启动临时Uvicorn，经HTTP验证OpenAPI列出GET /templates与POST /chat；TXT解析200且原文一致，任意template_key成功回显，无附件200 message_received；模板列表真实访问RustFS后返回502 storage_access_denied，上游匿名403。临时进程已关闭，不保留HTTP自动化测试；带权限的成功列表和用户Postman验收仍待完成。无依赖升级。</p><h2 id="chat-oss-template">chat选中OSS模板后读取（2026-11-06，最新实现）</h2>
+<p>以template_key替代原template_url。ChatRequest可选template_key（1–1024字符，保留原标识空格/目录，默认None），必须是列表object_key，不是URL，不从前端接收桶或S3端点。指定后真实调用GetObject；未指定不访问OSS。模板对象需GetObject权限，列表权限不自动保证下载权限。</p>
+<pre>POST /chat → get_chat_submission
+  ├─ file → read_chat_attachment → 按格式校验/解析 → attachment
+  └─ template_key → read_chat_template
+       → open_template_storage_client(Settings)
+       → S3TemplateFileReader.read_file → get_object + 有界Body.read + close
+       → 复用read_chat_attachment的PPTX校验/读取器 → template
+  → ChatReadResponse：消息、key、两份结果、状态；model_called=false</pre>
+<p>存储字节读取协议domain/templates/template_file_reader_contract.py，SDK实现integrations/storage/s3_template_file_reader.py；只返回bytes，无磁盘归档或HTTP依赖。API模板处理负责配置/权限错误映射及调用共用读取器。客户端由组装层closing关闭，下载Body由适配器closing关闭（包括超限/失败）；请求取消不保证立即终止工作线程。</p>
+<p>新增S3_TEMPLATE_MAX_FILE_BYTES默认50 MiB（范围1 KiB–200 MiB），与参考附件上传上限分开；Office展开及正文规模仍独立限制。先检查ContentLength再按实际流量累计，超限413，不返回截断文件。没有新依赖或下载HTTP路由，下载由chat内部按选中key触发。</p>
+<p>ChatTemplateResponse在chat/chat_response.py定义，复用文件元数据/正文并增加object_key。ChatReadResponse.template可空，状态template_read仅OSS模板、files_read两份文件、attachment_read仅上传、message_received无文件。任一失败整个请求错误，没有全局文件缓存/项目/会话/AI。</p>
+<p>真实HTTP验证：公司模板1053430字节/5页/15块，JSON chat为200 template_read；暑期模板457910字节/15页/121块，与上传TXT同时请求为200 files_read；无文件200 message_received。用户已成功列出8份PPTX。SDK读取独立测试3项与现有列表/日志16项通过；未代替用户Postman验收。未串联模板角色、渲染、视觉或Harness。</p>
+</main></body></html>

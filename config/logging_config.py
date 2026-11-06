@@ -60,6 +60,6 @@ def configure_logging(
         root_logger.addHandler(handler)
     # SDK的DEBUG可能包含请求正文、图片base64或密钥；应用DEBUG不同时打开SDK调试。
     # 这里只设这些logger阈值，不接管它们自己的处理器或Uvicorn日志。
-    for name in ("httpx", "httpcore", "openai", "langchain", "langchain_core", "langchain_openai"):
+    for name in ("httpx", "httpcore", "openai", "langchain", "langchain_core", "langchain_openai", "boto3", "botocore", "s3transfer", "urllib3"):
         logging.getLogger(name).setLevel(logging.WARNING)
     return log_path

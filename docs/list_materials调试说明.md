@@ -85,7 +85,7 @@ import json
 print(json.dumps(convert_to_openai_tool(material_tool), ensure_ascii=False, indent=2))
 ```
 
-模型只会得到 `origin`、`name_contains`、`offset`、`limit` 这些参数，不会得到项目选择参数或完整目录。外层未来可将该工具绑定到 Agent；当前 `/ppt-agent/v1/chat` 仍然只有普通文本流，不会自动调用它。
+模型只会得到 `origin`、`name_contains`、`offset`、`limit` 这些参数，不会得到项目选择参数或完整目录。外层未来可将该工具绑定到 Agent；当前 `/ppt-agent/v1/chat` 有附件时返回读取结果，无附件只回显消息；全部JSON、不调用模型，也不会调用资料目录工具，尚无正式目录接线。
 
 ## 模型怎样看懂工具和参数
 

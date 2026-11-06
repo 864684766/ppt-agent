@@ -8,6 +8,8 @@
 | llm/ | 共用模型构造及聊天SDK适配 | langchain_model_factory.py、langchain_chat_client.py |
 | web/ | 搜索引擎、HTTP网页读取和HTML提取 | searxng_search_client.py、webpage_http_client.py、http_webpage_reader.py、html_text_extractor.py |
 | skills/ | 本地技能介绍扫描、头部解析和完整读取 | local_skill_catalog.py、local_skill_reader.py、skill_header_reader.py、skill_metadata_parser.py |
+| storage/ | RustFS/S3只读模板目录及字节下载 | s3_template_catalog.py、s3_template_file_reader.py |
+| documents/ | 各格式内存正文读取及PDFium共享锁 | text/pdf/docx/xlsx/pptx_document_reader.py、document_reader_registry.py、pdfium_runtime.py |
 | templates/ | PPTX结构解析和页面视觉模型适配 | local_template_inspector.py、pptx_shape_extractor.py、langchain_template_vision.py、gotenberg_converter.py、pdfium_page_renderer.py |
 
 ## 如何选择位置
@@ -43,3 +45,24 @@ PdfiumPageRenderer是本地同步PDF页面渲染器，输出PNG字节及PDF页�
 ## 诊断日志（2026-11-05）
 
 各外部操作通过diagnostics/operation_logging.py记录生命周期、耗时及安全异常位置；摘要只记录数量/状态，不记录用户正文或原始SDK异常。PDF逐页细节为DEBUG。日志初始化仍在应用/pytest/脚本入口，适配器不读取日志配置。详见[日志说明](../docs/日志使用说明.md)。
+
+## 文档正文读取（2026-11-05）
+
+各读取器实现domain/documents/document_reader_contract.py的DocumentReader协议：read(content=bytes, limits=DocumentReadLimits)返回DocumentContent。
+注册表只构造无状态读取器，不读配置或文件。API外层选择格式、验证内容并用线程调用；读取器关闭自己创建的文档、工作簿和原生句柄。
+PDF正文与模板PDF图片渲染共享documents/pdfium_runtime.py的PDFIUM_LOCK，避免同进程并发使用PDFium。
+DOCX使用python-docx1.2.0；XLSX使用openpyxl3.1.5；PPTX/python-pptx、PDF/PDFium沿用锁定版本。
+不执行宏、公式、OCR、模型调用或模板角色判断；具体能力边界见[对话附件读取说明](../docs/对话附件读取调试说明.md)。
+
+## RustFS/S3模板目录（2026-11-06）
+
+S3TemplateCatalog接收外层创建的SDK client及固定bucket，实现TemplateResourceCatalog协议；不读取Settings、不创建连接、不依赖HTTP。
+ListObjectsV2单页后按.pptx过滤，保留分页与完整object_key，不下载/上传/删除，不构造公共URL。API组装层负责closing(client)；同步操作在工作线程执行。
+boto3==1.43.125及关联约束已锁定实装。凭据仅本机.env配置，SDK DEBUG抑制。真实匿名访问ppts返回403，带凭据成功列表仍待验证；见[调试说明](../docs/模板资源列表调试说明.md)。
+
+## OSS模板字节读取（2026-11-06）
+
+S3TemplateFileReader实现TemplateFileReader协议，接收宿主client/bucket及object_key/max_bytes，返回真实bytes。
+对get_object.Body使用closing；ContentLength预检查与流式实际下载上限同时执行，失败/超限也关闭流。SDK客户端仍由api/template_resource_dependencies.py的open_template_storage_client管理，目录与下载复用连接组装。
+不解析文件或返回HTTP，不写磁盘/Store；API模板处理取得字节后复用已有PPTX校验和读取器。未增加外部依赖。
+独立模块测试tests/test_s3_template_file_reader.py（SDK Stubber，非HTTP测试）覆盖读取、关闭、实际超限和不存在；真实chat已从OSS读取公司/暑期两份模板。

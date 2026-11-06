@@ -7,11 +7,11 @@ import math
 from collections.abc import Sequence
 from contextlib import ExitStack
 from io import BytesIO
-from threading import Lock
 
 import pypdfium2 as pdfium
 
 from diagnostics.operation_logging import log_operation
+from integrations.documents.pdfium_runtime import PDFIUM_LOCK
 from domain.templates.pdf_page_renderer_contract import PdfRenderError
 from models.templates.pdf_page_image import PdfPageImage, PdfRenderResult
 
@@ -20,9 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 # PDFium不是线程安全库：即使不同实例处理不同PDF，也不应同时调用。
-# 该锁仅保护本模块在同一进程中的PDFium操作，不承载业务数据；多进程各自隔离。
-# 其他代码也应通过本模块调用PDFium，不绕开锁自行操作。暂不实现多进程池。
-_PDFIUM_LOCK = Lock()
+# 文字读取和图片渲染从pdfium_runtime共用同一进程锁，不承载业务数据。
+# 其他PDFium接入也需复用该锁；多进程各自隔离，暂不实现多进程池。
 
 
 class PdfiumPageRenderer:
@@ -65,7 +64,7 @@ class PdfiumPageRenderer:
             if len(set(selected)) != len(selected):
                 raise PdfRenderError("页码不能重复，请为每个页面只指定一次。")
         try:
-            with _PDFIUM_LOCK, pdfium.PdfDocument(pdf_bytes) as document:
+            with PDFIUM_LOCK, pdfium.PdfDocument(pdf_bytes) as document:
                 total_pages = len(document)
                 if total_pages == 0:
                     raise PdfRenderError("PDF没有可渲染的页面。")
