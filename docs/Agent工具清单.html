@@ -1,10 +1,10 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent 可调用工具清单</title><style>
 :root{--ink:#1b2932;--muted:#61747a;--green:#12675f;--line:#d7e2e2}*{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:var(--ink);font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:#fff;padding:35px max(24px,calc((100% - 1120px)/2))}header p{color:#d1e5e0}h1{margin:4px 0;font-size:30px}main{max-width:1120px;margin:auto;padding:18px 24px 65px}h2{font-size:23px;border-bottom:2px solid var(--line);padding-bottom:8px;margin-top:36px}h3{font-size:19px;margin:0 0 12px}a{color:var(--green)}nav{background:white;padding:14px 18px;border:1px solid var(--line)}nav a{display:inline-block;margin:4px 15px 4px 0}.note{padding:16px 20px;border-left:4px solid var(--green);background:#eaf5f1;margin:20px 0}.muted{color:var(--muted)}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;background:white}td,th{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}code{background:#e9efee;padding:2px 4px;overflow-wrap:anywhere}pre{background:#193039;color:#eef8f4;padding:18px;white-space:pre-wrap;overflow-wrap:anywhere}pre code{background:none;padding:0}.tool{padding:20px;background:white;border:1px solid var(--line);border-radius:8px;margin:14px 0;scroll-margin-top:16px}.badge{font-size:13px;background:#edf5f1;color:var(--green);padding:3px 8px;border-radius:12px}.tool dl{display:grid;grid-template-columns:85px 1fr;gap:8px 12px;margin:0}.tool dt{font-weight:bold}.tool dd{margin:0}li{margin:7px 0}.flow{background:white;border:1px solid var(--line);padding:18px}.small{font-size:14px}@media(max-width:700px){main{padding:14px 16px}header{padding:25px 16px}table{min-width:760px}.tool dl{grid-template-columns:1fr}.tool dt{margin-top:6px}}@media print{body{background:white}header{background:white;color:black;padding:0}header p{color:#444}main{padding:0}nav{display:none}.tool{break-inside:avoid}pre{background:#eee;color:black}}
-</style></head><body><header><p>工具设计讨论稿 · 2026-11-02</p><h1>Agent 可调用工具清单</h1><p>区分联网、本地与共用工具 · 先生成完整可打开的 PPTX</p></header><main>
-<div class="note"><strong>状态更新（2026-11-04）：</strong>本页维护各Agent工具的用途、契约、状态和验证要求；项目整体安排统一见<a href="开发任务列表.html">开发任务列表</a>的任务04「Agent工具开发」。目前list_materials、search_materials、read_material、search_web、fetch_webpage、list_skills、read_skill、inspect_template已完成独立实现及相应验证，其余工具待开发。联网结果验证使用真实配置和网页，属于集成验证；独立工具可调用不等于上传登记、Agent循环或MCP链路已接线。页面图片渲染为低优先级可选能力。</div>
-<nav><a href="#runtime">先看运行过程</a><a href="#sources">资料范围与分类</a><a href="#overview">工具总览</a><a href="#skill-execution">技能脚本怎么执行</a><a href="#details">输入输出与边界</a><a href="#examples">调用示例</a><a href="#checks">PPT 检查依据</a><a href="#scope">工具与内部方法</a><a href="#sequence">建议顺序</a><a href="#unit-tests">逐工具单元测试</a></nav>
+</style></head><body><header><p>工具实现清单 · 状态核对 2026-11-06</p><h1>Agent 可调用工具清单</h1><p>区分联网、本地与共用工具 · 先生成完整可打开的 PPTX</p></header><main><div class="note"><strong>当前工具状态（2026-11-06）：</strong>10项工具，9项独立实现；按用户最新决定先完成check_presentation基础版，下一项build_presentation。检查扩展规则仍有未实现项；ask_user只保留数据，不计当前工具。开发顺序看第9节，PPT检查复用依据看第7节。</div>
+<p>本页维护工具用途、契约、状态、检查复用与测试要求；总体任务归属见任务列表04。独立工具已实现不等于模型会选择调用，联网结果测试与离线Schema检查分别记录。页面渲染已独立实现，前端预览仍延期。</p>
+<nav><a href="#sequence">当前开发顺序</a><a href="#runtime">先看运行过程</a><a href="#sources">资料范围与分类</a><a href="#overview">工具总览</a><a href="#skill-execution">技能脚本怎么执行</a><a href="#details">输入输出与边界</a><a href="#examples">调用示例</a><a href="#checks">PPT 检查依据</a><a href="#scope">工具与内部方法</a><a href="#unit-tests">逐工具单元测试</a></nav>
 <h2 id="runtime">1. 先看典型运行过程</h2>
-<p><strong>有依赖顺序，但不要求逐个调用全部工具。</strong>编号按常见首次使用位置排列；已知资料可直接读取，已知网页 URL 可直接抓取。资料研究可以循环，人工反馈可以随时插入。</p>
+<p><strong>下面是拟议运行场景，不是当前已接入的流程，也不是固定工具链。</strong>编号按常见首次使用位置排列；已知资料可直接读取，已知网页 URL 可直接抓取。资料研究可以循环，人工反馈可以随时插入。</p>
 <pre>A. 专业准备（需要时）
    list_skills → read_skill
                   ↓ 技能要求执行脚本时
@@ -14,7 +14,7 @@
 B. 资料研究（本地、联网任选或结合）
    本地：用户上传业务文件 → 系统解析/OCR并登记       [用户/API/内部能力]
                                     ↓
-                           list_materials → search_materials ⇄ read_material
+                           模型按需选择 list_materials / search_materials / read_material
                                     ↑
    联网：search_web → fetch_webpage → 登记选中网页正文
                       ↓             （需要复查时共用上述三工具）
@@ -25,7 +25,8 @@ B. 资料研究（本地、联网任选或结合）
 C. 模板分析与人工反馈
    用户上传模板 / 选择内置模板                       [用户/API]
      → inspect_template → Agent 判断页角色
-     → 缺页或歧义时 ask_user → 用户补传 / 指定角色 / 确认自动补齐
+     → 缺页或歧义时通过后续人工反馈通道提问（工具形式未定）
+     → 用户补传 / 指定角色 / 确认自动补齐
                   ↓
 D. 生成文件与检查
    build_presentation → check_presentation → 有问题则修订再检查
@@ -51,21 +52,21 @@ D. 生成文件与检查
 <tr><td>联网专用</td><td>search_web、fetch_webpage</td><td>前者找候选网页，后者读取选中网页正文；首版用于主题资料，不搜索 PPT 模板。</td></tr>
 <tr><td>本地与联网共用</td><td>list_materials、search_materials、read_material</td><td>只面向已加入当前项目的资料；目录和检索支持按uploaded / web / all过滤，读取按具体source_id、version和block_id定位。网页抓取结果已经够用时，不强制再查再读。</td></tr>
 <tr><td>模板与 PPT 产物</td><td>inspect_template、build_presentation、check_presentation</td><td>模板结构分析、文件生成与结果检查；与内容资料集合区分。</td></tr>
-<tr><td>技能与交互</td><td>list_skills、read_skill、ask_user</td><td>跨本地/联网场景使用；技能脚本执行入口另见下文。</td></tr></table></div>
+<tr><td>技能与交互</td><td>list_skills、read_skill</td><td>跨本地/联网场景使用；ask_user已移除，仅保留数据；真实人工反馈随子智能体/编排实现。</td></tr></table></div>
 <h2 id="overview">3. 项目工具总览：按典型运行阶段排列</h2>
-<p><strong>以下11项为项目Agent工具：list_materials、search_materials、read_material、search_web、fetch_webpage、list_skills、read_skill、inspect_template已完成独立实现与约定测试，其他项仍待开发。</strong>系统内部解析方法、用户上传和 LangGraph 状态管理不计入。运行时已有的命令执行工具单独说明，避免与项目工具重复建设。</p>
-<div class="table-wrap"><table><tr><th>编号</th><th>工具</th><th>分类</th><th>用途</th></tr>
-<tr><td>01</td><td><a href="#tool-11">list_skills</a></td><td>技能</td><td>发现专业技能</td></tr>
-<tr><td>02</td><td><a href="#tool-12">read_skill</a></td><td>技能</td><td>读取SKILL.md完整说明；资源与执行入口待子Agent阶段确定</td></tr>
-<tr><td>03</td><td><a href="#tool-1">list_materials</a></td><td>本地/联网共用</td><td>查看当前项目的内容参考资料目录</td></tr>
-<tr><td>04</td><td><a href="#tool-4">search_web</a></td><td>联网专用</td><td>发现候选网页</td></tr>
-<tr><td>05</td><td><a href="#tool-5">fetch_webpage</a></td><td>联网专用</td><td>提取选中网页正文；来源登记待接线</td></tr>
-<tr><td>06</td><td><a href="#tool-2">search_materials</a></td><td>本地/联网共用</td><td>在已导入内容中检索，非实时互联网搜索</td></tr>
-<tr><td>07</td><td><a href="#tool-3">read_material</a></td><td>本地/联网共用</td><td>读取指定来源的正文范围</td></tr>
-<tr><td>08</td><td><a href="#tool-6">inspect_template</a></td><td>模板</td><td>提取版式、占位符及文本结构</td></tr>
-<tr><td>09</td><td><a href="#tool-8">build_presentation</a></td><td>生成</td><td>生成完整可编辑的 PPTX</td></tr>
-<tr><td>10</td><td><a href="#tool-9">check_presentation</a></td><td>检查</td><td>检查文件、大纲覆盖及引用等规则</td></tr>
-<tr><td>11</td><td><a href="#tool-10">ask_user</a></td><td>贯穿各阶段</td><td>遇到缺失或歧义时请求指导</td></tr></table></div>
+<p><strong>当前共10项项目Agent工具：9项已独立实现（list_materials、search_materials、read_material、search_web、fetch_webpage、list_skills、read_skill、inspect_template及check_presentation基础版）；build_presentation未实现。检查基础版不包含大纲/来源/版面/Office打开验收。ask_user不计入，只有预留数据。</strong>系统内部解析方法、用户上传和 LangGraph 状态管理不计入。运行时已有的命令执行工具单独说明，避免与项目工具重复建设。</p>
+<div class="table-wrap"><table><tr><th>编号</th><th>工具</th><th>分类</th><th>用途</th><th>当前状态</th></tr>
+<tr><td>01</td><td><a href="#tool-11">list_skills</a></td><td>技能</td><td>发现专业技能</td><td>已完成独立实现</td></tr>
+<tr><td>02</td><td><a href="#tool-12">read_skill</a></td><td>技能</td><td>读取SKILL.md完整说明；资源与执行入口待子Agent阶段确定</td><td>已完成独立实现</td></tr>
+<tr><td>03</td><td><a href="#tool-1">list_materials</a></td><td>本地/联网共用</td><td>查看当前项目的内容参考资料目录</td><td>已完成独立实现</td></tr>
+<tr><td>04</td><td><a href="#tool-4">search_web</a></td><td>联网专用</td><td>发现候选网页</td><td>已完成独立实现</td></tr>
+<tr><td>05</td><td><a href="#tool-5">fetch_webpage</a></td><td>联网专用</td><td>提取选中网页正文；来源登记待接线</td><td>已完成独立实现</td></tr>
+<tr><td>06</td><td><a href="#tool-2">search_materials</a></td><td>本地/联网共用</td><td>在已导入内容中检索，非实时互联网搜索</td><td>已完成独立实现</td></tr>
+<tr><td>07</td><td><a href="#tool-3">read_material</a></td><td>本地/联网共用</td><td>读取指定来源的正文范围</td><td>已完成独立实现</td></tr>
+<tr><td>08</td><td><a href="#tool-6">inspect_template</a></td><td>模板</td><td>提取版式、占位符及文本结构</td><td>已完成独立实现</td></tr>
+<tr><td>09</td><td><a href="#tool-8">build_presentation</a></td><td>生成</td><td>生成完整可编辑的 PPTX</td><td>未实现，下一项</td></tr>
+<tr><td>10</td><td><a href="#tool-9">check_presentation</a></td><td>检查</td><td>检查文件、大纲覆盖及引用等规则</td><td>基础工具已完成；扩展检查未实现</td></tr>
+</table></div>
 <h2 id="details">4. 每个工具的输入、输出与边界</h2><p>以下为语义级输入输出，参数名称和完整 JSON Schema 在逐项设计时确定。source_id 是来源标识，file_id 是文件标识，artifact_id 是产物标识；Agent 不需要持有任意本机绝对路径。项目范围由运行上下文绑定。</p><article class="tool" id="tool-11"><h3>01 · <code>list_skills</code> — 发现本地技能 <span class="badge">独立实现与真实目录验证完成</span></h3><dl><dt>调用目的</dt><dd>发现项目内置skills/有哪些技能及其用途，不保证它们已适配运行。</dd><dt>输入</dt><dd>keyword可选，默认空，最多200字符；编号、名称、用途的字面子串筛选，不自动翻译，无分页。</dd><dt>输出</dt><dd>items：skill_id为一级目录编号、name为声明名称、description为用途说明、version为顶层或metadata声明版本（缺失null）；returned_count为本次条数。</dd><dt>使用方</dt><dd>内容与制作Agent按需使用，当前尚未接模型循环。</dd><dt>职责边界</dt><dd>固定读取项目根目录skills/，无目录环境变量；每次实际调用重新扫描，只读64KiB内的YAML头部。不合读取格式的技能记录WARNING日志后忽略，根目录不可用报错。不读全文、不执行代码、不安装、不联网；完整说明由read_skill读取。不检查技能依赖、不分析脚本或执行步骤、不判断运行可用性；日志只针对介绍读取与格式问题，不返回给模型；服务启动及独立结果测试由宿主统一初始化日志；LOG_LEVEL选择级别，LOG_OUTPUT选择文件、控制台或两者，工具不自行管理处理器。</dd><dt>测试状态</dt><dd>JSON定义及用户实际目录验证2项通过：固定读取skills/，返回fitness-nutrition、flyai、legal-issue-research三项；chef-assistant读取介绍失败，按约定记录WARNING后跳过。见<a href="list_skills调试说明.md">测试与断点说明</a>。</dd><dt>运行位置</dt><dd>A · 技能准备；异步ainvoke。</dd></dl></article>
 <article class="tool" id="tool-12"><h3>02 · <code>read_skill</code> — 读取技能说明 <span class="badge">独立实现与真实文件验证完成</span></h3><dl><dt>调用目的</dt><dd>按list_skills的skill_id读取选中技能的SKILL.md完整说明。</dd><dt>输入</dt><dd>skill_id必填，不接收任意路径或附属资源路径；字段含义和约束通过Field进入Schema。</dd><dt>输出</dt><dd>skill_id为读取的技能编号；resource_path固定SKILL.md；content为包含YAML头部的完整Markdown，去BOM并规范换行，不截断。</dd><dt>使用方</dt><dd>需要技能的Agent；模型选工具循环尚未接线。</dd><dt>职责边界</dt><dd>固定项目skills/，不执行脚本或展开附属资源。共用发现工具的头部读取和元数据校验，不规范或不可读时记录WARNING并报错。每次读取磁盘，无缓存或版本锁定；不检查运行依赖。资源读取与执行入口待子Agent测试后决定，不新增read_skill_resource。</dd><dt>测试状态</dt><dd>JSON定义与真实文件结果两项通过；与list_skills回归共4 passed（0.73秒），见<a href="read_skill调试说明.md">测试与断点说明</a>。</dd><dt>运行位置</dt><dd>A · 专业准备；具体选择策略待接入时测试。</dd></dl></article>
 <article class="tool" id="tool-1"><h3>03 · <code>list_materials</code> — 列出资料 <span class="badge">已完成</span></h3><dl><dt>调用目的</dt><dd>查看当前项目已加入的业务参考资料目录，包括上传文件和选中后抓取的网页正文；用于决定查哪几份资料，不负责上传或搜索互联网。</dd><dt>输入</dt><dd>当前参数：origin（all/uploaded/web，默认all）、name_contains（默认空，最多200字符）、offset（默认0）、limit（默认20，1–100）。按source_id排序。暂不提供格式过滤。</dd><dt>输出</dt><dd>返回 items、total、next_offset；每项包含source_id、name、origin、format、status、version、url、page_count。页数未知为None；未提供块数。total为筛选后总数，下一页偏移为空表示结束。pending/failed资料也可列出，不假装已有正文。</dd><dt>使用方</dt><dd>资料研究 Agent</dd><dt>职责边界</dt><dd>不返回整份正文；不列设计模板、技能资源、未关联历史文件或仅有摘要的网页候选。不扫描电脑目录。上传/网页抓取后的资料登记由系统完成。</dd><dt>建议阶段</dt><dd>先讨论并实现</dd><dt>运行位置</dt><dd>B · 已导入资料，本地文件与网页正文共用；具体依赖见上方流程。</dd></dl></article>
@@ -74,9 +75,10 @@ D. 生成文件与检查
 <article class="tool" id="tool-2"><h3>06 · <code>search_materials</code> — 检索项目资料 <span class="badge">已完成</span></h3><dl><dt>调用目的</dt><dd>在已经导入当前项目的资料正文中查找关键词、相关表述。默认不是互联网搜索。资料可以是上传文件，也可以是已抓取并登记的网页正文。</dd><dt>输入</dt><dd>已实现：queries（必填，1–8词）、source_ids（可选，省略查全部ready来源）、origin（默认all）、max_results（默认10，1–50）、max_chars_per_match（默认300，50–1000字符）。固定字面子串、忽略大小写、任意关键词命中，不开放正则。</dd><dt>输出</dt><dd>已实现：matches每项含source_id、version、location（block_id/page）、matched_queries、text、text_truncated；总结果含total_matches、truncated。原页码未知为null；同块一次，按来源/页码/块ID排序。</dd><dt>使用方</dt><dd>资料研究 Agent</dd><dt>职责边界</dt><dd>只检索宿主提供的正文快照，扫描资料应先由后续解析/OCR模块处理。无网络、自动扩词、offset分页或相关性排名；数据版本须一致。无效/未ready/未载入来源明确报错，不伪装零命中。代码与测试已实现，真实数据接线未实现；详见search_materials调试说明.md。</dd><dt>建议阶段</dt><dd>先讨论并实现</dd><dt>运行位置</dt><dd>B · 已导入资料，本地文件与网页正文共用；具体依赖见上方流程。</dd></dl><div class="note"><strong>例子：</strong>你上传《劳动合同法.pdf》和《员工手册.docx》，Agent 搜索“经济补偿”，返回“劳动合同法.pdf：PDF 第 12 页、块 31”的片段。随后 read_material 读取块31的完整解析文本；长块按next_offset续读。第一版不自动扩展相邻块。若没有这些资料且需要上网找，调用的是 search_web。</div></article>
 <article class="tool" id="tool-3"><h3>07 · <code>read_material</code> — 读取资料 <span class="badge">已完成</span></h3><dl><dt>调用目的</dt><dd>已知来源与正文块时核对原文，补读检索截断文本。本地上传资料与已登记网页共用。</dd><dt>输入</dt><dd>source_id、version、block_id必填，来自检索定位；offset默认0，max_chars默认2000、范围1–8000，单位均为Python字符。项目由宿主绑定。</dd><dt>输出</dt><dd>source_id、version、location(block_id/page)、text、offset、end_offset、total_chars、next_offset。读取范围为[offset,end_offset)，next_offset为null表示到块尾；未知页码为null。</dd><dt>使用方</dt><dd>资料研究Agent</dd><dt>职责边界</dt><dd>第一版一次读取一个已解析正文块，可按next_offset续读，不自动读取相邻块或整份文件，不按页定位、不返回图像、不做解析/OCR或网络请求。指定来源不存在、未ready、版本过期、块未载入或偏移越界会明确报错。正式数据登记、HTTP和聊天工具循环尚未接入。</dd><dt>测试状态</dt><dd>JSON定义与样本返回结果2项通过；三工具合跑6项通过。详见<a href="read_material调试说明.md">read_material调试说明</a>。</dd><dt>运行位置</dt><dd>B · 已导入资料；已知准确定位时可直接调用，不强制先列目录再检索。</dd></dl></article>
 <article class="tool" id="tool-6"><h3>08 · <code>inspect_template</code> — 检查模板结构 <span class="badge">独立实现与真实PPTX验证完成</span></h3><dl><dt>调用目的</dt><dd>取得样例页、母版、版式、占位符、文字、表格与对象几何事实，不判断页面角色。</dd><dt>输入</dt><dd>template_id必填，1–200字符，选择宿主登记编号；测试以ppt-demo中的文件名登记，不传任意本机路径。本版读取全部结构，无分页。</dd><dt>输出</dt><dd>template_id/file_name/sha256、slide_width_emu/slide_height_emu、slide_count/slides/layouts/masters/warnings。对象含编号、类型、EMU坐标、旋转、占位符idx/type、text/table_rows/children。组合递归，子坐标未换算为幻灯片绝对位置；对象及母版关联详见字段清单。</dd><dt>使用方</dt><dd>后续Harness制作Agent；当前仅独立可调用，尚未接上传及模型循环。</dd><dt>职责边界</dt><dd>只读PPTX，不修改原文件；不做OCR、渲染、背景/主题/完整继承展开或图表数据读取。角色由Agent综合语义和结构判断，歧义交给用户，不按页序或版式名称直接确定角色。hash标识本次字节，不是历史版本系统。</dd><dt>测试状态</dt><dd>JSON及真实公司模板.pptx结果2 passed（1.06秒）：5页、1母版、13版式，递归对象数9/15/7/3/1，样例页无正式占位符。原文件未修改；不能以此证明任意文件兼容或视觉质量。见<a href="inspect_template调试说明.md">断点与结果说明</a>。</dd><dt>运行位置</dt><dd>C · 模板结构提取；异步ainvoke，解析器可独立调用。</dd></dl></article>
-<article class="tool" id="tool-8"><h3>09 · <code>build_presentation</code> — 生成 PPTX <span class="badge">拟议</span></h3><dl><dt>调用目的</dt><dd>根据已确认的大纲与模板映射，调用 Python 生成能力创建可编辑 PPTX。</dd><dt>输入</dt><dd>已确认的大纲/映射版本引用，以及受 Schema 约束的页面填充计划、引用和输出选项。</dd><dt>输出</dt><dd>artifact_id、生成文件标识、实际页数、所用版本和生成警告。</dd><dt>使用方</dt><dd>Harness 模板使用子智能体</dd><dt>职责边界</dt><dd>只读已确认快照；校验页计划，不允许工具擅自修改已确认大纲。残缺模板补全按用户确认的策略执行，新产物不覆盖旧版本。</dd><dt>建议阶段</dt><dd>生成阶段</dd><dt>运行位置</dt><dd>D · 生成文件；具体依赖见上方流程。</dd></dl></article>
-<article class="tool" id="tool-9"><h3>10 · <code>check_presentation</code> — 检查 PPTX <span class="badge">拟议</span></h3><dl><dt>调用目的</dt><dd>检查生成文件的结构、页数、必需页面和可检查的内容/版面问题。</dd><dt>输入</dt><dd>artifact_id、系统提供的检查配置引用、已确认的大纲/模板映射版本。Agent 不能随意降低必须通过的检查。</dd><dt>输出</dt><dd>按 rule_id 返回 pass/fail/warning/not_checked、期望值、实际值、问题页与证据，以及总体是否满足必须规则。无法自动判断的项明确标记。</dd><dt>使用方</dt><dd>Harness 模板使用子智能体</dd><dt>职责边界</dt><dd>确定性检查不能证明事实全部正确，也不能代替 PowerPoint 真实打开验收；事实准确性还需 Agent 对照来源原文核实，必要时请用户确认。不以生成页面图片作为检查前提。</dd><dt>建议阶段</dt><dd>与生成配套</dd><dt>运行位置</dt><dd>E · 生成后检查；具体依赖见上方流程。</dd></dl><p>详细检查依据与示例见<a href="#checks">第 7 节</a>；没有“填一个美观阈值就能证明好看”的承诺。</p></article>
-<article class="tool" id="tool-10"><h3>11 · <code>ask_user</code> — 请求用户指导 <span class="badge">待开发，仅保留数据定义</span></h3><dl><dt>目标用途</dt><dd>信息不足或模板歧义时向用户提出问题，接收真实回答后继续。具体工具形式与等待/恢复方式在子智能体及LangGraph开发时再确定。</dd><dt>当前状态</dt><dd>已按用户要求移除工具入口、内存收集器及对应测试。保留UserQuestion、AskUserInput、AskUserOutput及其字段校验，作为后续讨论的数据定义，不是可调用工具。</dd><dt>预留字段</dt><dd>问题question、理由reason、选项options、是否允许自由输入allow_free_text，以及问题关联编号question_id和拟议等待状态。字段说明见Store清单。</dd><dt>验证边界</dt><dd>当前无工具JSON/返回结果测试，不将已删除实现的测试记录作为当前验收。没有提交、存储、展示、回答或暂停/恢复功能。</dd></dl></article>
+<article class="tool" id="tool-8"><h3>09 · <code>build_presentation</code> — 生成 PPTX <span class="badge">未实现 · 下一开发项</span></h3><dl><dt>调用目的</dt><dd>根据已确认的大纲与模板映射，调用 Python 生成能力创建可编辑 PPTX。</dd><dt>输入</dt><dd>本次确认的大纲、模板及页面填充计划、引用和输出选项；具体Schema在开发该工具时确定，不依赖多项目或历史版本系统。</dd><dt>输出</dt><dd>拟返回生成产物标识、实际页数和警告，资源交付方式及字段待实际实现确认。当前无产物或输出契约。</dd><dt>使用方</dt><dd>Harness 模板使用子智能体</dd><dt>职责边界</dt><dd>使用本次确认内容；校验页计划，不擅自改写大纲。残缺模板补全及映射由制作侧确认；具体支持范围逐步验证，不承诺任意模板无损适配或历史版本管理。</dd><dt>建议阶段</dt><dd>生成阶段</dd><dt>运行位置</dt><dd>D · 生成文件；具体依赖见上方流程。</dd></dl></article>
+<article class="tool" id="tool-9"><h3>10 · <code>check_presentation</code> — 检查PPTX <span class="badge">基础版独立实现完成 · 2项测试通过</span></h3><dl>
+<dt>调用目的</dt><dd>对宿主登记PPTX返回基础检查报告，不修改文件。</dd><dt>输入</dt><dd>artifact_id必填，宿主登记编号，1–200字符；不是路径/URL/模板编号。页数与限额由宿主注入，模型不可降低。</dd><dt>输出</dt><dd>artifact_id、file_name、sha256、size_bytes、slide_count、passed、checks。checks逐项含rule_id/status/required/message/expected/actual/slide_numbers；具体中文含义在工具description及字段清单中说明。passed仅当前必过规则全pass，不代表未检查项目通过。</dd><dt>已检查</dt><dd>文件大小、共享Office包校验、python-pptx可解析性、默认8–12页或宿主页数要求、实际页无可提取文字警告。</dd><dt>未检查</dt><dd>大纲/必要角色与顺序、引用原文/事实、排版/字号/占位符遗留、Office真实打开；报告明确not_checked。不做渲染/OCR，不把图片页无文字判为错误。</dd><dt>接入与测试</dt><dd>LocalPresentationChecker绑定宿主登记路径，在工作线程只读执行；当前用真实模板作为检查样本，生成产物接线待后续。JSON定义及真实文件报告2 passed（0.91秒）。详见<a href="check_presentation调试说明.md">断点说明</a>。</dd><dt>边界</dt><dd>不合格返回报告；未登记/文件不可读等执行错误转ToolException。未接模型循环、Harness、HTTP或真实Office打开验收。</dd></dl></article>
+<article class="tool" id="tool-10"><h3>预留交互数据 · <code>ask_user</code>（非当前工具） <span class="badge">工具已移除，不计入10项</span></h3><dl><dt>目标用途</dt><dd>信息不足或模板歧义时向用户提出问题，接收真实回答后继续。具体工具形式与等待/恢复方式在子智能体及LangGraph开发时再确定。</dd><dt>当前状态</dt><dd>已按用户要求移除工具入口、内存收集器及对应测试。保留UserQuestion、AskUserInput、AskUserOutput及其字段校验，作为后续讨论的数据定义，不是可调用工具。</dd><dt>预留字段</dt><dd>问题question、理由reason、选项options、是否允许自由输入allow_free_text，以及问题关联编号question_id和拟议等待状态。字段说明见Store清单。</dd><dt>验证边界</dt><dd>当前无工具JSON/返回结果测试，不将已删除实现的测试记录作为当前验收。没有提交、存储、展示、回答或暂停/恢复功能。</dd></dl></article>
 <h2 id="skill-execution">5. 技能脚本：不必另造 run_skill_script，但要有执行入口</h2>
 <p><strong>接受不单独提供 run_skill_script 的设计。</strong>技能可以由 SKILL.md、参考资源和可执行脚本组成。read_skill 只负责读取；Agent 按技能说明决定下一步。技能含脚本，并不要求工具必须叫 run_skill_script，也不意味着读到文件就自动执行。</p>
 <pre>read_skill（SKILL.md）
@@ -88,7 +90,7 @@ D. 生成文件与检查
 <p><strong>建议优先复用运行时已有的执行工具。</strong>如果选用的 Harness 运行配置已有可调用的命令执行工具，就让该工具承担脚本运行，不重复添加同职责入口；具体名称与可用性在 Harness 接线时按实际 SDK 文档和配置核对，本文不把它写成已接入能力。LangChain 侧也必须显式提供执行工具或执行适配器，单纯读取 Markdown 不会自动获得执行能力。</p>
 <p>如果两个子智能体都需要执行脚本，可在底层共用一个独立 Python 进程执行模块，分别由各运行时适配。它处理解释器、工作目录、参数、依赖缺失、超时、取消和执行结果；这是内部模块。模型可调用的命令入口则属于<strong>运行时工具</strong>，必须在实际工具清单中列明，不能把它隐藏成“模型自己就会 exec”。只有现有执行入口不能满足实际需求时，再讨论专门的脚本工具。</p>
 <p>你说的“exec 一下”如果指运行命令，理解正确。Python 的 <code>exec()</code> 是在当前 Python 进程执行代码字符串；启动技能的 Python/其他脚本通常使用进程调用，例如 <code>subprocess</code>，二者不是同一个概念。执行应遵循技能要求的时机和参数，结果返回 Agent 后继续；不是 read_skill 在内部顺便执行脚本。</p>
-<div class="note"><strong>页面图像导出与预览分开（2026-11-05）：</strong>前端预览继续延期。为让现有视觉模块分析真实PPT页面，拟采用Gotenberg将PPTX转为PDF，再逐页生成图片；这些是内部接入能力，不自动新增render_pptx工具，也不是PPTX生成与确定性检查的必需步骤。已完成服务配置、健康检查与独立PPTX转PDF真实验证；字体效果待人工核对，页面图片生成与Agent接线尚未实现。</div>
+<div class="note"><strong>页面图像导出与预览分开（2026-11-05）：</strong>前端预览继续延期。为让现有视觉模块分析真实PPT页面，拟采用Gotenberg将PPTX转为PDF，再逐页生成图片；这些是内部接入能力，不自动新增render_pptx工具，也不是PPTX生成与确定性检查的必需步骤。已完成服务配置、独立PPTX转PDF和PDF页面图片模块；字体效果需人工核对，Agent组合接线尚未实现。</div>
 <h2 id="examples">6. 用法示例</h2>
 <p>用户上传《劳动合同法.pdf》《员工手册.docx》《案例扫描件.pdf》，要求制作解除劳动合同培训 PPT。Agent 可以跨三份资料检索，但只读取命中的具体范围：</p>
 <div class="flow">list_materials → search_materials（解除、辞退等相关词）→ read_material（具体来源和位置）→ 必要时换词再搜 → 根据原文生成带来源的大纲</div>
@@ -121,7 +123,17 @@ D. 生成文件与检查
 }</code></pre>
 <p>执行层接收模型调用并保持 tool_call_id，将结构化结果转换为模型框架需要的工具消息。LangChain 可用 @tool/args_schema；Harness 侧可通过 MCP 薄适配暴露同一 Python 能力。具体接线能力以之后实现为准。</p>
 <h2 id="checks">7. check_presentation 的检查标准来自哪里？</h2>
-<p>采用<strong>程序固定规则 + 可配置项目要求 + 已确认业务快照</strong>三个来源。这个工具主要做确定性检查；事实结论由 Agent 对照原文核实，审美由用户反馈，图片预览仅为后续可选能力，不能把两者混成一个“检查通过”。</p>
+<div class="note"><strong>最新结论（2026-11-06）：check_presentation基础版已实现。</strong>已复用独立包校验，提供Schema、工具入口及规则报告，2项测试通过。以下保留复用依据；目标规则表中大纲/来源/版面等仍为未实现，不冒充已完成。</div>
+<table><tr><th>能力</th><th>现有实现与证据</th><th>当前完成程度</th><th>复用方式</th></tr>
+<tr><td>Office/PPTX包基础校验</td><td>domain/uploads/office_package_validation.py的validate_office_package：ZIP条目数、声明/实际解压字节、CRC、重复/非法路径、加密、宏、关键XML、内容类型、根关系。</td><td>已有独立函数。关键结构可检查，不是全部XML或全部关系完整性检查。</td><td>检查核心直接传content、file_format="pptx"和资源限额；捕获FileUploadError后转换为规则结果。不复制代码，也不从HTTP路由借用。</td></tr>
+<tr><td>文件非空/大小、名称/MIME</td><td>file_upload_validation.py的validate_uploaded_content及validate_upload_metadata。</td><td>已有上传边界规则，不等同生成质量规则。</td><td>按需复用字节检查；产物不必经过上传元数据校验，也不强制套用UPLOAD_MAX_FILE_BYTES。</td></tr>
+<tr><td>可解析性、页数、文本与对象事实</td><td>LocalTemplateInspector.inspect、PptxDocumentReader.read，以及extract_shapes。</td><td>已有python-pptx解析与事实提取，无针对产物的规则报告。</td><td>未来如需共享内存PPTX解析/遍历，按实际复用抽取到接入模块；不强制调用inspect_template工具、不借_read_shape等私有方法、不为触发校验运行完整内容查询。</td></tr>
+<tr><td>页数范围、必要角色/顺序、大纲及来源覆盖</td><td>页数范围已由检查器比对；其他仍为设计说明。</td><td>页数已实现；必要角色/大纲/来源核对未实现，报告not_checked。</td><td>基于本次要求和实际生成映射新增确定性规则，输出证据与问题位置。</td></tr>
+<tr><td>越界、占位符遗留、字号等</td><td>结构模块能提供部分坐标/对象事实。</td><td>规则未实现；组合局部坐标、继承与字体效果不能简单断言。</td><td>先实现可可靠判断的规则，不能判断时标not_checked，不将合法重叠当错误。</td></tr>
+<tr><td>真实打开、事实准确、审美</td><td>当前没有自动保证。</td><td>不能由基础结构通过推导。</td><td>Windows打开人工验收、来源核对及用户反馈单独记录；渲染/视觉意见不冒充确定性结论。</td></tr>
+</table><p><strong>本轮复用验证：</strong>直接调用现有validate_office_package检查一份本地15页PPTX通过；在内存副本中移除ppt/presentation.xml后明确拒绝，code=invalid_file，未修改原文件。此为模块审查验证，不是check_presentation工具测试，也不证明所有检查规则完成。</p><p>现有校验已经独立，本轮检查核心已直接复用，无迁移或复制。调用上传接口、Agent工具或完整正文读取再丢弃结果，都不是合适的公共校验抽取方式。</p>
+
+<p>采用<strong>程序固定规则 + 本次确认要求 + 实际生成映射</strong>三个来源。这个工具主要做确定性检查；事实结论由 Agent 对照原文核实，审美由用户反馈，图片预览仅为后续可选能力，不能把两者混成一个“检查通过”。</p>
 <table><tr><th>检查内容</th><th>依据</th><th>具体例子与限制</th></tr>
 <tr><td>文件结构完整性</td><td>程序固定技术规则，不能由 Agent 关闭</td><td>PPTX 容器、必要部件和关系可解析；程序能解析不等于已经用 Windows PowerPoint 打开过。首版由 Windows PowerPoint 手工打开验收，单独记录；不要求导出图片。</td></tr>
 <tr><td>页数要求</td><td>项目配置/用户本次确认的要求</td><td>默认 8–12 页；若用户明确确认 10 页，按 10 页核对。未讨论的变更不由工具自作主张。</td></tr>
@@ -130,7 +142,7 @@ D. 生成文件与检查
 <tr><td>版面几何与样式阈值</td><td>模板/项目检查配置</td><td>可选检查：文本框是否超出页面、最小字号、是否有未填占位符。对象重叠可能是合法设计；文字是否实际溢出受字体与渲染影响，不能只凭文本框边界断言。</td></tr>
 <tr><td>字体与实际打开效果</td><td>Windows PowerPoint 手工打开验收</td><td>检查能否正常打开、是否有修复提示、内容显示和字体是否异常；页面图片渲染不是首版要求。自动结构检查无法证明文字绝不溢出。</td></tr>
 <tr><td>审美与信息表达</td><td>用户偏好/技能指导/可用视觉模型</td><td>背景是否合适、对比是否舒服、逻辑是否清楚，单独标记模型或人工意见。当前确定性检查工具不能给出普适美观保证。</td></tr></table>
-<p>建议以后将可配置规则放独立配置文件，并把本次有效规则与确认版本一并锁定。以下只是<strong>配置设计示例，尚未创建配置文件或接线</strong>：</p>
+<p>建议实现时集中定义检查策略，并保存本次实际使用的要求；当前尚无规则配置加载器，不要求历史版本系统。以下只是<strong>配置设计示例，尚未创建配置文件或接线</strong>：</p>
 <pre>{
   "page_count": {"min": 8, "max": 12},
   "required_roles": ["cover", "agenda", "content", "sources"],
@@ -169,18 +181,17 @@ D. 生成文件与检查
 <tr><td>数据库、内存 Store、日志、LangSmith</td><td>系统基础设施；不是给 Agent 自由操作的业务工具。</td></tr>
 <tr><td>模型路由、检索轮数和调用预算</td><td>运行配置与程序约束。上限由程序执行，Agent 可以知道剩余预算，但不能靠提示词自觉遵守，也不能自行提高预算。</td></tr>
 <tr><td>大纲生成、角色识别、审美判断</td><td>Agent 的推理/结构化输出任务；通过资料读取和模板结构提取获取依据，不确定时请求人工指导，不再套一个同名工具重复调用模型。</td></tr>
-<tr><td>大纲确认、模板映射确认、正式状态提交</td><td>由用户和 LangGraph 校验并提交。Agent 可提出修改结果或通过 ask_user 提问，不提供绕过确认的任意写状态工具。</td></tr>
-<tr><td>技能上传、热加载和版本管理</td><td>用户/系统管理功能。Agent 使用 list_skills、read_skill，并按技能要求调用实际提供的执行工具；热更新对新任务生效，运行任务锁定版本。</td></tr>
+<tr><td>大纲确认、模板映射确认、正式状态提交</td><td>由用户和 LangGraph 校验并提交。Agent可提出修改结果或通过后续真实人工反馈通道提问（工具形式待定），不提供绕过确认的任意写状态工具。</td></tr>
+<tr><td>技能来源与执行</td><td>当前固定skills/，无技能上传、市场或历史版本管理。Agent使用list_skills/read_skill，执行能力随运行时接入；未来市场为独立服务适配，不等于本地目录配置。</td></tr>
 <tr><td>同义词扩展、提示词加载</td><td>检索策略与资源管理。提示词放独立资源目录，专业词表可来自技能；不额外增加一个每次都必须调用的“同义词工具”。</td></tr>
 <tr><td>技能脚本执行</td><td>命令执行入口是运行时工具；底层进程执行模块是内部方法。优先复用已有执行能力，不强制新增 run_skill_script；读取与执行保持独立，脚本按技能步骤运行。</td></tr></table>
-<h2 id="sequence">9. 建议开发顺序（与运行顺序区分）</h2>
-<ol><li><strong>先确定资料三个工具：</strong>list_materials、search_materials、read_material。逐个讨论 Schema 和结果示例；文件解析、本机 OCR 为其配套内部任务。</li>
-<li><strong>再讨论联网两个工具：</strong>search_web接口、协议与SearXNG适配已实现；fetch_webpage已完成独立静态HTML读取，资料登记后续接线。</li>
-<li><strong>模板与反馈阶段：</strong>inspect_template、ask_user。完整或残缺模板均须允许人工判断；ask_user 不推迟到首版之后。</li>
-<li><strong>PPT 生成阶段：</strong>build_presentation、check_presentation，完成 Windows PowerPoint 打开验收，不依赖图片渲染。</li>
-<li><strong>技能阶段：</strong>list_skills、read_skill，以及可复用的运行时脚本执行能力，按用户确认的技能能力接入，不把带代码技能缩减成仅 Markdown。</li></ol>
-<p>开发顺序与运行顺序不同：可以先开发资料工具，完整任务运行时却可能先读专业技能。上面的工具编号按运行阶段排列；本节是建议实施次序。这是讨论建议，不改变现有任务状态，也不代表下一轮要一次实施这些工具。页面图像导出已作为模板自动视觉分析的后续接入项；前端预览继续延期，不能把配置或健康检查当作转换已完成。每次只开发已讨论清楚的一个小任务。</p>
-<ul><li>按任务只提供所需工具；不会把这 11 个项目工具定义全部塞给每次模型调用。</li>
+<h2 id="sequence">9. 当前开发顺序与状态</h2>
+<ol><li><strong>已完成独立实现：</strong>9个工具（检查为基础版），详见总览，不再重复排为待开发。</li>
+<li><strong>下一项：build_presentation。</strong>真实生成核心＋工具契约/入口，验证工具JSON与实际结果，用户打开文件；逐步明确模板支持范围。</li>
+<li><strong>按用户要求先完成check_presentation基础版：</strong>工具已独立实现，当前待用户测试讨论。大纲/来源/排版等扩展检查不在本次完成范围。</li>
+<li><strong>之后：内容、运行时、制作与编排。</strong>按任务列表07–10接入LangChain/Harness/LangGraph，包含实际资料准备、技能执行及真实人工反馈。ask_user如何承载交互到此时再定，不恢复已删内存方案作为前置。</li></ol>
+<p>开发顺序统一以<a href="开发任务列表.html#next">任务列表</a>为准，每轮一个工具，等待用户测试讨论。总览编号仍按典型运行阶段排列，既不是强制调用顺序，也不是固定工具流水线；模型按需选择，运行时执行。转换、渲染、视觉组合仍留到Harness阶段，不在此之前追加新的配套前置任务。</p>
+<ul><li>按任务只提供所需工具；不会把这10个项目工具定义全部塞给每次模型调用。</li>
 <li>工具结果有长度上限和截断标记；保留来源/版本/位置；明确区分无命中、范围无效和执行失败。</li>
 <li>读取工具不得越过项目或技能资源范围；带副作用的生成、提问和脚本操作需关联任务，避免重试时重复执行。</li>
 <li>Python 核心模块可独立调用；tool-calling 与 MCP 是薄适配，不把 Agent 框架写进解析/生成业务。</li>

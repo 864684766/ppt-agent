@@ -178,3 +178,7 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 ## PDF OCR读取字段语义（2026-11-06）
 
 未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。ChatReadResponse.model_called仍表示是否调用对话/云端视觉大模型，本地OCR不将其置true。见[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)。
+
+## PPTX检查工具（2026-11-06）
+
+[presentations/check_presentation_contract.py](presentations/check_presentation_contract.py)集中定义CheckPresentationInput（模型输入artifact_id）、CheckPresentationOutput及PresentationCheckItem（检查器创建、工具公开）。输入由Pydantic校验，TypedDict结果只描述类型；工具不公开宿主路径/SDK对象。passed只覆盖本轮必过规则；未知值null，未实现规则not_checked。PresentationChecker协议和PresentationCheckError在domain/presentations。字段详见[字段清单](../docs/Store清单.html#presentation-check-fields)及[调试说明](../docs/check_presentation调试说明.md)。

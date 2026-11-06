@@ -43,25 +43,43 @@ class PdfDocumentReader:
         """
         texts = self._read_native_pages(content=content, limits=limits)
         builder = DocumentContentBuilder(limits)
+        # missing保存最终仍无文字的真实页码，ocr_pages保存尝试过OCR的页码。
+        # 执行过OCR不代表识别一定成功，也可能是空白页，因此两组页码可能重叠。
         missing: list[int] = []
         ocr_pages: list[int] = []
+        # enumerate逐项取得文字并生成编号；start=1让number对应用户看到的PDF页码。
+        # 例如第5次循环number=5，而不是Python序列使用的下标4。
         for number, native_text in enumerate(texts, start=1):
             text = native_text
             if not text.strip() and self._recognizer is not None and self._renderer is not None:
                 logger.debug("event=pdf_ocr_page_start pdf_page=%d", number)
                 try:
+                    # pages=[number]只请求当前这一页，不是渲染全部PDF。
+                    # 例如number=5，返回images中唯一一张图片就是PDF第5页。
                     rendered = self._renderer.render(pdf_bytes=content, pages=[number], dpi=144)
+                    # 检查“数量为1”及“图片对应页码正确”，防止错页引用。
+                    # or会短路：数量不是1时，不再访问images[0]，空集合也不会越界。
                     if len(rendered.images) != 1 or rendered.images[0].page_number != number:
                         raise PdfRenderError("页面渲染结果与请求页码不一致。")
+                    # Python集合下标从0开始，[0]取本次返回的第一张图片，
+                    # 不表示PDF第1页。number=5时，这张图片的page_number仍为5。
+                    # 外层循环依次换number，因此能处理多页，每次只持有一页图片。
                     image = rendered.images[0]
+                    # png_bytes是当前页PNG文件的完整字节，不是路径或PDF原始内容。
                     result = self._recognizer.recognize(image_bytes=image.png_bytes)
+                    # 只把各文字区域拼接后的正文交给后续内容构造器，不保存坐标或图片。
                     text = result.text
+                    # append把真实页码追加到列表；空白识别结果也计入“执行过OCR”。
                     ocr_pages.append(number)
                     logger.debug("event=pdf_ocr_page_result pdf_page=%d character_count=%d", number, len(text))
-                    # 图片和区域结果不进入DocumentContent，及时解除本页大对象引用。
+                    # del移除这几个局部变量的引用，不删除磁盘文件，也不销毁OCR引擎。
+                    # 已保存在text中的字符串仍可使用；没有其他引用时，大对象可被回收。
+                    # 这不保证操作系统立刻收回同等内存；下一页识别仍复用self._recognizer。
                     del result, image, rendered
                 except (OcrError, PdfRenderError) as error:
-                    # 已在下层记录安全错误位置；对外统一语义，不把失败伪装成空白。
+                    # 将渲染/OCR的错误转成文件读取错误，供API统一返回，不当空白跳过。
+                    # from error保留原异常关联，日志可查安全调用位置；对外只返回固定提示。
+                    # 原生提取、渲染及OCR下层也记录生命周期，不在这里打印异常原文。
                     raise DocumentReadError(
                         "document_ocr_failed", f"PDF第{number}页OCR失败，请检查本地模型、页面大小及运行日志。",
                     ) from error

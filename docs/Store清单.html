@@ -323,4 +323,18 @@ nav a{display:inline-block;margin:5px 18px 5px 0}h3{margin-top:30px}code{overflo
 <tr><td>max_image_bytes / max_image_pixels</td><td>构造参数，正整数，默认20971520压缩字节（20MiB）/25000000像素（宽×高）；Pillow自身图片安全规则也生效。不是已接线的环境变量。</td></tr>
 <tr><td>cpu_threads</td><td>构造参数，正整数，默认2，ONNX intra-op计算线程；inter-op固定1、CPU执行，同一实例加锁串行。不是系统并发限制。</td></tr>
 </table><p>OcrError为协议模块的安全运行错误，不混入数据模型。公共OCR已由PDF读取器接入chat无文字页回退，不新增上传格式。详见<a href="OCR模块调试说明.md">OCR模块调试说明</a>。</p>
-<h2>PDF OCR接线语义（2026-11-06）</h2><p>无新增字段。DocumentBlock.text可以来自OCR，page/location保持PDF真实页码；DocumentContent.pages_without_text表示本次处理后仍无文字的页面，warnings说明OCR可能错漏。不返回图片或区域坐标。ChatReadResponse.model_called=false表示未调用对话/云端视觉大模型，PDF仍可能使用本地OCR。失败document_ocr_failed为503，正文超限document_limit_exceeded仍为413。</p><p>create_document_readers新增内部可选recognizer: ImageTextRecognizer及renderer: PdfPageRenderer，默认均None，必须成对传入；API仅PDF注入，根目录ocr-models/长期保留。PdfDocumentReader持有注入实例，不关闭调用方资源；每页解码与原生句柄由对应实现关闭，无跨请求缓存。详见<a href="PDF文字与OCR调试说明.md">PDF OCR说明</a>。</p></main></body></html>
+<h2>PDF OCR接线语义（2026-11-06）</h2><p>无新增字段。DocumentBlock.text可以来自OCR，page/location保持PDF真实页码；DocumentContent.pages_without_text表示本次处理后仍无文字的页面，warnings说明OCR可能错漏。不返回图片或区域坐标。ChatReadResponse.model_called=false表示未调用对话/云端视觉大模型，PDF仍可能使用本地OCR。失败document_ocr_failed为503，正文超限document_limit_exceeded仍为413。</p><p>create_document_readers新增内部可选recognizer: ImageTextRecognizer及renderer: PdfPageRenderer，默认均None，必须成对传入；API仅PDF注入，根目录ocr-models/长期保留。PdfDocumentReader持有注入实例，不关闭调用方资源；每页解码与原生句柄由对应实现关闭，无跨请求缓存。详见<a href="PDF文字与OCR调试说明.md">PDF OCR说明</a>。</p><h2 id="presentation-check-fields">check_presentation字段（2026-11-06）</h2><p>models/presentations/check_presentation_contract.py集中定义模型输入与公开输出，LocalPresentationChecker创建报告，工具直接公开。无HTTP接口、环境变量、数据库或LangGraph状态。</p>
+<table><tr><th>字段</th><th>类型、含义与边界</th></tr>
+<tr><td>CheckPresentationInput.artifact_id</td><td>必填str，去两端空格，1–200字符，严格模式、不接受额外字段；宿主登记产物编号，不是路径/URL/template_id。执行时只选择宿主可读文件。</td></tr>
+<tr><td>CheckPresentationOutput.artifact_id / file_name</td><td>str，回显登记编号/文件展示名；不返回绝对路径或凭据。</td></tr>
+<tr><td>sha256 / size_bytes</td><td>str|None / int|None，完整读取的文件SHA-256指纹与字节数；超限未读完整时均None，不使用部分数据冒充整份文件。</td></tr>
+<tr><td>slide_count</td><td>int|None，PPT解析成功后的总页数，包含所有幻灯片；无法解析为None，不猜0。</td></tr>
+<tr><td>passed</td><td>bool，仅所有required规则为pass时True；不证明not_checked项目、事实、审美或真实打开合格。</td></tr>
+<tr><td>checks</td><td>list[PresentationCheckItem]，固定规则顺序的检查结果；失败后不可能执行的规则not_checked。</td></tr>
+<tr><td>PresentationCheckItem.rule_id</td><td>str，固定规则标识：file_size/package_structure/pptx_parse/page_count/pages_without_text/outline_coverage/source_verification/visual_layout/office_open。</td></tr>
+<tr><td>status / required</td><td>pass/fail/warning/not_checked / bool；后者由实现指定当前必过规则，模型不可关闭。前4项必过；无文字页只警告，后4项明确未检查。</td></tr>
+<tr><td>message / expected / actual</td><td>str / str|None / int|str|list[int]|None：安全中文结论/要求/实际值，未知None；超限说明字符串，不返回输入正文或原始异常。</td></tr>
+<tr><td>slide_numbers</td><td>list[int]，相关实际页码，从1起；文件级或无问题时[]，不是渲染图片下标。</td></tr>
+<tr><td>LocalPresentationChecker.artifacts</td><td>宿主注入Mapping[str,Path]并复制，不扫描硬盘，不是全局Store或项目系统；生成模块以后登记实际文件，测试用本地PPTX。</td></tr>
+<tr><td>min_slides / max_slides</td><td>宿主构造参数，默认8/12、正整数且min≤max，模型工具输入不含这些字段；不属于环境变量。</td></tr>
+<tr><td>max_file_bytes / max_uncompressed_bytes</td><td>宿主构造参数，正整数，默认52428800/104857600字节，分别为实际原文件/Office实际展开限额；共享包校验另有条目数和XML限制。</td></tr></table><p>无效编号、文件不可读或后缀非PPTX抛PresentationCheckError，工具转ToolException；内容/大小不合格返回报告，不抛HTTP错误。详见<a href="check_presentation调试说明.md">调试说明</a>。TypedDict不宣称自动校验。</p></main></body></html>

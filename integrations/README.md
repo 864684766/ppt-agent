@@ -76,3 +76,7 @@ rapidocr3.10.0/onnxruntime1.31.1已锁定实装，Windows真实图片验证通�
 ## PDF OCR组合（2026-11-06）
 
 PdfDocumentReader可注入ImageTextRecognizer/PdfPageRenderer，API按PDF格式组装。原生文字提取释放PDFium锁后，再逐页渲染无文字页并OCR，继续正文限额。每次请求复用一个OCR实例，非PDF不受影响；未实现同页混合图片识别或全局模型缓存。当前行为以[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)为准，此前未OCR是历史状态。
+
+## PPTX产物检查（2026-11-06）
+
+LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位于domain/presentations，数据位于models/presentations。宿主注入编号/路径及页数、大小要求，检查器有界读取并直接复用validate_office_package，再读取实际页数和文字存在性，不创建模型、渲染或OCR。对不合格文件返回规则报告，不可读取/未登记报安全执行错误。详见[检查工具说明](../docs/check_presentation调试说明.md)。

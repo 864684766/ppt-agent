@@ -69,3 +69,8 @@ uv run --locked --no-sync python -m pytest tests/test_pdf_ocr.py -s -q
 用户可直接使用Postman验收接口，不必先阅读该模块验证文件。Linux/Docker、批量扫描、手写、复杂表格及人工准确性尚未验证。
 
 回归：既有日志/诊断及PDF渲染12 passed（1.34秒）；FastAPI导入、git diff --check通过，无依赖升级。
+
+## 页码与图片下标（初学者说明）
+
+PDF读取器已补充附近注释：enumerate(texts, start=1)生成真实页码number；pages=[number]只渲染当前一页，因此images[0]表示本次返回的第一张图，不表示PDF第1页。例如number=5时，images[0].page_number为5。数量检查使用or短路，空结果不会继续访问[0]。del只移除本页局部变量引用，不删除文件、不关闭引擎，也不保证立即向操作系统归还内存。
+本次只补注释与说明，通过Python AST比较确认运行逻辑未变，不重复运行OCR测试。下一开发小步建议为本次参考资料与既有资料工具接线，具体数据生命周期先讨论，不扩展多项目/会话/数据库。
