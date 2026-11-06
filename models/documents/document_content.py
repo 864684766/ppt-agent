@@ -11,7 +11,7 @@ class DocumentBlock(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     block_id: str = Field(min_length=1, description="本次读取内的块编号，如b000001；不是跨版本稳定编号或全局source_id。")
     kind: Literal["text", "page", "paragraph", "table_row", "sheet_row", "slide_text"] = Field(description="块类型：纯文本、PDF页、Word段落、表格行、Excel行或PPT文字。")
-    text: str = Field(min_length=1, description="实际提取文字；表格行使用制表符分隔单元格；不包含模型补写内容。")
+    text: str = Field(min_length=1, description="原生提取或本地OCR识别的文字，OCR可能错漏；表格行使用制表符分隔单元格；不含大语言模型补写。")
     location: str = Field(min_length=1, description="原文位置说明，如第2页、正文第3段、工作表销售第5行；不是猜测的Word页码。")
     page: int | None = Field(default=None, ge=1, description="PDF页码或PPT幻灯片序号，从1开始；Word/Excel/普通文本为null。")
     sheet_name: str | None = Field(default=None, description="Excel原工作表名称，其他格式为null。")
@@ -25,7 +25,7 @@ class DocumentContent(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     blocks: tuple[DocumentBlock, ...] = Field(description="按读取顺序返回的正文块；可能为空，须结合warnings判断。")
     page_count: int | None = Field(default=None, ge=0, description="PDF总页数或PPT实际页数；Word/Excel无法可靠得出页数时为null。")
-    pages_without_text: tuple[int, ...] = Field(default=(), description="未提取到文字的PDF/PPT页序号，可能为空白或图片；不等于已确认扫描件，本次不执行OCR。")
+    pages_without_text: tuple[int, ...] = Field(default=(), description="本次读取后仍无文字的PDF/PPT页序号；PDF启用OCR时为OCR后仍无文字，PPT仅原生提取；不等于已确认扫描件。")
     warnings: tuple[str, ...] = Field(default=(), description="固定限制与读取提示；不是正文或模型推理，不代表全文所有元素均已提取。")
 
 

@@ -12,6 +12,6 @@ def chat_http_error(code: str, message: str) -> HTTPException:
         status = 415
     elif code in {"invalid_fields", "invalid_message"}:
         status = 422
-    elif code == "configuration_invalid":
+    elif code in {"configuration_invalid", "document_ocr_failed"}:
         status = 503
     return HTTPException(status, detail={"code": code, "message": message})

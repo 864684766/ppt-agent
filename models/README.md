@@ -174,3 +174,7 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 ## 公共图片OCR（2026-11-06）
 
 [ocr/ocr_result.py](ocr/ocr_result.py)定义OcrTextRegion和OcrResult。由integrations/ocr的识别器创建，供测试与未来文档读取器使用，当前为内部返回数据，不是HTTP、Agent或LangGraph状态。字段包括文字、四边形像素位置、置信分、EXIF校正后尺寸；text属性派生全文。来源ID/页码由调用方关联，不塞入OCR结果。协议与OcrError位于domain/ocr，不放进models。详见[字段清单](../docs/Store清单.html#ocr-fields)与[OCR调试说明](../docs/OCR模块调试说明.md)。
+
+## PDF OCR读取字段语义（2026-11-06）
+
+未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。ChatReadResponse.model_called仍表示是否调用对话/云端视觉大模型，本地OCR不将其置true。见[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)。

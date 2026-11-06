@@ -72,3 +72,7 @@ S3TemplateFileReader实现TemplateFileReader协议，接收宿主client/bucket�
 
 RapidOcrTextRecognizer实现ImageTextRecognizer协议，接收图片字节，返回models/ocr中的文字区域、位置及置信分。模型目录由宿主注入，本地模型预先准备，不读取.env、不自动下载或保存图片。实例内复用引擎并加锁，异步线程桥接由调用方负责。ocr_image_decoder仅负责图片格式、限额、方向及透明背景处理。
 rapidocr3.10.0/onnxruntime1.31.1已锁定实装，Windows真实图片验证通过；PDF/聊天尚未接线。详见[OCR模块调试说明](../docs/OCR模块调试说明.md)。
+
+## PDF OCR组合（2026-11-06）
+
+PdfDocumentReader可注入ImageTextRecognizer/PdfPageRenderer，API按PDF格式组装。原生文字提取释放PDFium锁后，再逐页渲染无文字页并OCR，继续正文限额。每次请求复用一个OCR实例，非PDF不受影响；未实现同页混合图片识别或全局模型缓存。当前行为以[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)为准，此前未OCR是历史状态。

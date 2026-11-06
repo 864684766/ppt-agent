@@ -19,7 +19,7 @@ class DocumentReader(Protocol):
     def read(self, *, content: bytes, limits: DocumentReadLimits) -> DocumentContent:
         """调用方提供完整字节和限额；实现负责关闭自己创建的解析资源。
 
-        不读取.env、不调用模型、不归档原文件。无可靠文字时返回明确提示；损坏、
+        不读取.env、不调用大语言模型、不归档原文件；可注入本地OCR。无可靠文字时返回明确提示；损坏、
         加密或规模超限时抛DocumentReadError，不能返回伪造正文。
         """
         ...
