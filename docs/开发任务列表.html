@@ -1,23 +1,23 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI PPT 工作台｜开发任务列表</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f4f7f6;color:#1b2932;font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}header{background:#183b3a;color:#fff;padding:38px max(24px,calc((100% - 1050px)/2))}header p{color:#cfe3df}h1{font-size:30px;margin:5px 0}main{max-width:1050px;margin:auto;padding:12px 24px 70px}h2{border-bottom:2px solid #d8e1e2;padding-bottom:8px;margin-top:38px;font-size:22px}h3{font-size:18px;margin-bottom:4px}.note{background:#edf6f4;border-left:4px solid #12675f;padding:12px 18px;margin:22px 0}table{border-collapse:collapse;width:100%;background:white}td,th{border:1px solid #d8e1e2;padding:10px;text-align:left;vertical-align:top}th{background:#eaf1f0}a{color:#12675f}code{background:#e9efee;padding:2px 4px}.scroll{overflow-x:auto}li{margin:6px 0}@media(max-width:650px){main{padding-inline:16px}header{padding:26px 16px}table{min-width:700px}}@media print{body{background:white}header{background:white;color:black;padding:0}header p{color:#555}main{padding:0}}
-.status{display:inline-block;white-space:nowrap;padding:2px 9px;border-radius:5px;font-weight:bold}.done{background:#dff2e8;color:#185a3d}.partial{background:#fff0cd;color:#785000}.todo{background:#e9edf0;color:#52616b}.merged{background:#e9edf0;color:#52616b}.summary{display:flex;gap:14px;flex-wrap:wrap;margin:20px 0}.summary span{background:white;border:1px solid #d8e1e2;padding:10px 16px}nav a{display:inline-block;margin:5px 18px 5px 0}pre{white-space:pre-wrap;background:#eaf1f0;padding:16px}</style></head><body><header><p>DEVELOPMENT CHECKLIST · 2026-11-06</p><h1>后端开发任务列表</h1><p>一次性任务 · 当前能力、待办与交付边界</p></header><main>
+.status{display:inline-block;white-space:nowrap;padding:2px 9px;border-radius:5px;font-weight:bold}.done{background:#dff2e8;color:#185a3d}.partial{background:#fff0cd;color:#785000}.todo{background:#e9edf0;color:#52616b}.merged{background:#e9edf0;color:#52616b}.summary{display:flex;gap:14px;flex-wrap:wrap;margin:20px 0}.summary span{background:white;border:1px solid #d8e1e2;padding:10px 16px}nav a{display:inline-block;margin:5px 18px 5px 0}pre{white-space:pre-wrap;background:#eaf1f0;padding:16px}</style></head><body><header><p>DEVELOPMENT CHECKLIST · 2026-11-06</p><h1>后端开发任务列表</h1><p>一次性任务 · 当前能力、待办与交付边界</p></header><main><div class="note"><strong>2026-11-16 当前确认：</strong>complete_template基础版按计划复制原参考页支持的图形和图片，目标总页数8至12；不生成新布局或正文，动画等不复制，结果待用户打开核对。通用ask_user用于任意场景的信息补充、选择及反馈；模型提出问题，运行时与LangGraph负责向前端展示、等待真实回答并恢复，LangChain与Harness共用交互语义。该交互尚未实现，编号、接口及状态在实际接入时结合现有实体讨论；不恢复模拟内存收集器。</div><div class="note"><strong>2026-11-16 制作职责拆分：</strong>按用户确认新增规划工具complete_template：按参考页复制受支持的图形和图片，补充示例页，输出可复用模板，不注入主题业务正文；build_presentation：使用已确认大纲、内容和可用模板生成最终PPTX，不负责隐式补全模板。模板完整时无需调用补全工具；缺失或映射不明确时由Harness判断，涉及用户选择则交LangGraph反馈。补全基础版已实现、待用户打开验证；成品生成尚未实现。模型按需选择工具，不是固定调用链。</div><div class="note"><strong>2026-11-16 范围确认：</strong>检查范围确认：check_presentation维持基础版，9条报告项中仅前5条有实际检查；后4条扩展暂不实现，不作为下一任务的前置要求。当前仍待开发build_presentation，本次仅完善代码注释与文档。</div>
 <nav><a href="#status">当前状态</a><a href="#next">开发顺序</a><a href="#tasks">任务台账</a><a href="#checks">PPT检查复用</a><a href="#files">运行资源</a><a href="#references">文档分工</a></nav>
-<div class="note"><strong>当前唯一开发顺序：</strong>按用户最新决定先实现check_presentation基础版，现已独立完成、待用户测试讨论；下一项build_presentation。生成后的大纲/来源映射检查随实际能力补充。之后接子智能体与LangGraph。下面的任务编号保留原引用，不代表实际执行先后。运行时由模型按需选择工具，不把工具写死为固定调用链。</div>
+<div class="note"><strong>当前唯一开发顺序：</strong>按用户最新决定先实现check_presentation基础版，现已独立完成、待用户测试讨论；complete_template基础版待用户测试，之后开发build_presentation。生成后的大纲/来源映射检查随实际能力补充。之后接子智能体与LangGraph。下面的任务编号保留原引用，不代表实际执行先后。运行时由模型按需选择工具，不把工具写死为固定调用链。</div>
 <p>第一阶段为Windows本机Python后端，练习并贯通LangChain、Harness、LangGraph、FastAPI及LangSmith，最终生成8–12页可打开、主要文字可编辑的PPTX。本版只做一次性任务，不建设多项目、独立会话、数据库或历史版本系统。</p>
 <h2 id="status">1. 当前状态</h2>
 <div class="summary"><span>大项已完成：3</span><span>大项部分完成：2</span><span>大项未开始：6</span><span>06已合并，不计入11项有效任务</span></div>
 <p>已完成仅表示该项限定能力已实现并有记录，不表示智能体或完整产品已完成。“基础可复用”也不等于Agent工具已实现。HTTP接口由用户用Postman和断点验收；工具JSON检查、模块测试、真实外部服务验证分别记录。</p>
 <table><tr><th>当前能力</th><th>状态与实际边界</th></tr>
-<tr><td>9个Agent工具</td><td>list_materials、search_materials、read_material、search_web、fetch_webpage、list_skills、read_skill、inspect_template、check_presentation基础版已独立实现；尚未接入模型选工具循环。具体Schema及测试见工具清单。</td></tr>
-<tr><td>剩余生成工具与检查扩展</td><td>build_presentation未实现；check_presentation基础版已具备契约、工具入口和两项测试。已检查大小/包结构/可解析性/页数/无文字页，大纲/来源/排版/Office打开明确未检查。</td></tr>
+<tr><td>10个Agent工具</td><td>list_materials、search_materials、read_material、search_web、fetch_webpage、list_skills、read_skill、inspect_template、check_presentation基础版、complete_template基础版已独立实现；尚未接入模型选工具循环。具体Schema及测试见工具清单。</td></tr>
+<tr><td>剩余生成工具与检查扩展</td><td>complete_template基础版已实现，build_presentation未实现；check_presentation基础版已具备契约、工具入口和两项测试。已检查大小/包结构/可解析性/页数/无文字页，大纲/来源/排版/Office打开明确未检查。</td></tr>
 <tr><td>chat与OSS模板</td><td>POST /ppt-agent/v1/chat接收message、可选file和template_key，返回JSON；GET /ppt-agent/v1/templates列出RustFS模板。已实现真实下载与正文读取，用户已确认此前读取小步测试结束。不是制作接口，不调用大语言模型/SSE。</td></tr>
 <tr><td>文件解析与OCR</td><td>TXT/MD/PDF/DOCX/XLSX/PPTX读取已实现；PDF无文字页本地OCR已接入并有模块验证，用户接口效果验收待确认；其他图片入口和混合页图片识别未实现。</td></tr>
 <tr><td>模板分析配套</td><td>结构检查、Gotenberg转换、PDF逐页图片及视觉模块已独立实现；组合分析留到Harness阶段。不是PPTX制作或质检工具。</td></tr>
 <tr><td>技能、提示词与诊断</td><td>固定skills/发现/读取、视觉提示词文件、统一模型工厂、系统日志已具备；技能资源/脚本运行、内容与制作提示词随子智能体接入。</td></tr></table>
 <h2 id="next">2. 后续开发顺序</h2>
 <ol>
-<li><strong>04-A build_presentation（下一项，未开始）：</strong>先讨论并实现可独立运行的PPTX生成核心、模型可见工具契约与薄入口；真实生成文件，用户打开核对。第一步不得承诺任意完整/残缺模板无损适配。具体任务只在工具清单维护，不另拆一套重复任务。</li>
+<li><strong>04-A complete_template（基础版已实现，待用户测试）→ build_presentation（随后，未开始）：</strong>先分别明确模板补全和成品生成的独立契约与核心，再逐项实现可独立运行的PPTX生成核心、模型可见工具契约与薄入口；真实生成文件，用户打开核对。第一步不得承诺任意完整/残缺模板无损适配。具体任务只在工具清单维护，不另拆一套重复任务。</li>
 <li><strong>check_presentation基础版已独立完成：</strong>按用户最新决定先实现检查工具。复用包校验，新增页数和无文字页报告，2项工具测试通过；用户测试讨论待进行。大纲/来源/排版/Office打开未检查，后续结合实际生成映射补充，不将基础版完成写成全部质检完成。</li>
 <li><strong>07 LangChain内容子智能体：</strong>接入问题、实际资料与现有工具，完成模型提出调用→运行时执行→结果返回模型的闭环，再逐步生成与对话修改大纲。05剩余的本次资料数据准备在这里按真实需要接线，不作为提前串联工具的任务。</li>
 <li><strong>08 Harness运行时：</strong>接入Python SDK、模型、工具/MCP及技能执行，验证错误、取消及用户提问桥接。</li>
@@ -25,13 +25,13 @@
 <li><strong>10 LangGraph协调与真实人工反馈：</strong>与07–09按最小实际需要同步接入暂停/回答/恢复与修改分派，不能等到最后才验证人工反馈。</li>
 <li><strong>11工作流接口与交付 → 12完整验收：</strong>大纲确认、进度、产物下载及修改闭环；Windows实际打开PPTX，独立记录准确性与显示效果。</li>
 </ol>
-<p>本节规定开发先后，不规定模型运行时的工具调用顺序。不再先推进新的OCR增强、资料存储平台、预览或技能市场来代替剩余的build_presentation工具开发。</p>
+<p>本节规定开发先后，不规定模型运行时的工具调用顺序。不再先推进新的OCR增强、资料存储平台、预览或技能市场来代替剩余的模板补全与成品生成工具开发。</p>
 <h2 id="tasks">3. 任务台账（保留编号，明细不重复工具清单）</h2>
 <table><tr><th>编号／任务</th><th>状态</th><th>已有成果与剩余边界</th></tr>
 <tr><td>01 环境与依赖</td><td>已完成</td><td>Python/uv、pyproject与锁文件；版本记录在技术文档及对应模块说明，后续变更持续维护。</td></tr>
 <tr><td>02 FastAPI基础服务</td><td>已完成</td><td>入口、路由、健康检查、监听配置及调试说明。</td></tr>
 <tr><td>03 模型连接与流式基础</td><td>已完成（限定基础）</td><td>统一模型工厂、独立聊天/流式能力及历史验证。当前chat按用户要求仅文件读取；多轮大纲、选工具循环、LangSmith追踪初始化尚未接入。</td></tr>
-<tr><td>04 Agent工具开发</td><td>部分完成，当前优先</td><td>9项独立实现（含check_presentation基础版），剩余build_presentation；工具明细、测试与复用边界看<a href="Agent工具清单.html">Agent工具清单</a>。ask_user已移除，仅数据预留，不计入当前10项工具。</td></tr>
+<tr><td>04 Agent工具开发</td><td>部分完成，当前优先</td><td>10项独立实现（含complete_template和check_presentation基础版），剩余build_presentation；工具明细、测试与复用边界看<a href="Agent工具清单.html">Agent工具清单</a>。ask_user已移除，仅数据预留，不计入当前11项工具。</td></tr>
 <tr><td>05 参考附件读取与模板资源</td><td>部分完成</td><td>六格式读取、真实OSS列表/下载、公共OCR与PDF回退已有实现；PDF OCR接口效果待用户确认。本次资料与工具的真实数据绑定在07按需接入，不建设项目/会话/数据库。无长期原文件归档。</td></tr>
 <tr><td>06 技能与提示词接入</td><td>已合并，不独立排期</td><td>发现/读取归04，实际使用及提示词归07–09；技能固定skills/，无上传或市场。</td></tr>
 <tr><td>07 LangChain内容与大纲</td><td>未开始</td><td>研究、工具选择、来源核查、大纲生成及对话重新整理；前端负责手动增删/排序/合并，后端校验完整提交结果。</td></tr>
@@ -50,6 +50,6 @@
 <h2 id="files">5. 文件与运行资源</h2>
 <ul><li>参考附件：当前请求内接收并解析，不长期归档；框架可能使用临时文件，退出时关闭。正文与来源供后续一次性运行使用的生命周期在07接线时明确。</li><li>模板：RustFS列表object_key作为template_key原样回填，真实下载并解析；当前不建立选择状态或全局文件缓存。制作时如何持有字节按实际需求实现。</li><li>OCR模型：根目录ocr-models/为长期运行资源，不按data/清理；缺失时报错，不临时下载。data/用于测试输入输出，删除前确认是否仍被测试引用。</li><li>PPTX产物：尚未生成，下载与临时清理由04/11实现时明确，不提前声明已支持历史版本。</li></ul>
 <h2 id="references">6. 文档分工</h2>
-<ul><li><a href="Agent工具清单.html">工具清单</a>：当前10项工具，9项独立实现、生成工具待开发；检查扩展规则另列；参数、职责、规则与工具测试。</li><li><a href="技术文档.html">技术文档</a>：架构、技术栈/版本、模块及运行流程；旧阶段记录不覆盖最新状态。</li><li><a href="Store清单.html">字段清单</a>：已实现字段，不预设未实现LangGraph状态。</li><li><a href="接口调试说明.md">接口说明</a>与<a href="PDF文字与OCR调试说明.md">PDF OCR说明</a>：Postman及断点操作，不生成Postman文件。</li><li><a href="../optimization/README.md">optimization</a>：性能、市场、多项目/会话/历史等后续需求；未经实验不标完成。</li><li><a href="../AGENTS.md">开发规范</a>：一次一个小任务，注释、字段、日志、解耦及文档同步。</li></ul>
+<ul><li><a href="Agent工具清单.html">工具清单</a>：当前11项工具，10项独立实现（补全和检查均为基础版）、模板补全与生成工具待开发；检查扩展规则另列；参数、职责、规则与工具测试。</li><li><a href="技术文档.html">技术文档</a>：架构、技术栈/版本、模块及运行流程；旧阶段记录不覆盖最新状态。</li><li><a href="Store清单.html">字段清单</a>：已实现字段，不预设未实现LangGraph状态。</li><li><a href="接口调试说明.md">接口说明</a>与<a href="PDF文字与OCR调试说明.md">PDF OCR说明</a>：Postman及断点操作，不生成Postman文件。</li><li><a href="../optimization/README.md">optimization</a>：性能、市场、多项目/会话/历史等后续需求；未经实验不标完成。</li><li><a href="../AGENTS.md">开发规范</a>：一次一个小任务，注释、字段、日志、解耦及文档同步。</li></ul>
 <p>本轮新增check_presentation基础工具及报告字段，复用已有校验，无依赖升级；2项测试通过，用户测试讨论待进行。</p>
 </main></body></html>

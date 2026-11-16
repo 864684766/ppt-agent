@@ -38,6 +38,10 @@ class LocalPresentationChecker:
     min_slides/max_slides为宿主本次要求，默认8–12页；默认原文件50MiB、
     Office展开100MiB。它们是显式构造参数，不是新环境变量或模型可改参数。
     文件以同一份有界字节校验/解析/计算指纹，不修改原文件；无跨请求缓存。
+
+    当前返回9条报告项，但只有前5条实现了检查；后4条用于说明未覆盖的能力，
+    不是已执行的检查。2026-11-16用户决定暂不实现扩展检查，因此这里不会
+    调模型核对大纲/来源、调用视觉模块或启动Office。基础版通过不等于完整质检通过。
     """
 
     def __init__(
@@ -83,19 +87,31 @@ class LocalPresentationChecker:
     def _check_content(self, *, content: bytes, artifact_id: str, file_name: str) -> CheckPresentationOutput:
         """复用包校验后才解析；前置失败的后续规则留not_checked，绝不假装通过。"""
         complete = len(content) <= self._max_file_bytes
+        # 先建立报告，再根据实际执行结果替换对应项。Python列表下标从0开始：
+        # rules[0:5]对应下面前5条已实现检查，rules[5:9]仅说明尚未实现的能力。
+        # not_checked有两种原因：已实现但前置条件失败而跳过；或者能力尚未实现。
+        # 需要结合message区分，不能把它理解为通过，也不能直接理解为文件有错。
         rules = [
+            # 前4条required=True：属于本轮必过规则，影响最终passed。
             _rule("file_size", "not_checked", True, "尚未检查文件大小。"),
             _rule("package_structure", "not_checked", True, "文件大小/非空检查通过后才检查包结构。"),
             _rule("pptx_parse", "not_checked", True, "包结构检查通过后才尝试解析。"),
             _rule("page_count", "not_checked", True, "解析成功后才核对页数。",
                   expected=f"{self._min_slides}–{self._max_slides}页（包含封面等所有页）"),
+            # 第5条已实现但非必过：图片页可能没有可提取文字，只提示人工关注。
             _rule("pages_without_text", "not_checked", False, "解析成功后才检查实际页面可提取文字。"),
+            # 以下4条没有执行代码，始终保留not_checked，暂不实现：
+            # 大纲覆盖需要确认后的大纲及页面映射；来源核查需要引用与原文关联；
+            # 排版检查需要明确规则，实际显示通常还需渲染；Office打开需真实运行时。
+            # python-pptx能解析、甚至LibreOffice能转换，都不能替代PowerPoint/WPS验收。
             _rule("outline_coverage", "not_checked", False, "当前没有大纲/页面映射输入，未核对内容覆盖。"),
             _rule("source_verification", "not_checked", False, "当前未核查引用与来源原文，不能证明事实正确。"),
             _rule("visual_layout", "not_checked", False, "未检查字号、越界、占位符残留、实际溢出或审美。"),
             _rule("office_open", "not_checked", False, "未使用PowerPoint/WPS实际打开，请人工核对显示与修复提示。"),
         ]
         count = None
+        # 后续步骤依赖前一步成功：大小→包结构→页面解析→页数/文字存在性。
+        # 前置失败时不继续处理；保留后续项的not_checked，而不是伪造pass或页数0。
         if not content or not complete:
             rules[0] = _rule("file_size", "fail", True, "文件为空或超过本轮原文件字节上限。",
                              expected=f"1–{self._max_file_bytes}字节", actual=len(content) if complete else "超过上限，未完整读取")
@@ -112,7 +128,10 @@ class LocalPresentationChecker:
                 try:
                     with BytesIO(content) as stream:
                         presentation = Presentation(stream)
+                        # slides是实际幻灯片集合，含隐藏页，不是母版/布局数量。
                         count = len(presentation.slides)
+                        # enumerate(..., 1)将页面从1编号；missing只收集无可提取文字页。
+                        # 它不表示“空白页”：图片、图表等也可能构成完整的页面内容。
                         missing = [number for number, slide in enumerate(presentation.slides, 1)
                                    if not self._has_text(slide.shapes)]
                 except Exception as error:
@@ -126,6 +145,9 @@ class LocalPresentationChecker:
                     rules[4] = _rule("pages_without_text", "warning" if missing else "pass", False,
                                      "无可提取文字页可能是合法图片页，不等于空白、内容缺失或错误。" if missing else "每页至少有一处可提取文字，不保证内容完整。",
                                      actual=missing, slides=missing)
+        # all(...)只要求required=True的前4条全部pass；任一fail或not_checked即False。
+        # 第5条警告不否决基础检查；后4条未实现也不参与计算。因此passed=True
+        # 不能解读为大纲、来源、排版及Office打开均已通过，调用方仍须阅读checks。
         return dict(
             artifact_id=artifact_id, file_name=file_name,
             sha256=hashlib.sha256(content).hexdigest() if complete else None,

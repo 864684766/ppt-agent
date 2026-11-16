@@ -27,6 +27,7 @@
 | 技能 | read_skill输入与公开输出 | ReadSkillInput、ReadSkillOutput | [read_skill_contract.py](skills/read_skill_contract.py) |
 | 模板 | 模板结构事实与嵌套对象 | TemplateStructure、TemplateSlide、TemplateLayout、TemplateMaster、TemplateShape | [template_structure.py](templates/template_structure.py) |
 | 模板 | inspect_template输入与公开输出 | InspectTemplateInput、InspectTemplateOutput | [inspect_template_contract.py](templates/inspect_template_contract.py) |
+| 模板 | complete_template输入、补页计划及公开输出 | CompleteTemplateInput、TemplatePagePlan、CompleteTemplateOutput、CompletedTemplatePage | [complete_template_contract.py](templates/complete_template_contract.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 对话 | 接收层内部问题与附件 | ChatSubmission、ChatAttachmentInput | [chat_request.py](chat/chat_request.py) |
 | 对话 | 附件读取公开响应和安全错误 | ChatReadResponse、ChatAttachmentResponse、ChatErrorDetail、ChatErrorResponse | [chat_response.py](chat/chat_response.py) |

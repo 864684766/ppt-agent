@@ -20,7 +20,8 @@ class PresentationCheckItem(TypedDict):
 
     # 稳定规则名称，如package_structure、page_count，用于识别具体检查项。
     rule_id: str
-    # pass通过、fail不满足、warning需关注、not_checked未检查（含前置失败）。
+    # pass通过、fail不满足、warning需关注；not_checked可能是前置失败跳过，
+    # 也可能是尚未实现的扩展能力，具体看message，不代表已通过或文件必然有错。
     status: Literal["pass", "fail", "warning", "not_checked"]
     # 是否为本轮必须通过的规则；只能由宿主/实现决定，不能由模型关闭。
     required: bool
@@ -49,5 +50,6 @@ class CheckPresentationOutput(TypedDict):
     passed: bool
     # 已读全部字节时为实际大小，超限中止时None；文件大小规则仍解释超限。
     size_bytes: int | None
-    # 固定顺序规则结果，失败后不能执行的检查标not_checked，不伪造通过。
+    # 当前固定9项：前5项有检查逻辑，后4项仅说明未覆盖能力，扩展暂缓开发。
+    # 前置失败而未执行的项也标not_checked；结合message区分原因，不伪造通过。
     checks: list[PresentationCheckItem]
