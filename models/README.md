@@ -29,6 +29,11 @@
 | 模板 | inspect_template输入与公开输出 | InspectTemplateInput、InspectTemplateOutput | [inspect_template_contract.py](templates/inspect_template_contract.py) |
 | 模板 | complete_template输入、补页计划及公开输出 | CompleteTemplateInput、TemplatePagePlan、CompleteTemplateOutput、CompletedTemplatePage | [complete_template_contract.py](templates/complete_template_contract.py) |
 | 模板 | create_template_page输入、绘制对象与公开结果 | CreateTemplatePageInput、PageElement、CreateTemplatePageOutput | [create_template_page_contract.py](templates/create_template_page_contract.py) |
+| 成品 | build_presentation输入、逐页计划、文字替换及结果 | BuildPresentationInput、PresentationPagePlan、TextReplacement、BuildPresentationOutput、BuiltPresentationPage | [build_presentation_contract.py](presentations/build_presentation_contract.py) |
+| 成品 | 混合内容方案 | TextElement、ImageElement、VideoElement、AudioElement、ChartElement、ChartSeries、TableElement、ListElement、PresentationPageElement | [presentation_page_element.py](presentations/presentation_page_element.py) |
+| 成品 | 表格绘制方案 | PresentationTablePlan | [presentation_table_plan.py](presentations/presentation_table_plan.py) |
+| 成品 | 列表绘制方案 | PresentationListPlan、PresentationListItem | [presentation_list_plan.py](presentations/presentation_list_plan.py) |
+| 成品 | 位置、尺寸及颜色输入 | PresentationBox、Color | [presentation_object_geometry.py](presentations/presentation_object_geometry.py) |
 | 对话 | HTTP 对话请求 | ChatRequest | [chat_request.py](chat/chat_request.py) |
 | 对话 | 接收层内部问题与附件 | ChatSubmission、ChatAttachmentInput | [chat_request.py](chat/chat_request.py) |
 | 对话 | 附件读取公开响应和安全错误 | ChatReadResponse、ChatAttachmentResponse、ChatErrorDetail、ChatErrorResponse | [chat_response.py](chat/chat_response.py) |

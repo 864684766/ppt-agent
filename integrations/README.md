@@ -84,3 +84,7 @@ LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位�
 `templates/local_template_completer.py`：按计划复制原模板参考页及支持的图形、文字、图片并另存；目标总页数8至12。`template_slide_copy.py`负责复制和重映射图片关联；不自动设计页面，复杂关联会拒绝。字段和测试见 `docs/complete_template调试说明.md`。
 
 `templates/local_template_page_creator.py`：按输入方案创建可编辑文字框和矩形。`template_file_operations.py`供补全和页面创建共用PPTX限量读取、包校验和另存；不会自动连接Agent或登记输出文件。
+
+`templates/local_presentation_builder.py`：复用模板加载、页面复制和另存，按已确认计划输出成品页；`presentation_text_writer.py`递归定位页面文字框。该功能不调用成品检查或验证内容真实性；复杂资源、视觉及示例文字限制见 `docs/build_presentation调试说明.md`。
+
+`presentations/`分类存放成品内容绘制模块，`presentation_element_dispatcher.py`按type分发文字、图片、视频、音频、图表、表格和列表；媒体字节按宿主编号注入，不允许模型传任意路径。表格及列表绘制由build_presentation复用，已移除独立工具。
