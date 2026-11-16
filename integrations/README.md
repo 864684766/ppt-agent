@@ -82,3 +82,5 @@ PdfDocumentReader可注入ImageTextRecognizer/PdfPageRenderer，API按PDF格式�
 LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位于domain/presentations，数据位于models/presentations。宿主注入编号/路径及页数、大小要求，检查器有界读取并直接复用validate_office_package，再读取实际页数和文字存在性，不创建模型、渲染或OCR。对不合格文件返回规则报告，不可读取/未登记报安全执行错误。详见[检查工具说明](../docs/check_presentation调试说明.md)。
 
 `templates/local_template_completer.py`：按计划复制原模板参考页及支持的图形、文字、图片并另存；目标总页数8至12。`template_slide_copy.py`负责复制和重映射图片关联；不自动设计页面，复杂关联会拒绝。字段和测试见 `docs/complete_template调试说明.md`。
+
+`templates/local_template_page_creator.py`：按输入方案创建可编辑文字框和矩形。`template_file_operations.py`供补全和页面创建共用PPTX限量读取、包校验和另存；不会自动连接Agent或登记输出文件。
