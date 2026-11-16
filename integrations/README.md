@@ -88,3 +88,5 @@ LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位�
 `templates/local_presentation_builder.py`：复用模板加载、页面复制和另存，按已确认计划输出成品页；`presentation_text_writer.py`递归定位页面文字框。该功能不调用成品检查或验证内容真实性；复杂资源、视觉及示例文字限制见 `docs/build_presentation调试说明.md`。
 
 `presentations/`分类存放成品内容绘制模块，`presentation_element_dispatcher.py`按type分发文字、图片、视频、音频、图表、表格和列表；媒体字节按宿主编号注入，不允许模型传任意路径。表格及列表绘制由build_presentation复用，已移除独立工具。
+
+`presentation_chart_drawing.py`负责创建原生图表及数据；`presentation_chart_axis_style.py`负责坐标轴/刻度/网格线，`presentation_chart_display_style.py`负责标题/图例/标签/字体。仅支持契约列出的样式，未提供的项保留Office默认值。
