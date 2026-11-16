@@ -39,13 +39,13 @@ from integrations.templates.langchain_template_vision import LangChainTemplateVi
 
 2026-11-05：仅调整模块位置、导入、代码注释中的路径及关联文档；无依赖、配置、公开字段或业务行为变化。
 
-GotenbergPdfConverter为PPTX转PDF具体适配器，返回PDF字节；协议位于domain/templates/presentation_pdf_converter_contract.py。真实配置、磁盘读写和HTTP资源生命周期在外层组装。详见[转换调试说明](../docs/Gotenberg转换调试说明.md)。
+GotenbergPdfConverter为PPTX转PDF具体适配器，返回PDF字节；协议位于domain/templates/presentation_pdf_converter_contract.py。真实配置、磁盘读写和HTTP资源生命周期在外层组装。详见[转换调试说明](../docs/调试/Gotenberg转换调试说明.md)。
 
-PdfiumPageRenderer是本地同步PDF页面渲染器，输出PNG字节及PDF页码。它不启动Gotenberg、不调用模型；PDFium通过模块锁串行访问，调用方负责异步线程桥接和文件读写。详见[PDF页面图片调试说明](../docs/PDF页面图片调试说明.md)。
+PdfiumPageRenderer是本地同步PDF页面渲染器，输出PNG字节及PDF页码。它不启动Gotenberg、不调用模型；PDFium通过模块锁串行访问，调用方负责异步线程桥接和文件读写。详见[PDF页面图片调试说明](../docs/调试/PDF页面图片调试说明.md)。
 
 ## 诊断日志（2026-11-05）
 
-各外部操作通过diagnostics/operation_logging.py记录生命周期、耗时及安全异常位置；摘要只记录数量/状态，不记录用户正文或原始SDK异常。PDF逐页细节为DEBUG。日志初始化仍在应用/pytest/脚本入口，适配器不读取日志配置。详见[日志说明](../docs/日志使用说明.md)。
+各外部操作通过diagnostics/operation_logging.py记录生命周期、耗时及安全异常位置；摘要只记录数量/状态，不记录用户正文或原始SDK异常。PDF逐页细节为DEBUG。日志初始化仍在应用/pytest/脚本入口，适配器不读取日志配置。详见[日志说明](../docs/调试/日志使用说明.md)。
 
 ## 文档正文读取（2026-11-05）
 
@@ -53,13 +53,13 @@ PdfiumPageRenderer是本地同步PDF页面渲染器，输出PNG字节及PDF页�
 注册表只构造无状态读取器，不读配置或文件。API外层选择格式、验证内容并用线程调用；读取器关闭自己创建的文档、工作簿和原生句柄。
 PDF正文与模板PDF图片渲染共享documents/pdfium_runtime.py的PDFIUM_LOCK，避免同进程并发使用PDFium。
 DOCX使用python-docx1.2.0；XLSX使用openpyxl3.1.5；PPTX/python-pptx、PDF/PDFium沿用锁定版本。
-不执行宏、公式、OCR、模型调用或模板角色判断；具体能力边界见[对话附件读取说明](../docs/对话附件读取调试说明.md)。
+不执行宏、公式、OCR、模型调用或模板角色判断；具体能力边界见[对话附件读取说明](../docs/调试/对话附件读取调试说明.md)。
 
 ## RustFS/S3模板目录（2026-11-06）
 
 S3TemplateCatalog接收外层创建的SDK client及固定bucket，实现TemplateResourceCatalog协议；不读取Settings、不创建连接、不依赖HTTP。
 ListObjectsV2单页后按.pptx过滤，保留分页与完整object_key，不下载/上传/删除，不构造公共URL。API组装层负责closing(client)；同步操作在工作线程执行。
-boto3==1.43.125及关联约束已锁定实装。凭据仅本机.env配置，SDK DEBUG抑制。真实匿名访问ppts返回403，带凭据成功列表仍待验证；见[调试说明](../docs/模板资源列表调试说明.md)。
+boto3==1.43.125及关联约束已锁定实装。凭据仅本机.env配置，SDK DEBUG抑制。匿名访问ppts曾返回403，后续用户已成功列举和读取；见[调试说明](../docs/调试/模板资源列表调试说明.md)。
 
 ## OSS模板字节读取（2026-11-06）
 
@@ -71,21 +71,21 @@ S3TemplateFileReader实现TemplateFileReader协议，接收宿主client/bucket�
 ## 公共图片OCR（2026-11-06）
 
 RapidOcrTextRecognizer实现ImageTextRecognizer协议，接收图片字节，返回models/ocr中的文字区域、位置及置信分。模型目录由宿主注入，本地模型预先准备，不读取.env、不自动下载或保存图片。实例内复用引擎并加锁，异步线程桥接由调用方负责。ocr_image_decoder仅负责图片格式、限额、方向及透明背景处理。
-rapidocr3.10.0/onnxruntime1.31.1已锁定实装，Windows真实图片验证通过；PDF/聊天尚未接线。详见[OCR模块调试说明](../docs/OCR模块调试说明.md)。
+rapidocr3.10.0/onnxruntime1.31.1已锁定实装，Windows真实图片验证通过；当前chat中的PDF无文字页已接入OCR，混合页面图片尚未识别。详见[OCR模块调试说明](../docs/调试/OCR模块调试说明.md)。
 
 ## PDF OCR组合（2026-11-06）
 
-PdfDocumentReader可注入ImageTextRecognizer/PdfPageRenderer，API按PDF格式组装。原生文字提取释放PDFium锁后，再逐页渲染无文字页并OCR，继续正文限额。每次请求复用一个OCR实例，非PDF不受影响；未实现同页混合图片识别或全局模型缓存。当前行为以[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)为准，此前未OCR是历史状态。
+PdfDocumentReader可注入ImageTextRecognizer/PdfPageRenderer，API按PDF格式组装。原生文字提取释放PDFium锁后，再逐页渲染无文字页并OCR，继续正文限额。每次请求复用一个OCR实例，非PDF不受影响；未实现同页混合图片识别或全局模型缓存。当前行为以[PDF OCR说明](../docs/调试/PDF文字与OCR调试说明.md)为准，此前未OCR是历史状态。
 
 ## PPTX产物检查（2026-11-06）
 
-LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位于domain/presentations，数据位于models/presentations。宿主注入编号/路径及页数、大小要求，检查器有界读取并直接复用validate_office_package，再读取实际页数和文字存在性，不创建模型、渲染或OCR。对不合格文件返回规则报告，不可读取/未登记报安全执行错误。详见[检查工具说明](../docs/check_presentation调试说明.md)。
+LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位于domain/presentations，数据位于models/presentations。宿主注入编号/路径及页数、大小要求，检查器有界读取并直接复用validate_office_package，再读取实际页数和文字存在性，不创建模型、渲染或OCR。对不合格文件返回规则报告，不可读取/未登记报安全执行错误。详见[检查工具说明](../docs/调试/check_presentation调试说明.md)。
 
-`templates/local_template_completer.py`：按计划复制原模板参考页及支持的图形、文字、图片并另存；目标总页数8至12。`template_slide_copy.py`负责复制和重映射图片关联；不自动设计页面，复杂关联会拒绝。字段和测试见 `docs/complete_template调试说明.md`。
+`templates/local_template_completer.py`：按计划复制原模板参考页及支持的图形、文字、图片并另存；目标总页数8至12。`template_slide_copy.py`负责复制和重映射图片关联；不自动设计页面，复杂关联会拒绝。字段和测试见 `docs/调试/complete_template调试说明.md`。
 
 `templates/local_template_page_creator.py`：按输入方案创建可编辑文字框和矩形。`template_file_operations.py`供补全和页面创建共用PPTX限量读取、包校验和另存；不会自动连接Agent或登记输出文件。
 
-`templates/local_presentation_builder.py`：复用模板加载、页面复制和另存，按已确认计划输出成品页；`presentation_text_writer.py`递归定位页面文字框。该功能不调用成品检查或验证内容真实性；复杂资源、视觉及示例文字限制见 `docs/build_presentation调试说明.md`。
+`templates/local_presentation_builder.py`：复用模板加载、页面复制和另存，按已确认计划输出成品页；`presentation_text_writer.py`递归定位页面文字框。该功能不调用成品检查或验证内容真实性；复杂资源、视觉及示例文字限制见 `docs/调试/build_presentation调试说明.md`。
 
 `presentations/`分类存放成品内容绘制模块，`presentation_element_dispatcher.py`按type分发文字、图片、视频、音频、图表、表格和列表；媒体字节按宿主编号注入，不允许模型传任意路径。表格及列表绘制由build_presentation复用，已移除独立工具。
 

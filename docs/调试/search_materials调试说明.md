@@ -33,7 +33,7 @@ uv run --locked python -m pytest tests/test_search_materials.py::test_tool_retur
 | `tools/materials/search_materials_tool.py` | 项目/快照绑定、@tool入口及公开结果组装 |
 | `tests/test_search_materials.py` | 两项可打印测试与样本 |
 
-总体导航见 [模型索引](../models/README.md)。依赖方向是工具 → 纯业务检索 → 数据及纯校验；内部检索不依赖LangChain、FastAPI、Pydantic、Office或真实文件。
+总体导航见 [模型索引](../../models/README.md)。依赖方向是工具 → 纯业务检索 → 数据及纯校验；内部检索不依赖LangChain、FastAPI、Pydantic、Office或真实文件。
 
 ## 模型调用参数
 
@@ -93,7 +93,7 @@ total_matches=2是命中块数；第一块命中两个词，也只计一块。
 - 按来源ID、页码、块ID排序；未知页码排在已知页码之后，不做相关性排名。
 - 长块围绕最早命中截取窗口；text_truncated表示该块未完整返回。其他命中词可能在窗口外，matched_queries仍描述完整块。
 - total_matches是全部命中块数；truncated仅表示max_results限制丢弃了后续块。首版没有offset分页，可收窄来源/关键词或在上限内调大max_results。
-- source_id、version、block_id共同定位原块；page只记录真实原页码，不能用块序号猜页码。`read_material`尚未实现。
+- source_id、version、block_id共同定位原块；page只记录真实原页码，不能用块序号猜页码。`read_material`工具已独立实现，但当前chat的资料尚未接入这些工具。
 - 未登记的来源、显式指定未ready来源、选中ready来源的正文未载入，明确报错；不当作空命中。若没有任何选中ready资料或关键词没有匹配，则返回空matches。
 - 组装时检查正文关联当前项目的ready资料、版本一致、同来源版本块ID唯一。宿主数据错误抛ValueError；模型参数错误由Pydantic抛ValidationError，执行期业务错误适配为ToolException。当前没有HTTP/SSE错误映射。
 

@@ -98,13 +98,13 @@ ChatAttachmentInput由接收层创建，包含原始bytes（禁止序列化/日�
 
 解析模块提供MaterialFragment(project_id/source_id/version/block_id/text/page)，工具宿主同时提供目录摘要与正文快照。模型参数用SearchMaterialsInput校验，纯业务检索生成MaterialSearchResult，工具选择公开字段生成SearchMaterialsOutput。正文与目录版本必须一致，片段只能关联当前项目ready来源。page从1开始，未知为None；块ID由解析模块生成，不由搜索工具猜测。
 
-MaterialFragment及内部检索结果为标准库dataclass；SearchMaterialsInput为Pydantic，公开输出为TypedDict。资料正文与目录的正式登记仍未实现，当前通过宿主传样本验证工具；没有新增数据库或全局Store。详情见[search_materials调试说明](../docs/search_materials调试说明.md)。
+MaterialFragment及内部检索结果为标准库dataclass；SearchMaterialsInput为Pydantic，公开输出为TypedDict。资料正文与目录的正式登记仍未实现，当前通过宿主传样本验证工具；没有新增数据库或全局Store。详情见[search_materials调试说明](../docs/调试/search_materials调试说明.md)。
 
 ## 第三个工具：正文读取数据流（2026-11-02）
 
 宿主提供MaterialSummary与MaterialFragment快照 → ReadMaterialInput校验模型定位 → material_reader.read_project_material返回MaterialReadResult → 工具选择公开字段生成ReadMaterialOutput。
 
-MaterialReadResult由读取业务创建、工具适配使用，包含内部fragment，不直接公开；公开输出不含project_id或本机路径。ReadMaterialInput为Pydantic，ReadMaterialOutput与MaterialReadLocation为TypedDict。共享的validate_material_content_data放在domain/materials/material_validator.py，检索和读取各自引用它，不互相依赖。详见[read_material调试说明](../docs/read_material调试说明.md)。
+MaterialReadResult由读取业务创建、工具适配使用，包含内部fragment，不直接公开；公开输出不含project_id或本机路径。ReadMaterialInput为Pydantic，ReadMaterialOutput与MaterialReadLocation为TypedDict。共享的validate_material_content_data放在domain/materials/material_validator.py，检索和读取各自引用它，不互相依赖。详见[read_material调试说明](../docs/调试/read_material调试说明.md)。
 
 ## 联网候选与资料来源的边界（2026-11-02）
 
@@ -114,23 +114,23 @@ candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录sour
 
 ## 字段说明约定（2026-11-03）
 
-当前实体与TypedDict输出逐字段提供中文注释；输入通过Field(description=...)解释。阅读类型时先看字段附近注释，区分条数/字符数、None/null、版本与页码、候选ID与来源ID。源码注释不会自动传给模型，必要的返回字段含义同时写入工具description。具体搜索返回字段见[联网搜索调试说明](../docs/search_web调试说明.md)。
+当前实体与TypedDict输出逐字段提供中文注释；输入通过Field(description=...)解释。阅读类型时先看字段附近注释，区分条数/字符数、None/null、版本与页码、候选ID与来源ID。源码注释不会自动传给模型，必要的返回字段含义同时写入工具description。具体搜索返回字段见[联网搜索调试说明](../docs/调试/search_web调试说明.md)。
 
 ## 网页读取数据流（2026-11-03）
 
-HttpWebpageReader创建WebpageContent → WebpageReader协议返回业务 → read_webpage创建WebpageReadResult → fetch_webpage工具组装FetchWebpageOutput。FetchWebpageInput由运行时校验，输入说明通过Field进入Schema。内部dataclass只依赖标准库，不反向依赖执行层；公开输出不含本机路径或项目内部状态。没有创建资料source_id/版本或新的Store。字段及真实搜索测试见[网页读取调试说明](../docs/fetch_webpage调试说明.md)。
+HttpWebpageReader创建WebpageContent → WebpageReader协议返回业务 → read_webpage创建WebpageReadResult → fetch_webpage工具组装FetchWebpageOutput。FetchWebpageInput由运行时校验，输入说明通过Field进入Schema。内部dataclass只依赖标准库，不反向依赖执行层；公开输出不含本机路径或项目内部状态。没有创建资料source_id/版本或新的Store。字段及真实搜索测试见[网页读取调试说明](../docs/调试/fetch_webpage调试说明.md)。
 
 ## 技能发现数据流（2026-11-04）
 
-LocalSkillCatalog扫描项目根目录skills/，parse_skill_metadata创建SkillSummary，目录返回SkillSummary元组（不合格式的技能记录日志并跳过）→工具调用filter_skills→组装SkillListItem/ListSkillsOutput。内部dataclass只依赖标准库；输入Pydantic校验keyword，输出TypedDict不自动校验。当前不建立技能注册Store或正文快照、不执行脚本；缺失版本返回None，不与资料version混淆。模型不选择本机目录。未来技能市场通过服务接口及适配器接入，现有协议保留摘要加载边界，具体远程契约待开发时确定。详见[list_skills调试说明](../docs/list_skills调试说明.md)。
+LocalSkillCatalog扫描项目根目录skills/，parse_skill_metadata创建SkillSummary，目录返回SkillSummary元组（不合格式的技能记录日志并跳过）→工具调用filter_skills→组装SkillListItem/ListSkillsOutput。内部dataclass只依赖标准库；输入Pydantic校验keyword，输出TypedDict不自动校验。当前不建立技能注册Store或正文快照、不执行脚本；缺失版本返回None，不与资料version混淆。模型不选择本机目录。未来技能市场通过服务接口及适配器接入，现有协议保留摘要加载边界，具体远程契约待开发时确定。详见[list_skills调试说明](../docs/调试/list_skills调试说明.md)。
 
 ## 技能完整读取（2026-11-04）
 
-ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协议返回普通str，工具显式组装ReadSkillOutput（skill_id/resource_path/content）。输入来源为list_skills编号，输出供模型阅读，不含本机绝对路径。正文包含YAML头部，不截断、不展开资源、不执行脚本；无新内部结果实体、缓存或状态。共享头部读取位于integrations/skills/skill_header_reader.py。详见[read_skill调试说明](../docs/read_skill调试说明.md)。
+ReadSkillInput由运行时校验skill_id；LocalSkillReader通过SkillReader协议返回普通str，工具显式组装ReadSkillOutput（skill_id/resource_path/content）。输入来源为list_skills编号，输出供模型阅读，不含本机绝对路径。正文包含YAML头部，不截断、不展开资源、不执行脚本；无新内部结果实体、缓存或状态。共享头部读取位于integrations/skills/skill_header_reader.py。详见[read_skill调试说明](../docs/调试/read_skill调试说明.md)。
 
 ## 模板结构数据流（2026-11-04）
 
-宿主登记template_id到Path映射→LocalTemplateInspector读取真实文件并创建TemplateStructure→工具沿用公开事实返回InspectTemplateOutput。TemplateStructure及嵌套TypedDict本身不包含内部路径或SDK对象，因而共用于协议与输出，不复制同形内部实体。Pydantic仅校验工具输入，TypedDict输出不自动校验。模型通过说明理解坐标、关联和限制；页面角色留给后续Agent判断。真实样本登记目前在测试入口，正式上传登记尚未接线。详见[inspect_template调试说明](../docs/inspect_template调试说明.md)。
+宿主登记template_id到Path映射→LocalTemplateInspector读取真实文件并创建TemplateStructure→工具沿用公开事实返回InspectTemplateOutput。TemplateStructure及嵌套TypedDict本身不包含内部路径或SDK对象，因而共用于协议与输出，不复制同形内部实体。Pydantic仅校验工具输入，TypedDict输出不自动校验。模型通过说明理解坐标、关联和限制；页面角色留给后续Agent判断。真实样本登记目前在测试入口，正式上传登记尚未接线。详见[inspect_template调试说明](../docs/调试/inspect_template调试说明.md)。
 
 模板阅读提示（2026-11-05）：`TemplateSlide`是实际页面，`TemplateLayout`是可复用版式，`TemplateMaster`是管理版式的上层设计；三者数量无需一致。详见模板结构文件的逐字段注释及模板调试说明中的初学者章节。本次仅补充说明，类型及公开字段未改变。
 
@@ -144,11 +144,11 @@ Gotenberg转换（2026-11-05）：输入pptx_bytes: bytes及file_name: str，输
 
 ## PDF页面图片（2026-11-05）
 
-[PdfPageImage、PdfRenderResult](templates/pdf_page_image.py)：渲染器创建的不可变内部结果，测试及未来页面分析使用；定义PNG字节、PDF页码、像素尺寸、文件指纹、总页数和DPI，不包含PPT页码或磁盘路径。标准库dataclass不依赖PDFium、Pillow或Agent。不是Agent工具输入输出。字段详见Store清单，操作见[PDF页面图片调试说明](../docs/PDF页面图片调试说明.md)。
+[PdfPageImage、PdfRenderResult](templates/pdf_page_image.py)：渲染器创建的不可变内部结果，测试及未来页面分析使用；定义PNG字节、PDF页码、像素尺寸、文件指纹、总页数和DPI，不包含PPT页码或磁盘路径。标准库dataclass不依赖PDFium、Pillow或Agent。不是Agent工具输入输出。字段详见Store清单，操作见[PDF页面图片调试说明](../docs/调试/PDF页面图片调试说明.md)。
 
 ## 日志诊断字段（2026-11-05）
 
-request_id、operation_id等是diagnostics管理的运行上下文与日志摘要，不是业务实体或LangGraph状态，不新建数据模型。HTTP响应头X-Request-ID仅用于查日志；字段解释见[字段清单](../docs/Store清单.html)及[日志说明](../docs/日志使用说明.md)。本次未改变工具输入输出字段。
+request_id、operation_id等是diagnostics管理的运行上下文与日志摘要，不是业务实体或LangGraph状态，不新建数据模型。HTTP响应头X-Request-ID仅用于查日志；字段解释见[字段清单](../docs/Store清单.html)及[日志说明](../docs/调试/日志使用说明.md)。本次未改变工具输入输出字段。
 
 ## 人工提问数据定义（2026-11-05，仅预留）
 
@@ -160,7 +160,7 @@ request_id、operation_id等是diagnostics管理的运行上下文与日志摘�
 
 旧models/uploads及FileUploadRequest/Response已移除；现由chat/chat_request.py、chat/chat_response.py和documents/document_content.py描述输入输出。
 实际读取器归integrations/documents，纯内容/Office包检查归domain/uploads；文件检查能力仍保留，移除的是独立上传HTTP入口。
-详见[对话附件读取说明](../docs/对话附件读取调试说明.md)。
+详见[对话附件读取说明](../docs/调试/对话附件读取调试说明.md)。
 
 ## RustFS模板资源（2026-11-06）
 
@@ -181,12 +181,12 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 
 ## 公共图片OCR（2026-11-06）
 
-[ocr/ocr_result.py](ocr/ocr_result.py)定义OcrTextRegion和OcrResult。由integrations/ocr的识别器创建，供测试与未来文档读取器使用，当前为内部返回数据，不是HTTP、Agent或LangGraph状态。字段包括文字、四边形像素位置、置信分、EXIF校正后尺寸；text属性派生全文。来源ID/页码由调用方关联，不塞入OCR结果。协议与OcrError位于domain/ocr，不放进models。详见[字段清单](../docs/Store清单.html#ocr-fields)与[OCR调试说明](../docs/OCR模块调试说明.md)。
+[ocr/ocr_result.py](ocr/ocr_result.py)定义OcrTextRegion和OcrResult。由integrations/ocr的识别器创建，供测试与未来文档读取器使用，当前为内部返回数据，不是HTTP、Agent或LangGraph状态。字段包括文字、四边形像素位置、置信分、EXIF校正后尺寸；text属性派生全文。来源ID/页码由调用方关联，不塞入OCR结果。协议与OcrError位于domain/ocr，不放进models。详见[字段清单](../docs/Store清单.html#ocr-fields)与[OCR调试说明](../docs/调试/OCR模块调试说明.md)。
 
 ## PDF OCR读取字段语义（2026-11-06）
 
-未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。ChatReadResponse.model_called仍表示是否调用对话/云端视觉大模型，本地OCR不将其置true。见[PDF OCR说明](../docs/PDF文字与OCR调试说明.md)。
+未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。ChatReadResponse.model_called仍表示是否调用对话/云端视觉大模型，本地OCR不将其置true。见[PDF OCR说明](../docs/调试/PDF文字与OCR调试说明.md)。
 
 ## PPTX检查工具（2026-11-06）
 
-[presentations/check_presentation_contract.py](presentations/check_presentation_contract.py)集中定义CheckPresentationInput（模型输入artifact_id）、CheckPresentationOutput及PresentationCheckItem（检查器创建、工具公开）。输入由Pydantic校验，TypedDict结果只描述类型；工具不公开宿主路径/SDK对象。passed只覆盖本轮必过规则；未知值null，未实现规则not_checked。PresentationChecker协议和PresentationCheckError在domain/presentations。字段详见[字段清单](../docs/Store清单.html#presentation-check-fields)及[调试说明](../docs/check_presentation调试说明.md)。
+[presentations/check_presentation_contract.py](presentations/check_presentation_contract.py)集中定义CheckPresentationInput（模型输入artifact_id）、CheckPresentationOutput及PresentationCheckItem（检查器创建、工具公开）。输入由Pydantic校验，TypedDict结果只描述类型；工具不公开宿主路径/SDK对象。passed只覆盖本轮必过规则；未知值null，未实现规则not_checked。PresentationChecker协议和PresentationCheckError在domain/presentations。字段详见[字段清单](../docs/Store清单.html#presentation-check-fields)及[调试说明](../docs/调试/check_presentation调试说明.md)。
