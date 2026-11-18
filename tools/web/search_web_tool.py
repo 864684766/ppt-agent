@@ -13,14 +13,20 @@ from models.web.search_web_contract import SearchWebInput, SearchWebOutput, WebS
 def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
     """绑定外层注入的搜索客户端；不持有项目目录，不负责关闭连接。
 
-    使用await tool.ainvoke(...)调用；模型只提供查询词和条数，不能更换密钥。
-    创建工具不会发请求，只有实际调用时才执行一次外部搜索。
+    Args:
+        client: 实现WebSearchClient协议的客户端，已由外层绑定搜索服务及引擎；
+            本函数借用它，不负责创建或关闭底层连接。
+
+    Returns:
+        LangChain BaseTool。通过await tool.ainvoke({"query": "..."})调用；
+        模型可见名称、用途及参数说明，不能在入参中更换引擎或密钥。
+    创建工具不会发请求；一次工具调用只执行一次搜索，不自动筛选或重试。
     """
 
     @tool("search_web", args_schema=SearchWebInput, description=(
         "需要发现外部主题资料或可引用网页时使用互联网搜索。"
         "返回query（实际搜索词）、items（候选网页列表）和returned_count（本次返回条数，非全网总数）。"
-        "每个候选含candidate_id（URL生成的候选编号）、title（网页标题）、url（网页地址）、snippet（搜索摘要）。snippet不是完整原文或事实核实结果；"
+        "每个候选含candidate_id（URL生成的候选编号）、title（网页标题）、url（网页地址）、snippet（搜索摘要）、engines（实际返回此网页的搜索引擎名称列表，未知为空）。snippet不是完整原文或事实核实结果；"
         "candidate_id不能用于read_material，不会自动登记source_id。"
         "可用fetch_webpage读取候选url的正文；正文登记为项目资料尚未实现。"
         "查询已上传或已登记资料应使用search_materials；不搜索PPT设计模板。"
@@ -28,7 +34,11 @@ def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
     ))
     @log_operation("tool.search_web")
     async def search_web(query: str, max_results: int = 5) -> SearchWebOutput:
-        """异步等待外部搜索，避免阻塞其他请求；业务错误转换成工具错误。"""
+        """执行一次搜索并返回公开字段；正常零结果返回空items。
+
+        query是搜索词，max_results是返回候选上限；Pydantic输入模型先校验。
+        搜索或业务校验失败转为ToolException，供LangChain运行时或工作流处理。
+        """
         try:
             candidates = await search_web_candidates(client=client, query=query, max_results=max_results)
         except (ValueError, WebSearchError) as error:
@@ -39,6 +49,7 @@ def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
             items.append({
                 "candidate_id": item.candidate_id, "title": item.title,
                 "url": item.url, "snippet": item.snippet,
+                "engines": list(item.engines),
             })
         return {"query": query.strip(), "items": items, "returned_count": len(items)}
 

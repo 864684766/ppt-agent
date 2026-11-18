@@ -24,7 +24,7 @@ class SearxngSearchClient:
 
     def __init__(
         self, *, client: httpx.AsyncClient, base_url: str,
-        engines: str = "sogou", timeout_seconds: float = 30,
+        engines: str = "", timeout_seconds: float = 30, language: str = "",
     ) -> None:
         """保存外层配置，不创建连接或立即搜索。
 
@@ -32,6 +32,7 @@ class SearxngSearchClient:
         base_url：SearXNG 根地址，可含部署子路径，不是某个结果网页。
         engines：逗号分隔的普通网页引擎 name；空字符串使用服务器默认配置。
         timeout_seconds：HTTP 各阶段等待超时秒数，不是整个 Agent 的时限。
+        language：可选SearXNG语言地区代码，例如zh-CN；留空不发送该参数。
         配置无效抛 ValueError；搜索失败统一抛不含上游原文的 WebSearchError。
         """
         address = base_url.strip().rstrip("/")
@@ -45,16 +46,27 @@ class SearxngSearchClient:
         self._search_url = address + "/search"
         self._engines = ",".join(name.strip() for name in engines.split(",") if name.strip())
         self._timeout_seconds = timeout_seconds
+        self._language = language.strip()
 
     @log_operation("web.search")
     async def search(self, *, query: str, max_results: int) -> tuple[WebSearchCandidate, ...]:
-        """请求 JSON，再转换为统一候选；取消异常不捕获，由调用栈传播。"""
-        # categories=general 避免把图片、视频列表混进普通网页结果。
-        # SearXNG 没有这里所需的统一条数参数，max_results 在解析后本地截取。
+        """请求SearXNG的JSON接口并返回不可变候选元组。
+
+        query是搜索词；max_results是本地转换后保留的最大条数，不是页数。
+        客户端由调用方管理；超时、连接和HTTP异常转换为安全的WebSearchError。
+        正常无结果返回空元组；取消异常不捕获，沿异步调用栈传播。
+        """
+        # 指定引擎时不能同时传分类：SearXNG会合并分类默认引擎。
+        # 没指定时选择普通网页分类；max_results在解析结果后本地截取。
         logger.info("event=search_input query_chars=%s max_results=%s", len(query), max_results)
-        params = {"q": query, "format": "json", "categories": "general"}
+        params = {"q": query, "format": "json"}
         if self._engines:
             params["engines"] = self._engines
+        else:
+            params["categories"] = "general"
+        if self._language:
+            params["language"] = self._language
+        # raise_for_status将非2xx HTTP响应转成异常；并不检查网页主题是否相关。
         try:
             response = await self._client.get(
                 self._search_url, params=params, timeout=self._timeout_seconds,
@@ -82,7 +94,9 @@ def parse_searxng_results(payload: object, *, max_results: int) -> tuple[WebSear
 
     跳过无有效 HTTP(S) 地址的条目，按去首尾空白后的完整 URL 去重。
     不移除 URL 查询参数，以免把不同文章误合并。标题/摘要缺失时使用空字符串。
-    无候选且引擎报告故障时明确报错，避免将服务故障伪装成正常零命中。
+    payload是接口反序列化后的数据；max_results为最多返回条数。
+    返回WebSearchCandidate元组；结构无效或无候选且引擎报告故障时抛
+    WebSearchError，避免将服务故障伪装成正常零命中。
     """
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise WebSearchError("搜索服务返回结构异常：缺少 results 列表。")
@@ -103,11 +117,22 @@ def parse_searxng_results(payload: object, *, max_results: int) -> tuple[WebSear
         if not valid_url or url in seen_urls:
             continue
         seen_urls.add(url)
+        # 对完整URL计算SHA-256，生成候选编号；它不是已登记资料的source_id。
+        # 优先读取合并结果的engines列表；旧版/单引擎结果仅有engine时使用它。
+        # 两者均无可靠名称就返回空元组，不从配置推测实际来源。
+        raw_engines = item.get("engines")
+        source_engines = tuple(dict.fromkeys(
+            name.strip() for name in raw_engines
+            if isinstance(name, str) and name.strip()
+        )) if isinstance(raw_engines, list) else ()
+        if not source_engines and isinstance(item.get("engine"), str) and item["engine"].strip():
+            source_engines = (item["engine"].strip(),)
         candidates.append(WebSearchCandidate(
             candidate_id="web_" + sha256(url.encode("utf-8")).hexdigest(),
             title=item["title"].strip() if isinstance(item.get("title"), str) else "",
             url=url,
             snippet=item["content"].strip() if isinstance(item.get("content"), str) else "",
+            engines=source_engines,
         ))
         if len(candidates) >= max_results:
             break

@@ -20,6 +20,7 @@
 | 资料 | read_material 工具输入与公开输出 | ReadMaterialInput、ReadMaterialOutput、MaterialReadLocation | [read_material_contract.py](materials/read_material_contract.py) |
 | 联网 | 内部候选网页 | WebSearchCandidate | [web_search_candidate.py](web/web_search_candidate.py) |
 | 联网 | search_web输入与公开输出 | SearchWebInput、SearchWebOutput、WebSearchItem | [search_web_contract.py](web/search_web_contract.py) |
+| 联网 | 独立网页资料收集的规划、审查及图状态 | SearchPlan、SearchReview、ResearchCandidate、ResearchState | [research_contract.py](web/research_contract.py) |
 | 联网 | fetch_webpage输入与公开输出 | FetchWebpageInput、FetchWebpageOutput | [fetch_webpage_contract.py](web/fetch_webpage_contract.py) |
 | 联网 | 内部网页内容与读取结果 | WebpageContent、WebpageReadResult | [webpage_content.py](web/webpage_content.py) |
 | 技能 | 内部技能摘要 | SkillSummary | [skill_summary.py](skills/skill_summary.py) |
@@ -110,7 +111,7 @@ MaterialReadResult由读取业务创建、工具适配使用，包含内部fragm
 
 SearXNG适配器将供应商结果创建为WebSearchCandidate → WebSearchClient协议交付业务 → search_web工具选择公开字段返回SearchWebOutput。SearchWebInput由运行时校验模型参数。实体为标准库dataclass，输入为Pydantic，公开输出为TypedDict；模型目录不导入执行层。已接入真实SearXNG适配器。
 
-candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录source_id，不承诺创建可恢复的Store。title/url/snippet不代表已抓取正文。fetch_webpage已能抓取静态网页；资料登记尚未接线，不能把工具结果当作可供共用资料工具使用的来源。当前不登记、不落盘、不保存查询历史。
+candidate_id由URL的SHA-256生成，标识候选链接，不是资料目录source_id，不承诺创建可恢复的Store。engines记录SearXNG实际报告的来源列表，未知为空；研究流程的search_strategies另记请求策略。title/url/snippet不代表已抓取正文。fetch_webpage已能抓取静态网页；资料登记尚未接线，不能把工具结果当作可供共用资料工具使用的来源。当前不登记、不落盘、不保存查询历史。
 
 ## 字段说明约定（2026-11-03）
 

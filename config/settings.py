@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     # SearXNG根地址，空值表示未配置；仅在外层创建搜索适配器时使用。
     searxng_base_url: str = Field(default="", description="SearXNG服务根地址，留空不启用。")
     # 普通网页默认引擎name，英文逗号分隔；空值使用服务器默认引擎。
-    searxng_default_engines: str = Field(default="sogou", description="普通网页引擎名称，默认sogou。")
+    searxng_default_engines: str = Field(default="", description="普通网页引擎名称；默认空，由服务器选择general分类引擎。")
     # 预留的Agent可选普通网页引擎name，英文逗号分隔；尚未接入工具参数校验。
     # 它不是服务器全部引擎清单，必须与SearXNG settings.yml中已启用的name一致。
     searxng_allowed_engines: str = Field(

@@ -1,6 +1,16 @@
 # 第四个工具：search_web
 
-状态（2026-11-03）：SearXNG适配器、配置读取、独立真实调用入口及JSON定义检查与真实搜索集成验证已完成。真实服务器使用sogou完成一次搜索，返回3条候选，其中包括https://dg.cnsoc.org/。HTTP接口、模型选工具循环、网页正文抓取不在本任务范围。
+状态（2026-11-17）：搜索工具已供独立多引擎研究图调用；chat与网页正文核验尚未接入该图。真实联网案例和本地流程检查统一放在tests/test_research_workflow.py：运行test_real_research会访问真实模型与搜索服务，其余流程检查使用替身。
+
+多引擎流程首轮不传engines，由SearXNG的general分类选择引擎；结果不足时根据检查反馈调整搜索词，并依次尝试外层配置的引擎。`max_attempts`是包含首轮的总搜索次数，达到目标数量或次数用尽即停止。当前测试入口需要读取真实模型和SearXNG，允许列表从`.env`读取。
+
+资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；零候选时可选`provide_materials`或`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
+
+**阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由图指定引擎并由代码调用工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
+
+`tests/test_search_web.py` 中 `test_searxng_raw_response` 只发送q和format，打印服务器原始JSON，不截取也不经过工具，便于与相同参数的浏览器地址对照。`test_tool_return_result` 执行项目工具：引擎和语言由测试变量指定，服务端响应会被转换并按max_results（1至10）截取；两次独立请求可能因上游状态、网络或排序发生变化。原始结果可含图片和视频及其专有字段；工具只公开统一候选字段，不能视为完整媒体搜索结果。
+
+2026-11-17实际运行六个主题（两次搜索、目标两条，使用bing与baidu kaifa）：膳食指南一条、本草纲目黄芪零条、劳动合同解除达到目标、身体活动建议达到目标、垃圾分类达到目标；Python官方文档初次因模型反馈超过长度限制失败，修改为接收后截取反馈，再单独重测，结果零条且bing本次连接失败。通过代表图运行结束，不能证明来源真实准确；博客候选尚需正文及权威性核查。
 
 ## 配置和运行
 
@@ -13,7 +23,9 @@ SEARXNG_ALLOWED_ENGINES=sogou,bing,360search
 WEB_SEARCH_TIMEOUT_SECONDS=30
 ```
 
-服务地址不加/search，可含部署子路径；不填写server.secret_key。地址默认空，真实调用时未配置会明确报错。`SEARXNG_DEFAULT_ENGINES`是未指定本次引擎时的默认值；`SEARXNG_ALLOWED_ENGINES`是以后Agent工具参数允许选择的范围。允许列表只做配置边界，必须与服务器settings.yml中的name一致，不代表每个引擎当前可用。二者都用英文逗号分隔；空默认值使用服务器默认配置，允许列表不应为空。提示词将根据允许列表告诉模型范围，工具运行时仍需校验。本次工具尚未开放engines参数。超时为HTTP各阶段等待秒数，范围(0,120]，不是整个任务总时限。系统环境变量优先于.env，再使用Settings默认值。不会自动修改用户的.env。
+服务地址不加/search；不填写server.secret_key。`SEARXNG_DEFAULT_ENGINES`为空时由服务器general分类选择；多引擎流程使用`SEARXNG_ALLOWED_ENGINES`组装独立客户端，名称必须与服务器配置一致。本次工具的模型参数仍只有query和max_results，引擎由宿主绑定；系统环境变量优先于.env。
+
+在 `tests/test_search_web.py` 文件顶部修改 `TEST_ENGINES`：`None`读取.env、`""`使用服务器默认、`"bing"`或`"baidu kaifa"`指定引擎。`TEST_LANGUAGE="zh-CN"`发送中文语言参数，设为空则由服务器决定；这两个变量只影响当前测试，不修改.env。修改 `arguments` 可改变搜索词与条数（最多10条）。
 
 从项目根目录运行真实搜索（会访问网络）：
 
@@ -25,7 +37,7 @@ PyCharm可将运行配置设为模块examples.search_web_demo，工作目录设�
 
 ## 工具参数和输出
 
-模型只传query和max_results，不选择服务器地址、引擎或超时。query去首尾空白后1–1000字符；max_results为1–10整数，默认5。每次只请求一次，不重试、不翻页、不扩词、不调用模型判断相关性。固定发送format=json、categories=general，配置非空时发送engines。
+工具参数为query和max_results，不选择服务器地址、引擎或超时；引擎由宿主组装客户端绑定。每次只请求一次，不重试、不翻页、不自行判断相关性。指定引擎时只发engines；未指定时发送categories=general，由服务器选择。两个Agent的独立图负责多轮搜索与摘要筛选。
 
 | 字段 | 含义与边界 |
 | --- | --- |
@@ -35,6 +47,7 @@ PyCharm可将运行配置设为模块examples.search_web_demo，工作目录设�
 | items[].title | 上游网页标题，缺失为空字符串，不代表内容已核实 |
 | items[].url | 有效HTTP/HTTPS网页地址；尚未抓取正文 |
 | items[].snippet | SearXNG的content搜索摘要，缺失为空字符串，不是完整正文 |
+| items[].engines | SearXNG实际报告的来源引擎名称列表；多个引擎合并时可能多项，缺失时为空列表 |
 | returned_count | 实际items条数，可能小于max_results，不是全网结果总量 |
 
 适配器保留上游顺序，跳过无效地址，按去首尾空白后的完整URL去重，再截取max_results条。不会移除查询参数；不进行语义过滤、权威性筛选或score阈值筛选。score不作为相似度返回。不会上传、解析或登记资料，不新建Store，Store结构未变化。
