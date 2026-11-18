@@ -6,9 +6,8 @@ from typing import Any, Literal, cast
 from langchain_core.tools import ToolException
 from langgraph.graph import END, START, StateGraph
 
-from agents.research_query_agent import ResearchQueryAgent
-from agents.research_review_agent import ResearchReviewAgent
 from diagnostics.operation_logging import log_operation
+from domain.web.research_agents_contract import ResearchQueryAgentContract, ResearchReviewAgentContract
 from models.web.research_contract import ResearchCandidate, ResearchState
 
 
@@ -23,7 +22,7 @@ class WebResearchWorkflow:
     当前只处理搜索标题与摘要，未读取正文、验证事实或接入chat接口。
     """
 
-    def __init__(self, *, query_agent: ResearchQueryAgent, review_agent: ResearchReviewAgent,
+    def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract,
                  engines: tuple[str, ...]) -> None:
         """创建图但不运行；调用run才会请求模型或搜索服务。
 

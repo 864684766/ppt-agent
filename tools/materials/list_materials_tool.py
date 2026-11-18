@@ -45,14 +45,9 @@ def create_list_materials_tool(
     @tool(
         "list_materials",
         description=(
-            "当需要知道当前项目有哪些已登记业务参考资料、取得source_id、"
-            "查看解析状态，或按来源/名称筛选资料目录时使用。"
-            "包括上传业务文件和已抓取并登记的网页正文；不含设计模板、"
-            "技能、未关联历史文件或搜索候选链接。只返回目录摘要，不返回正文，"
-            "不上传、不联网搜索。来源或source_id已知时不必为了走流程先调用它。"
-            "返回items、筛选后总数total和下一页偏移next_offset；"
-            "next_offset为null表示结束。status为pending/ready/failed分别表示"
-            "待解析/可供后续读取/解析失败，列出来不等于正文已可读取。"
+            "列出已登记的参考资料，按来源或名称筛选，获取source_id和解析状态；不返回正文或搜索互联网。"
+            "结果含items、筛选总数total及下一页next_offset（null表示结束）。"
+            "status为pending、ready、failed，分别表示待解析、可读取和解析失败；模板、技能及未登记搜索候选不在目录中。"
         ),
         args_schema=ListMaterialsInput,
     )

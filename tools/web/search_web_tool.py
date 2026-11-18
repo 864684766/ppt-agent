@@ -24,13 +24,11 @@ def create_search_web_tool(*, client: WebSearchClient) -> BaseTool:
     """
 
     @tool("search_web", args_schema=SearchWebInput, description=(
-        "需要发现外部主题资料或可引用网页时使用互联网搜索。"
-        "返回query（实际搜索词）、items（候选网页列表）和returned_count（本次返回条数，非全网总数）。"
-        "每个候选含candidate_id（URL生成的候选编号）、title（网页标题）、url（网页地址）、snippet（搜索摘要）、engines（实际返回此网页的搜索引擎名称列表，未知为空）。snippet不是完整原文或事实核实结果；"
-        "candidate_id不能用于read_material，不会自动登记source_id。"
-        "可用fetch_webpage读取候选url的正文；正文登记为项目资料尚未实现。"
-        "查询已上传或已登记资料应使用search_materials；不搜索PPT设计模板。"
-        "每次只搜索一次，不自动扩词、重试或循环；空items表示本次没有候选。"
+        "联网搜索主题资料，返回query（搜索词）、items（网页候选）和returned_count（返回条数）。"
+        "每项包含candidate_id（候选编号）、title（标题）、url（地址）、snippet（搜索摘要）和engines（来源引擎列表）。"
+        "摘要不是正文或事实核验结果；读取网页请将url传给fetch_webpage。"
+        "candidate_id不是已登记资料的source_id，不能用于read_material；本地资料检索使用search_materials。"
+        "每次调用搜索一次，空items表示没有候选。"
     ))
     @log_operation("tool.search_web")
     async def search_web(query: str, max_results: int = 5) -> SearchWebOutput:

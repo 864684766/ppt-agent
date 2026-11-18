@@ -2,7 +2,7 @@
 <div class="notice">当前12项有独立基础实现，但尚未接入真实Agent工具循环；生产数据、模板与产物登记也需要在宿主接线。ask_user当前仅保留部分数据定义，不是可调用工具。</div>
 <table><tr><th>分类</th><th>工具与用途</th><th>边界及调试</th></tr>
 <tr><td>技能</td><td>list_skills：发现技能；read_skill：读取SKILL.md</td><td>不执行脚本或分析依赖；<a href="调试/list_skills调试说明.md">发现</a>、<a href="调试/read_skill调试说明.md">读取</a>。</td></tr>
-<tr><td>联网</td><td>search_web：搜索候选网页；fetch_webpage：读取选中页面正文</td><td>搜索不等于读取；真实搜索依赖SearXNG。<a href="调试/search_web调试说明.md">搜索</a>、<a href="调试/fetch_webpage调试说明.md">网页</a>。</td></tr>
+<tr><td>联网</td><td>search_web：搜索候选网页；fetch_webpage：读取选中页面正文</td><td>搜索候选用URL交给fetch_webpage；candidate_id不能代替已登记资料的source_id。搜索不等于读取或核实；真实搜索依赖SearXNG。<a href="调试/search_web调试说明.md">搜索</a>、<a href="调试/fetch_webpage调试说明.md">网页</a>。</td></tr>
 <tr><td>已导入资料</td><td>list_materials：资料目录；search_materials：检索正文；read_material：读取定位内容</td><td>资料可以来自上传或已导入网页，正式资料登记尚未接到chat；不是在线搜索。<a href="调试/list_materials调试说明.md">目录</a>、<a href="调试/search_materials调试说明.md">检索</a>、<a href="调试/read_material调试说明.md">读取</a>。</td></tr>
 <tr><td>模板</td><td>inspect_template：提取页面、母版、版式及对象；complete_template：按指定参考页复制补充；create_template_page：按明确方案绘制页面</td><td>结构事实不等于角色判断；复杂对象、样式、视觉效果有限制。<a href="调试/inspect_template调试说明.md">检查结构</a>、<a href="调试/complete_template调试说明.md">补全</a>、<a href="调试/create_template_page调试说明.md">绘制</a>。</td></tr>
 <tr><td>成品</td><td>build_presentation：按确认的页面计划生成；check_presentation：检查已登记成品</td><td>生成支持文字、图片、媒体、表格、列表及常见原生图表；不自动选页或查事实。检查仅为基础版。<a href="调试/build_presentation调试说明.md">生成</a>、<a href="调试/check_presentation调试说明.md">检查</a>。</td></tr></table>

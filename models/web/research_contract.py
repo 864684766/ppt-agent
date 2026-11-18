@@ -19,11 +19,22 @@ class SearchPlan(BaseModel):
     query: str = Field(min_length=1, max_length=200, description="适合搜索引擎的简短搜索词，保留用户需求中的关键实体和限定。")
 
 
+class AlternativeCandidate(BaseModel):
+    """主题相关但不满足明确要求的备用候选，由检查模型提出。"""
+
+    candidate_id: str = Field(description="本轮搜索结果中真实存在的候选编号。")
+    unmet_requirement: str = Field(min_length=1, description="该候选不满足的用户明确要求，例如不是官方来源。")
+
+
 class SearchReview(BaseModel):
     """检查模型的结果；相关仅指摘要初筛，不表示事实或来源已核实。"""
 
     # 必填；无合适候选时为[]。工作流会再次检查ID是否属于本轮候选。
     relevant_ids: list[str] = Field(description="与用户要求直接相关的候选编号列表，不确定时排除。")
+    # 备用候选仅供后续用户决定；不能自动当作符合原始要求的资料。
+    alternatives: list[AlternativeCandidate] = Field(description="主题相关但不满足明确限定的候选及原因；没有时为空数组。")
+    # 记录当前批次尚未满足的要求；不是对整个互联网的结论。
+    unmet_requirements: list[str] = Field(description="本轮候选未满足的用户明确要求；没有时为空数组。")
     # 必填；用于下轮改词，工作流会截取前300个字符避免输入持续变长。
     feedback: str = Field(description="给查询Agent的反馈，说明不足或下一次可尝试的方向。")
 

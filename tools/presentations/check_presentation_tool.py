@@ -20,7 +20,7 @@ def create_check_presentation_tool(*, checker: PresentationChecker) -> BaseTool:
         "message（安全说明）、expected（要求）、actual（实际值，未知null）、slide_numbers（相关页码，从1开始）。"
         "passed仅代表所有required规则通过，不能把not_checked当通过。"
         "无可提取文字只给warning：图片页可能合法，不做OCR。"
-        "当前大纲覆盖、来源核查、排版和Office真实打开均not_checked；"
+        "大纲覆盖、来源核查、排版和Office真实打开均not_checked；"
         "包结构通过不证明所有关系完整、文字无溢出、事实准确或美观。"
         "页数/限额由宿主固定，模型不能修改要求以让失败变成功；失败应按具体规则处理。"
     ))

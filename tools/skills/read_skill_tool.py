@@ -15,12 +15,9 @@ def create_read_skill_tool(*, reader: SkillReader) -> BaseTool:
     """闭包保存宿主提供的读取器，模型只传skill_id，不选择根目录。"""
 
     @tool("read_skill", args_schema=ReadSkillInput, description=(
-        "选中list_skills中的技能后，使用本工具读取该技能SKILL.md完整指令。"
-        "返回skill_id（选中的技能编号）、resource_path（技能内文件标识，恒为SKILL.md）、"
-        "content（包含YAML头部的完整Markdown文本，不截断）。"
-        "仅读取入口文件，不自动读取参考资料、不解释依赖、不执行脚本，也不保证技能适配当前运行时。"
-        "技能不规范或无法读取时记录日志并报错，不返回虚构内容；可重新发现或选择其他技能。"
-        "附属资源读取及技能执行尚未接线；读取成功不表示已执行技能。"
+        "使用list_skills返回的skill_id读取技能SKILL.md完整指令。"
+        "返回skill_id、resource_path（SKILL.md）和content（含YAML头部的完整Markdown）。"
+        "只读取入口文件，不自动读取附属资料或执行脚本；读取成功不代表技能已执行或依赖可用。"
     ))
     @log_operation("tool.read_skill")
     async def read_skill(skill_id: str) -> ReadSkillOutput:

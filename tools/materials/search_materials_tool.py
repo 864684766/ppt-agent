@@ -39,14 +39,11 @@ def create_search_materials_tool(
         "search_materials",
         args_schema=SearchMaterialsInput,
         description=(
-            "需要在当前项目已登记且ready的正文中定位关键词和引用来源时使用。"
-            "多个queries按任意一个命中，字面匹配、忽略大小写；不自动扩词、"
-            "不访问互联网、不解析文件。返回matches及total_matches、truncated；"
-            "每项包含source_id、version、location(block_id及从1开始或null的page)、"
-            "matched_queries、text及text_truncated。matched_queries针对完整原文块，"
-            "可能不都出现在截取文本中。结果截断或需核实上下文时，应缩小查询或后续读取原块。"
-            "排序按来源/页码/块ID，不是相关性排名；没有命中不代表资料结论不存在。"
-            "不存在、未ready或正文未载入会明确报错，与空matches不同。"
+            "在已登记且ready的资料正文中查找关键词，不联网、不解析文件。"
+            "多个queries任一命中即可，按字面匹配并忽略大小写，不自动扩词；结果不是相关性排序。"
+            "返回matches（含source_id、version、location、matched_queries、text及text_truncated）、total_matches和truncated。"
+            "location包含block_id和页码page（从1开始或null）；需要完整上下文时用read_material读取该块。"
+            "matched_queries针对完整块，截取文本中可能看不到全部关键词；无命中不代表资料中不存在相关结论。"
         ),
     )
     @log_operation("tool.search_materials")

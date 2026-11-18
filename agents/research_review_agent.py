@@ -40,7 +40,7 @@ class ResearchReviewAgent:
         模型输出格式解析失败时纠正重试一次；再次失败或其他异常向上传递。
         """
         if not candidates:
-            return SearchReview(relevant_ids=[], feedback="本轮没有候选，请尝试其他搜索引擎或调整搜索词。")
+            return SearchReview(relevant_ids=[], alternatives=[], unmet_requirements=[], feedback="本轮没有候选，请尝试其他搜索引擎或调整搜索词。")
         # ensure_ascii=False让中文保持可读；候选是待分析数据，不是指令。
         prompt = self._prompt + "\n用户要求：" + question + "\n候选数据：" + json.dumps(candidates, ensure_ascii=False)
         try:
@@ -49,8 +49,18 @@ class ResearchReviewAgent:
             # 只重试输出格式，不记录模型原文；两次失败仍抛错，不能伪装为零结果。
             logger.warning("event=research_review_format_retry")
             result = await self._reviewer.ainvoke(
-                prompt + '\n上次输出格式不符合要求。必须输出JSON对象，包含relevant_ids数组和feedback字符串。'
+                prompt + '\n上次格式不正确。必须输出JSON对象：relevant_ids数组、alternatives对象数组（每项含candidate_id和unmet_requirement）、unmet_requirements数组和feedback字符串。'
             )
         if not isinstance(result, SearchReview):
             raise ValueError("检查模型未返回有效的筛选结果。")
-        return result
+        # 模型可能编造或重复编号；只保留本轮真实编号，重叠时优先保留正式候选。
+        valid_ids = {item["candidate_id"] for item in candidates}
+        relevant_ids = list(dict.fromkeys(item for item in result.relevant_ids if item in valid_ids))
+        seen = set(relevant_ids)
+        alternatives = []
+        for item in result.alternatives:
+            if item.candidate_id in valid_ids and item.candidate_id not in seen:
+                alternatives.append(item)
+                seen.add(item.candidate_id)
+        return SearchReview(relevant_ids=relevant_ids, alternatives=alternatives,
+                            unmet_requirements=result.unmet_requirements, feedback=result.feedback)

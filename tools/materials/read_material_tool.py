@@ -30,14 +30,10 @@ def create_read_material_tool(
     )
 
     @tool("read_material", args_schema=ReadMaterialInput, description=(
-        "已知来源、版本和正文块ID，需要核实原文或补读search_materials截断文本时使用。"
-        "读取当前项目ready资料的一个已解析正文块，上传文件与已登记网页均可用；"
-        "不联网、不打开原文件、不解析或OCR，不自动包含相邻块。"
-        "定位使用source_id、version和block_id，不要猜测块ID。"
-        "返回原文text、来源版本、location(block_id/page)、offset、end_offset、"
-        "total_chars和next_offset；实际范围为[offset,end_offset)，单位为Python字符。"
-        "长块用next_offset续读，null表示到块尾；完整块不等于整份文件。"
-        "来源未登记、未ready、版本过期或块不存在会报错，不伪装为空结果。"
+        "读取已登记且ready资料中的一个已解析正文块，用于核实原文或补读search_materials截断内容。"
+        "使用搜索结果提供的source_id、version和block_id定位，不要猜测；不联网或直接打开文件。"
+        "返回text、location、offset、end_offset、total_chars和next_offset；偏移按字符计，范围为[offset,end_offset)。"
+        "next_offset可用于续读，null表示到块尾；一个块不是整份资料。"
     ))
     @log_operation("tool.read_material")
     def read_material(

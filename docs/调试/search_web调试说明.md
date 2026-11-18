@@ -1,12 +1,14 @@
 # 第四个工具：search_web
 
-状态（2026-11-17）：搜索工具已供独立多引擎研究图调用；chat与网页正文核验尚未接入该图。真实联网案例和本地流程检查统一放在tests/test_research_workflow.py：运行test_real_research会访问真实模型与搜索服务，其余流程检查使用替身。
+状态（2026-11-17）：搜索工具已供独立多引擎研究图调用；chat与网页正文核验尚未接入该图。资料收集测试仅保留tests/test_research_workflow.py中的test_real_research，运行会访问真实模型与搜索服务。
 
 多引擎流程首轮不传engines，由SearXNG的general分类选择引擎；结果不足时根据检查反馈调整搜索词，并依次尝试外层配置的引擎。`max_attempts`是包含首轮的总搜索次数，达到目标数量或次数用尽即停止。当前测试入口需要读取真实模型和SearXNG，允许列表从`.env`读取。
 
 资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；零候选时可选`provide_materials`或`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
 
 **阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由图指定引擎并由代码调用工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
+
+`test_real_research` 的测试包装类会逐轮打印搜索策略、搜索词、候选与检查Agent输出，包括备用候选及原因；这些输出仅用于测试，不写入应用日志，也不会让图自动累计备用候选。最后打印工作流的正式候选、状态、提示及用户选项。使用 `pytest -s` 或 PyCharm 的pytest运行器查看；运行会调用真实模型和搜索服务。
 
 `tests/test_search_web.py` 中 `test_searxng_raw_response` 只发送q和format，打印服务器原始JSON，不截取也不经过工具，便于与相同参数的浏览器地址对照。`test_tool_return_result` 执行项目工具：引擎和语言由测试变量指定，服务端响应会被转换并按max_results（1至10）截取；两次独立请求可能因上游状态、网络或排序发生变化。原始结果可含图片和视频及其专有字段；工具只公开统一候选字段，不能视为完整媒体搜索结果。
 
@@ -83,3 +85,6 @@ uv run --locked python -m pytest tests/test_search_web.py -s -q
 调用方拥有httpx.AsyncClient并通过async with关闭连接；适配器只借用。领域层不依赖Settings、HTTP库或LangChain。无新增包或升级，沿用uv.lock中的httpx等依赖。Tavily实现、依赖和密钥配置已移除。
 
 SearXNG接口依据：[官方Search API](https://docs.searxng.org/dev/search_api.html)。latest镜像内容可能变化；本轮验证的是现有服务的接口行为，未读取服务器镜像digest。
+
+
+SearchReview的alternatives包含候选编号及不满足要求原因，unmet_requirements说明本轮不足；图尚未累计备用候选，也不会向用户提供备用选择。

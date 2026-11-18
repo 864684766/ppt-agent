@@ -16,12 +16,9 @@ def create_list_skills_tool(*, catalog: SkillCatalog) -> BaseTool:
     """通过闭包绑定目录能力；不把本机目录作为模型参数，也不执行技能脚本。"""
 
     @tool("list_skills", args_schema=ListSkillsInput, description=(
-        "需要发现本地有哪些技能、了解其适用场景时使用；不联网、不安装、不执行技能。"
-        "可按keyword筛选技能编号、名称、用途说明，省略则列出全部成功读取介绍的技能；不自动翻译或语义扩词。"
-        "返回items（技能摘要）和returned_count（本次条数，无分页）。不符合介绍格式的技能记录日志并忽略，不返回给模型。"
-        "每项skill_id是技能目录编号，name是声明名称，description是作者的用途说明，version是声明版本或null。"
-        "仅扫描并返回SKILL.md的介绍元数据；不检查依赖、不分析脚本或执行流程，也不判断技能可用性。"
-        "需要完整指令时使用read_skill并传入skill_id。当前使用项目内置skills目录，不能传任意本机路径。"
+        "发现可用的本地技能介绍，可按keyword字面筛选编号、名称或用途；不自动翻译或扩词。"
+        "返回items和returned_count；每项含skill_id、name、description（用途）及version（可能为null）。"
+        "只读取技能介绍，不检查依赖或执行技能；需要完整SKILL.md时用read_skill传入skill_id。"
     ))
     @log_operation("tool.list_skills")
     async def list_skills(keyword: str = "") -> ListSkillsOutput:
