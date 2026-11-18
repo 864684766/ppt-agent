@@ -42,7 +42,7 @@ class DisplayReviewAgent(ResearchReviewAgent):
     async def review(self, *, question: str, candidates: list[WebSearchItem]) -> SearchReview:
         result = await super().review(question=question, candidates=candidates)
         print("【本轮检查结果】", result.model_dump_json(indent=2), flush=True)
-        print("【说明】alternatives仅为本轮备用候选；当前工作流尚不累计或向用户提供这些候选。", flush=True)
+        print("【说明】这是本轮检查；最终备用候选会跨轮按URL合并，尚未交给用户确认。", flush=True)
         return result
 
 
@@ -109,4 +109,5 @@ async def test_real_research(question: str) -> None:
     print("【工作流提示】", result["message"])
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
     print("【候选结果】", json.dumps(result["accepted"], ensure_ascii=False, indent=2))
+    print("【累计备用候选及原因】", json.dumps(result["alternatives"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user"}, result["message"]

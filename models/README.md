@@ -20,7 +20,7 @@
 | 资料 | read_material 工具输入与公开输出 | ReadMaterialInput、ReadMaterialOutput、MaterialReadLocation | [read_material_contract.py](materials/read_material_contract.py) |
 | 联网 | 内部候选网页 | WebSearchCandidate | [web_search_candidate.py](web/web_search_candidate.py) |
 | 联网 | search_web输入与公开输出 | SearchWebInput、SearchWebOutput、WebSearchItem | [search_web_contract.py](web/search_web_contract.py) |
-| 联网 | 独立网页资料收集的规划、审查及图状态 | SearchPlan、AlternativeCandidate、SearchReview、ResearchCandidate、ResearchState | [research_contract.py](web/research_contract.py) |
+| 联网 | 独立网页资料收集的规划、审查及图状态 | SearchPlan、AlternativeCandidate、SearchReview、ResearchCandidate、ResearchAlternative、ResearchState | [research_contract.py](web/research_contract.py) |
 | 联网 | fetch_webpage输入与公开输出 | FetchWebpageInput、FetchWebpageOutput | [fetch_webpage_contract.py](web/fetch_webpage_contract.py) |
 | 联网 | 内部网页内容与读取结果 | WebpageContent、WebpageReadResult | [webpage_content.py](web/webpage_content.py) |
 | 技能 | 内部技能摘要 | SkillSummary | [skill_summary.py](skills/skill_summary.py) |

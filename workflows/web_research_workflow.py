@@ -8,7 +8,8 @@ from langgraph.graph import END, START, StateGraph
 
 from diagnostics.operation_logging import log_operation
 from domain.web.research_agents_contract import ResearchQueryAgentContract, ResearchReviewAgentContract
-from models.web.research_contract import ResearchCandidate, ResearchState
+from domain.web.research_candidate_merge import merge_research_candidates
+from models.web.research_contract import ResearchState
 
 
 logger = logging.getLogger(__name__)
@@ -89,39 +90,15 @@ class WebResearchWorkflow:
         if not state["candidates"]:
             return {"feedback": "本轮没有候选或搜索失败，请调整搜索词并尝试其他引擎。"}
         review = await self._review_agent.review(question=state["question"], candidates=state["candidates"])
-        ids = set(review.relevant_ids)
-        # 复制嵌套列表，避免原地修改上一个节点持有的图状态。
-        accepted: list[ResearchCandidate] = [
-            {
-                "candidate_id": item["candidate_id"], "title": item["title"],
-                "url": item["url"], "snippet": item["snippet"],
-                "engines": list(item["engines"]), "search_strategies": list(item["search_strategies"]),
-            }
-            for item in state["accepted"]
-        ]
-        # 字典让URL查找不需要每次从头遍历；不会改变首次出现的结果顺序。
-        by_url = {item["url"]: item for item in accepted}
-        for item in state["candidates"]:
-            if item["candidate_id"] not in ids:
-                continue
-            existing = by_url.get(item["url"])
-            if existing:
-                for source_engine in item["engines"]:
-                    if source_engine not in existing["engines"]:
-                        existing["engines"].append(source_engine)
-                if state["engine"] not in existing["search_strategies"]:
-                    existing["search_strategies"].append(state["engine"])
-            else:
-                new: ResearchCandidate = {
-                    "candidate_id": item["candidate_id"], "title": item["title"],
-                    "url": item["url"], "snippet": item["snippet"],
-                    "engines": list(item["engines"]), "search_strategies": [state["engine"]],
-                }
-                accepted.append(new)
-                by_url[item["url"]] = new
-        logger.info("event=research_review accepted_count=%d attempt=%d", len(accepted), state["attempt"])
-        # 模型可能给出很长地说明；只保留前300字用于下一轮，避免输入无限增长。
-        return {"accepted": accepted, "feedback": review.feedback[:300]}
+        # 每轮都与正式池和备用池比较，确保同一URL不会重复计数。
+        accepted, alternatives = merge_research_candidates(
+            accepted=state["accepted"], alternatives=state["alternatives"],
+            candidates=state["candidates"], review=review, strategy=state["engine"],
+        )
+        logger.info("event=research_review accepted_count=%d alternative_count=%d attempt=%d",
+                    len(accepted), len(alternatives), state["attempt"])
+        # 只保留简短反馈供下轮搜索；备用原因在alternatives中单独保存。
+        return {"accepted": accepted, "alternatives": alternatives, "feedback": review.feedback[:300]}
 
     @staticmethod
     def _next(state: ResearchState) -> Literal["query", "__end__"]:
@@ -140,7 +117,7 @@ class WebResearchWorkflow:
             max_attempts: 搜索总轮数，包含首轮服务器默认搜索，范围1至20，默认6。
 
         Returns:
-            ResearchState。accepted为去重候选，status为completed、awaiting_user
+            ResearchState。accepted和alternatives分别为去重后的正式与备用候选，status为completed、awaiting_user
             或failed，message解释结果；attempt为总次数，failed_engines
             记录失败策略。completed只代表数量达标，不代表网页内容可信。
 
@@ -154,7 +131,7 @@ class WebResearchWorkflow:
             raise ValueError("首轮服务器默认搜索需要注入不指定引擎的工具。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts,
-            "attempt": 0, "engine": "", "query": "", "feedback": "", "candidates": [], "accepted": [],
+            "attempt": 0, "engine": "", "query": "", "feedback": "", "candidates": [], "accepted": [], "alternatives": [],
             "failed_engines": [], "status": "running", "message": "", "user_options": []}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。

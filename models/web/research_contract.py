@@ -50,6 +50,12 @@ class ResearchCandidate(TypedDict):
     search_strategies: list[str]  # 查询时使用的策略，server_default不是实际引擎名称。
 
 
+class ResearchAlternative(ResearchCandidate):
+    """备用候选：除网页信息外，保留各轮指出的不满足要求原因。"""
+
+    unmet_reasons: list[str]  # 不重复的原因；仅表示摘要判断，不代表已核实正文。
+
+
 class ResearchState(TypedDict):
     """一次研究流程的临时状态；调用者负责保管，不提供跨进程持久化。"""
 
@@ -62,6 +68,7 @@ class ResearchState(TypedDict):
     feedback: str  # 上一轮检查意见，提供给查询Agent。
     candidates: list[WebSearchItem]  # 当前轮搜索候选，含实际引擎列表。
     accepted: list[ResearchCandidate]  # 跨轮去重后的初筛候选。
+    alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
     failed_engines: list[str]  # 搜索出错的引擎，可重复；server_default表示兜底失败。
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。

@@ -8,7 +8,7 @@
 
 **阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由图指定引擎并由代码调用工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
 
-`test_real_research` 的测试包装类会逐轮打印搜索策略、搜索词、候选与检查Agent输出，包括备用候选及原因；这些输出仅用于测试，不写入应用日志，也不会让图自动累计备用候选。最后打印工作流的正式候选、状态、提示及用户选项。使用 `pytest -s` 或 PyCharm 的pytest运行器查看；运行会调用真实模型和搜索服务。
+`test_real_research` 的测试包装类会逐轮打印搜索策略、搜索词、候选与检查Agent输出，包括备用候选及原因；这些输出仅用于测试，不写入应用日志；最终结果另行输出图累计的备用候选。最后打印工作流的正式候选、状态、提示及用户选项。使用 `pytest -s` 或 PyCharm 的pytest运行器查看；运行会调用真实模型和搜索服务。
 
 `tests/test_search_web.py` 中 `test_searxng_raw_response` 只发送q和format，打印服务器原始JSON，不截取也不经过工具，便于与相同参数的浏览器地址对照。`test_tool_return_result` 执行项目工具：引擎和语言由测试变量指定，服务端响应会被转换并按max_results（1至10）截取；两次独立请求可能因上游状态、网络或排序发生变化。原始结果可含图片和视频及其专有字段；工具只公开统一候选字段，不能视为完整媒体搜索结果。
 
@@ -87,4 +87,4 @@ uv run --locked python -m pytest tests/test_search_web.py -s -q
 SearXNG接口依据：[官方Search API](https://docs.searxng.org/dev/search_api.html)。latest镜像内容可能变化；本轮验证的是现有服务的接口行为，未读取服务器镜像digest。
 
 
-SearchReview的alternatives包含候选编号及不满足要求原因，unmet_requirements说明本轮不足；图尚未累计备用候选，也不会向用户提供备用选择。
+SearchReview的alternatives包含候选编号及不满足要求原因，unmet_requirements说明本轮不足；图已按完整URL累计备用候选及原因，但不会自动采用或向用户提供备用选择。
