@@ -66,6 +66,8 @@ class ResearchState(TypedDict):
     query: str  # 当前实际搜索词。
     feedback: str  # 上一轮检查意见，提供给查询Agent。
     candidates: list[WebSearchItem]  # 当前轮搜索候选，含实际引擎列表。
+    review_batches: list[list[WebSearchItem]]  # 本轮尚待检查的批次；超限时拆成更小批次。
+    unreviewed: list[WebSearchItem]  # 单条检查仍超限的候选；不是无关结果，可能在后续轮次重新检查。
     accepted: list[ResearchCandidate]  # 跨轮去重后的初筛候选。
     alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
     selected_alternatives: list[ResearchAlternative]  # 用户明确选中的备用候选；仍不视为满足原要求的正式资料。

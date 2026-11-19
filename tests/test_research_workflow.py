@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from openai import LengthFinishReasonError
 
 from agents.research_query_agent import ResearchQueryAgent
 from agents.research_review_agent import ResearchReviewAgent
@@ -41,6 +40,7 @@ class DisplayReviewAgent(ResearchReviewAgent):
     """仅用于测试：展示当前批次的检查结果，不修改工作流状态。"""
 
     async def review(self, *, question: str, candidates: list[WebSearchItem]) -> SearchReview:
+        print("【本批待检查数量】", len(candidates), flush=True)
         result = await super().review(question=question, candidates=candidates)
         print("【本轮检查结果】", result.model_dump_json(indent=2), flush=True)
         print("【说明】这是本轮检查；最终备用候选会跨轮按URL合并，尚未交给用户确认。", flush=True)
@@ -97,13 +97,7 @@ async def test_real_research(question: str) -> None:
         thread_id = uuid4().hex
         print("【任务编号】", thread_id, flush=True)
         # 在此打断点；可进入两个Agent，观察每轮搜索词和筛选反馈。
-        try:
-            result = await workflow.run(thread_id=thread_id, question=question, target_count=2, max_attempts=5)
-        except LengthFinishReasonError:
-            # 仅演示一次恢复；同一实例和HTTP连接仍有效。再次失败会直接报错，
-            # 不会无限循环，也不保证重新调用模型一定能得到完整结果。
-            print("【恢复】模型输出超限，从检查点重试未完成的节点一次。", flush=True)
-            result = await workflow.resume(thread_id=thread_id)
+        result = await workflow.run(thread_id=thread_id, question=question, target_count=2, max_attempts=5)
     print("\n【用户问题】", question)
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【用户可选动作】", result["user_options"])
@@ -111,5 +105,6 @@ async def test_real_research(question: str) -> None:
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
     print("【候选结果】", json.dumps(result["accepted"], ensure_ascii=False, indent=2))
     print("【累计备用候选及原因】", json.dumps(result["alternatives"], ensure_ascii=False, indent=2))
+    print("【因输出超限未检查完成】", json.dumps(result["unreviewed"], ensure_ascii=False, indent=2))
     print("【用户已选择的备用候选】", json.dumps(result["selected_alternatives"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user"}, result["message"]

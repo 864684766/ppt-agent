@@ -4,8 +4,10 @@ import logging
 from typing import Any, Literal, cast
 
 from langchain_core.tools import ToolException
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from openai import LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
 from domain.web.research_agents_contract import ResearchQueryAgentContract, ResearchReviewAgentContract
@@ -61,10 +63,12 @@ class WebResearchWorkflow:
                 question=state["question"], feedback=state["feedback"],
             )
         except ToolException:
-            return {"attempt": state["attempt"] + 1, "query": "", "candidates": [],
+            return {"attempt": state["attempt"] + 1, "query": "", "candidates": [], "review_batches": [],
                     "failed_attempts": state["failed_attempts"] + 1,
                     "feedback": "上次搜索调用失败，请重新尝试。"}
-        return {"attempt": state["attempt"] + 1, "query": query, "candidates": candidates}
+        # 每批最多两条：列表切片允许最后一批不足两条，不会遗漏候选。
+        batches = [candidates[index:index + 2] for index in range(0, len(candidates), 2)]
+        return {"attempt": state["attempt"] + 1, "query": query, "candidates": candidates, "review_batches": batches}
 
     async def _review(self, state: ResearchState) -> dict[str, Any]:
         """执行图中的检查节点，返回已合并候选和下一轮反馈。
@@ -73,22 +77,42 @@ class WebResearchWorkflow:
         的编号。按完整URL去重：同一URL重复出现时只保留一条并记录发现策略。
         不比较网页正文；不同URL指向同一篇转载文章时仍可能被当成不同候选。
         """
-        if not state["candidates"]:
+        if not state["review_batches"]:
             return {"feedback": "本轮没有候选或搜索失败，请调整搜索词后重试。"}
-        review = await self._review_agent.review(question=state["question"], candidates=state["candidates"])
+        # 节点每次只处理队首一批；返回后LangGraph会保存状态和下一节点。
+        batch, remaining = state["review_batches"][0], state["review_batches"][1:]
+        try:
+            review = await self._review_agent.review(question=state["question"], candidates=batch)
+        except LengthFinishReasonError:
+            if len(batch) > 1:
+                # 二分后先检查左半，再检查右半；每次拆分都会减少批次大小。
+                middle = len(batch) // 2
+                logger.warning("event=research_review_split batch_size=%d", len(batch))
+                return {"review_batches": [batch[:middle], batch[middle:], *remaining]}
+            # 单条仍超限时跳过这次检查并明确记录，不能归类成不相关。
+            item = batch[0]
+            unreviewed = [x for x in state["unreviewed"] if x["url"] != item["url"]]
+            logger.warning("event=research_review_unfinished count=1")
+            return {"review_batches": remaining, "unreviewed": [*unreviewed, item]}
         # 每轮都与正式池和备用池比较，确保同一URL不会重复计数。
         accepted, alternatives = merge_research_candidates(
             accepted=state["accepted"], alternatives=state["alternatives"],
-            candidates=state["candidates"], review=review, strategy="server_default",
+            candidates=batch, review=review, strategy="server_default",
         )
+        # 本次成功检查过的URL不再属于未检查；即使模型判断为无关也已检查。
+        checked_urls = {item["url"] for item in batch}
+        unreviewed = [item for item in state["unreviewed"] if item["url"] not in checked_urls]
         logger.info("event=research_review accepted_count=%d alternative_count=%d attempt=%d",
                     len(accepted), len(alternatives), state["attempt"])
         # 只保留简短反馈供下轮搜索；备用原因在alternatives中单独保存。
-        return {"accepted": accepted, "alternatives": alternatives, "feedback": review.feedback[:300]}
+        return {"accepted": accepted, "alternatives": alternatives, "feedback": review.feedback[:300],
+                "review_batches": remaining, "unreviewed": unreviewed}
 
     @staticmethod
-    def _next(state: ResearchState) -> Literal["query", "__end__"]:
+    def _next(state: ResearchState) -> Literal["query", "review", "__end__"]:
         """条件边路由：返回query继续下一轮，返回END结束图。"""
+        if state["review_batches"]:
+            return "review"
         if len(state["accepted"]) >= state["target_count"]:
             return END
         return "query" if state["attempt"] < state["max_attempts"] else END
@@ -116,13 +140,17 @@ class WebResearchWorkflow:
             raise ValueError("问题不能为空；目标数量和最大搜索次数必须为1至20。")
         if not thread_id or not thread_id.strip():
             raise ValueError("任务编号不能为空。")
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": max(25, max_attempts * 2 + 2)}
+        # 每轮最多5条候选：批次检查、拆分及搜索均计入图步数。
+        # RunnableConfig是LangChain的配置类型，明确声明后编辑器能识别
+        # configurable和recursion_limit分别允许字典与整数。
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id},
+                                  "recursion_limit": max(25, max_attempts * 12 + 2)}
         # 同一实例内不得覆盖已有任务；失败后应调用resume，而不是重新run。
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在，请使用新编号或恢复原任务。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts,
-            "attempt": 0, "query": "", "feedback": "", "candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
+            "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
             "failed_attempts": 0, "status": "running", "message": "", "user_options": []}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
@@ -142,12 +170,12 @@ class WebResearchWorkflow:
         """
         if not thread_id or not thread_id.strip():
             raise ValueError("任务编号不能为空。")
-        config = {"configurable": {"thread_id": thread_id}}
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
         snapshot = await self._graph.aget_state(config)
         if not snapshot.values or not snapshot.next:
             raise ValueError("任务不存在或没有待恢复的节点。")
         # 输入None表示继续检查点中的待执行节点，不重新提交初始状态。
-        config["recursion_limit"] = max(25, snapshot.values["max_attempts"] * 2 + 2)
+        config["recursion_limit"] = max(25, snapshot.values["max_attempts"] * 12 + 2)
         result = cast(ResearchState, await self._graph.ainvoke(None, config=config))
         return self._finalize(result)
 
@@ -170,6 +198,8 @@ class WebResearchWorkflow:
             else:
                 if result["failed_attempts"] == result["attempt"]:
                     result["message"] = "本次搜索全部失败，未能取得候选。是否自行提供资料？如果不提供，本次对话将结束。"
+                elif result["unreviewed"]:
+                    result["message"] = "部分候选尚未完成检查，目前无法确定是否有可用资料；可提供资料或结束。"
                 else:
                     result["message"] = "本次未找到可用候选，是否自行提供资料？如果不提供，本次对话将结束。"
             if result["alternatives"]:
@@ -177,6 +207,8 @@ class WebResearchWorkflow:
                 options.append("use_alternatives")
             options.append("end_conversation")
             result["user_options"] = options
+        if result["unreviewed"]:
+            result["message"] += f" 另有{len(result['unreviewed'])}条候选因模型输出超限未完成检查。"
         return result
 
     @staticmethod
@@ -190,8 +222,9 @@ class WebResearchWorkflow:
         """
         if state["status"] != "awaiting_user" or decision not in state["user_options"]:
             raise ValueError("当前状态或用户选择无效。")
+        # 先建立编号索引，确保后面的校验和选取都使用同一份候选列表。
+        available = {item["candidate_id"]: item for item in state["alternatives"]}
         if decision == "use_alternatives":
-            available = {item["candidate_id"]: item for item in state["alternatives"]}
             if not alternative_ids or len(set(alternative_ids)) != len(alternative_ids) or any(
                 item not in available for item in alternative_ids
             ):
