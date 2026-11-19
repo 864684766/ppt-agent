@@ -4,9 +4,11 @@ test_real_research会调用真实模型和搜索服务，并消耗模型额度�
 """
 
 import json
+from uuid import uuid4
 
 import httpx
 import pytest
+from openai import LengthFinishReasonError
 
 from agents.research_query_agent import ResearchQueryAgent
 from agents.research_review_agent import ResearchReviewAgent
@@ -91,8 +93,17 @@ async def test_real_research(question: str) -> None:
             review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
         )
         print("\n【用户问题】", question, flush=True)
+        # 编号需在run之前创建：即使run报错，也能用同一编号恢复。
+        thread_id = uuid4().hex
+        print("【任务编号】", thread_id, flush=True)
         # 在此打断点；可进入两个Agent，观察每轮搜索词和筛选反馈。
-        result = await workflow.run(question=question, target_count=2, max_attempts=5)
+        try:
+            result = await workflow.run(thread_id=thread_id, question=question, target_count=2, max_attempts=5)
+        except LengthFinishReasonError:
+            # 仅演示一次恢复；同一实例和HTTP连接仍有效。再次失败会直接报错，
+            # 不会无限循环，也不保证重新调用模型一定能得到完整结果。
+            print("【恢复】模型输出超限，从检查点重试未完成的节点一次。", flush=True)
+            result = await workflow.resume(thread_id=thread_id)
     print("\n【用户问题】", question)
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【用户可选动作】", result["user_options"])

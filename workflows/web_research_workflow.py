@@ -4,6 +4,7 @@ import logging
 from typing import Any, Literal, cast
 
 from langchain_core.tools import ToolException
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from diagnostics.operation_logging import log_operation
@@ -42,7 +43,10 @@ class WebResearchWorkflow:
         # 路由函数直接返回目标节点名或END；无需额外的路径映射。
         graph.add_conditional_edges("review", self._next)
         # compile将路线图编译为可调用对象；此时不会运行节点。
-        self._graph = graph.compile()
+        # 检查点保存在这个工作流实例的内存中。节点成功结束后，LangGraph
+        # 保存状态和下一节点；实例销毁或进程退出后无法再恢复。
+        self._checkpointer = InMemorySaver()
+        self._graph = graph.compile(checkpointer=self._checkpointer)
 
     async def _query(self, state: ResearchState) -> dict[str, Any]:
         """执行图中的查询节点，返回需要更新到ResearchState的字段。
@@ -90,10 +94,11 @@ class WebResearchWorkflow:
         return "query" if state["attempt"] < state["max_attempts"] else END
 
     @log_operation("workflow.web_research")
-    async def run(self, *, question: str, target_count: int = 5, max_attempts: int = 6) -> ResearchState:
+    async def run(self, *, thread_id: str, question: str, target_count: int = 5, max_attempts: int = 6) -> ResearchState:
         """启动一次独立搜索任务并返回完整ResearchState。
 
         Args:
+            thread_id: 调用方为本次任务创建的非空唯一编号；出错后用它恢复。
             question: 非空用户需求；会发送给模型，不应包含不应外传的内容。
             target_count: 希望返回的初筛候选数量，1至20，默认5；不足时不会凑数。
             max_attempts: 搜索总轮数，范围1至20，默认6；每轮使用服务器默认搜索。
@@ -109,6 +114,12 @@ class WebResearchWorkflow:
         """
         if not question.strip() or not 1 <= target_count <= 20 or not 1 <= max_attempts <= 20:
             raise ValueError("问题不能为空；目标数量和最大搜索次数必须为1至20。")
+        if not thread_id or not thread_id.strip():
+            raise ValueError("任务编号不能为空。")
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": max(25, max_attempts * 2 + 2)}
+        # 同一实例内不得覆盖已有任务；失败后应调用resume，而不是重新run。
+        if (await self._graph.aget_state(config)).values:
+            raise ValueError("任务编号已存在，请使用新编号或恢复原任务。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts,
             "attempt": 0, "query": "", "feedback": "", "candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
@@ -118,8 +129,32 @@ class WebResearchWorkflow:
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
         # cast只向类型检查器说明约定，不会在运行时执行字段校验。
         result = cast(ResearchState, await self._graph.ainvoke(
-            state, config={"recursion_limit": max(25, max_attempts * 2 + 2)},
+            state, config=config,
         ))
+        return self._finalize(result)
+
+    @log_operation("workflow.web_research_resume")
+    async def resume(self, *, thread_id: str) -> ResearchState:
+        """恢复同一实例中未完成的任务；失败的节点会从头执行。
+
+        thread_id必须与run一致。状态仅存在本实例内存中，进程退出无法恢复；
+        没有检查点或任务已完成时抛ValueError，不自动重试或恢复用户交互。
+        """
+        if not thread_id or not thread_id.strip():
+            raise ValueError("任务编号不能为空。")
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = await self._graph.aget_state(config)
+        if not snapshot.values or not snapshot.next:
+            raise ValueError("任务不存在或没有待恢复的节点。")
+        # 输入None表示继续检查点中的待执行节点，不重新提交初始状态。
+        config["recursion_limit"] = max(25, snapshot.values["max_attempts"] * 2 + 2)
+        result = cast(ResearchState, await self._graph.ainvoke(None, config=config))
+        return self._finalize(result)
+
+    @staticmethod
+    def _finalize(result: ResearchState) -> ResearchState:
+        """将图运行完成的状态整理为供调用方读取的结果。"""
+        target_count = result["target_count"]
         if len(result["accepted"]) >= target_count:
             # 最后一轮可能一次返回多条，只交付请求的数量，保持引擎原有顺序。
             result["accepted"] = result["accepted"][:target_count]
