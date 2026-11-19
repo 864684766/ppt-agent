@@ -1,4 +1,4 @@
-"""多引擎资料收集的输入、两个子Agent结果和图状态。
+"""资料收集的输入、两个子Agent结果和图状态。
 
 BaseModel负责在返回后解析和校验模型输出。当前Agent使用json_mode，
 字段结构需要在提示词中明确说明，不能假设Field描述已发送给模型。
@@ -61,15 +61,15 @@ class ResearchState(TypedDict):
 
     question: str  # 用户主题和要求。
     target_count: int  # 期望候选数量；不是保证找到的数量。
-    max_attempts: int  # 搜索总次数上限，包含第一次服务器默认搜索。
+    max_attempts: int  # 搜索总次数上限，每轮由服务器选择引擎。
     attempt: int  # 已尝试搜索总次数。
-    engine: str  # 当前引擎名称；server_default表示由服务器选择。
     query: str  # 当前实际搜索词。
     feedback: str  # 上一轮检查意见，提供给查询Agent。
     candidates: list[WebSearchItem]  # 当前轮搜索候选，含实际引擎列表。
     accepted: list[ResearchCandidate]  # 跨轮去重后的初筛候选。
     alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
-    failed_engines: list[str]  # 搜索出错的引擎，可重复；server_default表示兜底失败。
+    selected_alternatives: list[ResearchAlternative]  # 用户明确选中的备用候选；仍不视为满足原要求的正式资料。
+    failed_attempts: int  # 整次搜索工具调用失败次数，不代表某个具体引擎失败。
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。

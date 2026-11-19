@@ -23,24 +23,15 @@ class WebResearchWorkflow:
     当前只处理搜索标题与摘要，未读取正文、验证事实或接入chat接口。
     """
 
-    def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract,
-                 engines: tuple[str, ...]) -> None:
+    def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract) -> None:
         """创建图但不运行；调用run才会请求模型或搜索服务。
 
         Args:
             query_agent: 提供search方法的查询子Agent，由它生成搜索词并执行工具。
             review_agent: 提供review方法的检查子Agent，由它判断候选是否相关。
-            engines: 指定引擎名称的有序元组；例如("bing", "baidu kaifa")。
-                每个名称必须与query_agent注入的tools键一致，实际可用性需测试。
-
-        Raises:
-            ValueError: 引擎列表为空、有重复，或使用保留标记server_default。
         """
-        if not engines or len(set(engines)) != len(engines) or "server_default" in engines:
-            raise ValueError("引擎列表必须非空、不能重复，也不能使用预留名称server_default。")
         self._query_agent = query_agent
         self._review_agent = review_agent
-        self._engines = engines
         # StateGraph像一张执行路线图：State定义节点之间共享哪些字段。
         # add_node注册步骤，add_edge连接固定路线；条件边决定循环或结束。
         graph = StateGraph(ResearchState)
@@ -57,28 +48,19 @@ class WebResearchWorkflow:
         """执行图中的查询节点，返回需要更新到ResearchState的字段。
 
         state是当前图状态；返回字典只包含本节点修改的字段，LangGraph会
-        合并到状态。首轮不指定引擎，后续按列表轮换。
+        合并到状态。每轮都使用宿主注入的同一个搜索工具。
         搜索工具抛ToolException时记录失败并继续；模型输出等其他错误传播。
         """
-        # 第一轮让服务器选择；后续从列表下标0开始，超出列表后循环。
-        if state["attempt"] == 0:
-            engine = None
-            label = "server_default"
-        else:
-            engine_index = (state["attempt"] - 1) % len(self._engines)
-            engine = self._engines[engine_index]
-            label = engine
-        logger.info("event=research_search attempt=%d server_default=%s", state["attempt"] + 1, engine is None)
-        # None是调用查询Agent时约定的默认搜索标记；返回状态中使用可读字符串。
+        logger.info("event=research_search attempt=%d", state["attempt"] + 1)
         try:
             query, candidates = await self._query_agent.search(
-                question=state["question"], feedback=state["feedback"], engine=engine,
+                question=state["question"], feedback=state["feedback"],
             )
         except ToolException:
-            return {"attempt": state["attempt"] + 1, "engine": label, "query": "", "candidates": [],
-                    "failed_engines": [*state["failed_engines"], label],
-                    "feedback": "上一引擎调用失败，请调整搜索词并尝试下一个引擎。"}
-        return {"attempt": state["attempt"] + 1, "engine": label, "query": query, "candidates": candidates}
+            return {"attempt": state["attempt"] + 1, "query": "", "candidates": [],
+                    "failed_attempts": state["failed_attempts"] + 1,
+                    "feedback": "上次搜索调用失败，请重新尝试。"}
+        return {"attempt": state["attempt"] + 1, "query": query, "candidates": candidates}
 
     async def _review(self, state: ResearchState) -> dict[str, Any]:
         """执行图中的检查节点，返回已合并候选和下一轮反馈。
@@ -88,12 +70,12 @@ class WebResearchWorkflow:
         不比较网页正文；不同URL指向同一篇转载文章时仍可能被当成不同候选。
         """
         if not state["candidates"]:
-            return {"feedback": "本轮没有候选或搜索失败，请调整搜索词并尝试其他引擎。"}
+            return {"feedback": "本轮没有候选或搜索失败，请调整搜索词后重试。"}
         review = await self._review_agent.review(question=state["question"], candidates=state["candidates"])
         # 每轮都与正式池和备用池比较，确保同一URL不会重复计数。
         accepted, alternatives = merge_research_candidates(
             accepted=state["accepted"], alternatives=state["alternatives"],
-            candidates=state["candidates"], review=review, strategy=state["engine"],
+            candidates=state["candidates"], review=review, strategy="server_default",
         )
         logger.info("event=research_review accepted_count=%d alternative_count=%d attempt=%d",
                     len(accepted), len(alternatives), state["attempt"])
@@ -114,25 +96,23 @@ class WebResearchWorkflow:
         Args:
             question: 非空用户需求；会发送给模型，不应包含不应外传的内容。
             target_count: 希望返回的初筛候选数量，1至20，默认5；不足时不会凑数。
-            max_attempts: 搜索总轮数，包含首轮服务器默认搜索，范围1至20，默认6。
+            max_attempts: 搜索总轮数，范围1至20，默认6；每轮使用服务器默认搜索。
 
         Returns:
             ResearchState。accepted和alternatives分别为去重后的正式与备用候选，status为completed、awaiting_user
-            或failed，message解释结果；attempt为总次数，failed_engines
-            记录失败策略。completed只代表数量达标，不代表网页内容可信。
+            或failed，message解释结果；attempt为总次数，failed_attempts
+            为搜索工具失败次数。completed只代表数量达标，不代表网页内容可信。
 
         Raises:
-            ValueError: 参数越界、问题为空，或没有注入默认工具。
+            ValueError: 参数越界或问题为空。
             模型调用、结构化解析和未被工具转换的其他异常继续向调用方传播。
         """
         if not question.strip() or not 1 <= target_count <= 20 or not 1 <= max_attempts <= 20:
             raise ValueError("问题不能为空；目标数量和最大搜索次数必须为1至20。")
-        if not self._query_agent.has_default_tool:
-            raise ValueError("首轮服务器默认搜索需要注入不指定引擎的工具。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts,
-            "attempt": 0, "engine": "", "query": "", "feedback": "", "candidates": [], "accepted": [], "alternatives": [],
-            "failed_engines": [], "status": "running", "message": "", "user_options": []}
+            "attempt": 0, "query": "", "feedback": "", "candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
+            "failed_attempts": 0, "status": "running", "message": "", "user_options": []}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
@@ -147,22 +127,42 @@ class WebResearchWorkflow:
             result["message"] = "已达到候选数量；正文、权威性和事实仍需核对。"
         else:
             result["status"] = "awaiting_user"
+            # 按已有结果提供选项；备用资料必须由用户明确选择，不能自动混入正式池。
+            options = ["provide_materials"]
             if result["accepted"]:
                 result["message"] = f"本次仅找到{len(result['accepted'])}条候选，是否补充资料或使用当前资料？"
-                result["user_options"] = ["provide_materials", "use_current"]
+                options.append("use_current")
             else:
-                if len(result["failed_engines"]) == result["attempt"]:
+                if result["failed_attempts"] == result["attempt"]:
                     result["message"] = "本次搜索全部失败，未能取得候选。是否自行提供资料？如果不提供，本次对话将结束。"
                 else:
                     result["message"] = "本次未找到可用候选，是否自行提供资料？如果不提供，本次对话将结束。"
-                result["user_options"] = ["provide_materials", "end_conversation"]
+            if result["alternatives"]:
+                result["message"] = f"找到{len(result['accepted'])}条正式候选和{len(result['alternatives'])}条备用候选；备用资料未完全满足要求，请查看原因后选择。"
+                options.append("use_alternatives")
+            options.append("end_conversation")
+            result["user_options"] = options
         return result
 
     @staticmethod
-    def apply_user_decision(state: ResearchState, decision: str) -> ResearchState:
-        """处理调用方传入的真实选择；不上传文件，也不保存或恢复会话。"""
+    def apply_user_decision(state: ResearchState, decision: str, *,
+                            alternative_ids: list[str] | None = None) -> ResearchState:
+        """处理调用方的选择，返回新状态；不实现前端交互或会话恢复。
+
+        use_alternatives须提供用户选中的备用candidate_id；至少一项且必须属于
+        当前备用池。正式候选保留，选中的备用单独记录，不能伪装成正式资料。
+        其他选择不接受alternative_ids，避免把错误的调用误认为用户已确认。
+        """
         if state["status"] != "awaiting_user" or decision not in state["user_options"]:
             raise ValueError("当前状态或用户选择无效。")
+        if decision == "use_alternatives":
+            available = {item["candidate_id"]: item for item in state["alternatives"]}
+            if not alternative_ids or len(set(alternative_ids)) != len(alternative_ids) or any(
+                item not in available for item in alternative_ids
+            ):
+                raise ValueError("请选择当前备用池中至少一个不重复的候选编号。")
+        elif alternative_ids is not None:
+            raise ValueError("只有选择备用资料时才能传入备用候选编号。")
         result = dict(state)
         result["user_options"] = []
         if decision == "provide_materials":
@@ -171,6 +171,12 @@ class WebResearchWorkflow:
         elif decision == "use_current":
             result["status"] = "completed"
             result["message"] = "用户选择使用当前候选；正文和来源仍需核对。"
+        elif decision == "use_alternatives":
+            # 根据已校验的编号选择，不修改原备用池，也不把它们加入accepted。
+            assert alternative_ids is not None
+            result["selected_alternatives"] = [available[item] for item in alternative_ids]
+            result["status"] = "completed"
+            result["message"] = "用户已选择备用候选；其未满足的要求、正文和来源仍需核对。"
         else:
             result["status"] = "cancelled"
             result["message"] = "当前信息不足，本次对话结束；可以换一个主题试试。"

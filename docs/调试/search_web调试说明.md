@@ -1,12 +1,12 @@
 # 第四个工具：search_web
 
-状态（2026-11-17）：搜索工具已供独立多引擎研究图调用；chat与网页正文核验尚未接入该图。资料收集测试仅保留tests/test_research_workflow.py中的test_real_research，运行会访问真实模型与搜索服务。
+状态（2026-11-17）：搜索工具已供独立网页资料研究图调用；chat与网页正文核验尚未接入该图。资料收集测试仅保留tests/test_research_workflow.py中的test_real_research，运行会访问真实模型与搜索服务。
 
-多引擎流程首轮不传engines，由SearXNG的general分类选择引擎；结果不足时根据检查反馈调整搜索词，并依次尝试外层配置的引擎。`max_attempts`是包含首轮的总搜索次数，达到目标数量或次数用尽即停止。当前测试入口需要读取真实模型和SearXNG，允许列表从`.env`读取。
+资料收集每轮均不传engines，由SearXNG的general分类选择引擎；结果不足时根据检查反馈调整搜索词。`max_attempts`是包含首轮的总搜索次数，达到目标数量或次数用尽即停止。当前测试入口需要读取真实模型和SearXNG。
 
-资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；零候选时可选`provide_materials`或`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
+资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；有备用时还可选`use_alternatives`并传入选中的候选编号；所有不足场景均可选`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
 
-**阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由图指定引擎并由代码调用工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
+**阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由代码调用宿主注入的默认搜索工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
 
 `test_real_research` 的测试包装类会逐轮打印搜索策略、搜索词、候选与检查Agent输出，包括备用候选及原因；这些输出仅用于测试，不写入应用日志；最终结果另行输出图累计的备用候选。最后打印工作流的正式候选、状态、提示及用户选项。使用 `pytest -s` 或 PyCharm 的pytest运行器查看；运行会调用真实模型和搜索服务。
 
@@ -21,11 +21,10 @@
 ```dotenv
 SEARXNG_BASE_URL=http://124.71.135.104:8082
 SEARXNG_DEFAULT_ENGINES=sogou
-SEARXNG_ALLOWED_ENGINES=sogou,bing,360search
 WEB_SEARCH_TIMEOUT_SECONDS=30
 ```
 
-服务地址不加/search；不填写server.secret_key。`SEARXNG_DEFAULT_ENGINES`为空时由服务器general分类选择；多引擎流程使用`SEARXNG_ALLOWED_ENGINES`组装独立客户端，名称必须与服务器配置一致。本次工具的模型参数仍只有query和max_results，引擎由宿主绑定；系统环境变量优先于.env。
+服务地址不加/search；不填写server.secret_key。`SEARXNG_DEFAULT_ENGINES`为空时由服务器general分类选择；资料收集工作流每轮显式使用空引擎配置，不受`SEARXNG_DEFAULT_ENGINES`影响。本次工具的模型参数仍只有query和max_results，引擎由宿主绑定；系统环境变量优先于.env。
 
 在 `tests/test_search_web.py` 文件顶部修改 `TEST_ENGINES`：`None`读取.env、`""`使用服务器默认、`"bing"`或`"baidu kaifa"`指定引擎。`TEST_LANGUAGE="zh-CN"`发送中文语言参数，设为空则由服务器决定；这两个变量只影响当前测试，不修改.env。修改 `arguments` 可改变搜索词与条数（最多10条）。
 
@@ -87,4 +86,4 @@ uv run --locked python -m pytest tests/test_search_web.py -s -q
 SearXNG接口依据：[官方Search API](https://docs.searxng.org/dev/search_api.html)。latest镜像内容可能变化；本轮验证的是现有服务的接口行为，未读取服务器镜像digest。
 
 
-SearchReview的alternatives包含候选编号及不满足要求原因，unmet_requirements说明本轮不足；图已按完整URL累计备用候选及原因，但不会自动采用或向用户提供备用选择。
+SearchReview的alternatives包含候选编号及不满足要求原因，unmet_requirements说明本轮不足；图已按完整URL累计备用候选及原因；可通过apply_user_decision传入use_alternatives和alternative_ids选择，备用仍单独保存，真实用户交互尚未接入。

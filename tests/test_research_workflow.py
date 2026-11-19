@@ -1,4 +1,4 @@
-"""资料收集测试：六个真实联网案例，可在PyCharm调试。
+"""资料收集测试：多个真实联网案例，可在PyCharm调试。
 
 test_real_research会调用真实模型和搜索服务，并消耗模型额度。
 """
@@ -23,11 +23,10 @@ from models.web.search_web_contract import WebSearchItem
 class DisplayQueryAgent(ResearchQueryAgent):
     """仅用于测试：显示每轮实际搜索词、策略和原始候选。"""
 
-    async def search(self, *, question: str, feedback: str, engine: str | None) -> tuple[str, list[WebSearchItem]]:
-        strategy = engine if engine is not None else "服务器默认（不指定引擎）"
-        print(f"\n【本轮搜索策略】{strategy}", flush=True)
+    async def search(self, *, question: str, feedback: str) -> tuple[str, list[WebSearchItem]]:
+        print("\n【本轮搜索策略】服务器默认（不指定引擎）", flush=True)
         try:
-            query, candidates = await super().search(question=question, feedback=feedback, engine=engine)
+            query, candidates = await super().search(question=question, feedback=feedback)
         except ToolException:
             print("【本轮搜索失败】工具返回错误，工作流将根据剩余次数继续。", flush=True)
             raise
@@ -46,9 +45,10 @@ class DisplayReviewAgent(ResearchReviewAgent):
         return result
 
 
-# pytest会对列表中每一个问题各运行一次test_real_research，共六次真实任务。
+# pytest会对列表中每一个问题各运行一次test_real_research。
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
+    "介绍一下黄芪。",
     "查找中国居民膳食指南2022关于平衡饮食的资料。",
     "查找《本草纲目》中关于黄芪的记载。",
     "查找中国劳动合同解除的法律规定。",
@@ -69,8 +69,6 @@ async def test_real_research(question: str) -> None:
     配置缺失、服务故障或模型输出不合法会导致测试失败并显示相应错误。
     """
     settings = Settings()
-    # 按配置的允许列表组装，顺序决定每一轮使用哪个引擎。
-    engines = settings.get_searxng_allowed_engines()
     # async with负责在测试结束或异常时关闭连接。模型沿用系统代理；
     # 本测试的搜索连接不读取系统代理，以直接访问配置的SearXNG服务。
     async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=False) as search_http:
@@ -80,15 +78,7 @@ async def test_real_research(question: str) -> None:
             # 推理模型可能将思考计入输出预算；当前真实验证至少给4096。
             max_tokens=max(settings.llm_max_tokens, 4096), http_client=model_http,
         )
-        # 字典推导式：每个引擎名称对应一个工具；每个工具绑定自己的客户端，
-        # 客户端借用同一个search_http连接，不会在这里立即发送搜索请求。
-        tools = {
-            name: create_search_web_tool(client=SearxngSearchClient(
-                client=search_http, base_url=settings.searxng_base_url, engines=name,
-                timeout_seconds=settings.web_search_timeout_seconds,
-            )) for name in engines
-        }
-        # 兜底单独绑定空引擎客户端，不能复用可能指定了默认引擎的配置。
+        # 显式使用空引擎配置；所有轮次不发送engines参数，由服务器决定。
         default_tool = create_search_web_tool(client=SearxngSearchClient(
             client=search_http, base_url=settings.searxng_base_url, engines="",
             timeout_seconds=settings.web_search_timeout_seconds,
@@ -97,17 +87,18 @@ async def test_real_research(question: str) -> None:
         query_prompt = (PROJECT_ROOT / "prompts" / "research_query.md").read_text(encoding="utf-8")
         review_prompt = (PROJECT_ROOT / "prompts" / "research_review.md").read_text(encoding="utf-8")
         workflow = WebResearchWorkflow(
-            query_agent=DisplayQueryAgent(model=model, tools=tools, prompt=query_prompt, default_tool=default_tool),
-            review_agent=DisplayReviewAgent(model=model, prompt=review_prompt), engines=engines,
+            query_agent=DisplayQueryAgent(model=model, tool=default_tool, prompt=query_prompt),
+            review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
         )
         print("\n【用户问题】", question, flush=True)
         # 在此打断点；可进入两个Agent，观察每轮搜索词和筛选反馈。
         result = await workflow.run(question=question, target_count=2, max_attempts=5)
     print("\n【用户问题】", question)
-    print("【状态、次数、失败引擎】", result["status"], result["attempt"], result["failed_engines"])
+    print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【用户可选动作】", result["user_options"])
     print("【工作流提示】", result["message"])
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
     print("【候选结果】", json.dumps(result["accepted"], ensure_ascii=False, indent=2))
     print("【累计备用候选及原因】", json.dumps(result["alternatives"], ensure_ascii=False, indent=2))
+    print("【用户已选择的备用候选】", json.dumps(result["selected_alternatives"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user"}, result["message"]

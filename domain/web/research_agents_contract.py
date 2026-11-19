@@ -7,15 +7,10 @@ from models.web.search_web_contract import WebSearchItem
 
 
 class ResearchQueryAgentContract(Protocol):
-    """查询Agent需要提供默认工具状态和异步搜索能力。"""
+    """查询Agent根据需求与反馈执行搜索。"""
 
-    @property
-    def has_default_tool(self) -> bool:
-        """是否配置了由服务器选择引擎的工具。"""
-        ...
-
-    async def search(self, *, question: str, feedback: str, engine: str | None) -> tuple[str, list[WebSearchItem]]:
-        """返回本轮搜索词和候选；engine为None表示服务器默认策略。"""
+    async def search(self, *, question: str, feedback: str) -> tuple[str, list[WebSearchItem]]:
+        """返回本轮搜索词和候选；搜索工具由宿主注入。"""
         ...
 
 

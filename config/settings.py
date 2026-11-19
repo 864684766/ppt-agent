@@ -112,12 +112,6 @@ class Settings(BaseSettings):
     searxng_base_url: str = Field(default="", description="SearXNG服务根地址，留空不启用。")
     # 普通网页默认引擎name，英文逗号分隔；空值使用服务器默认引擎。
     searxng_default_engines: str = Field(default="", description="普通网页引擎名称；默认空，由服务器选择general分类引擎。")
-    # 预留的Agent可选普通网页引擎name，英文逗号分隔；尚未接入工具参数校验。
-    # 它不是服务器全部引擎清单，必须与SearXNG settings.yml中已启用的name一致。
-    searxng_allowed_engines: str = Field(
-        default="sogou,bing,360search",
-        description="Agent可选择的普通网页引擎名称，英文逗号分隔。",
-    )
     # HTTP各阶段等待超时秒数，默认30、范围(0,120]；不是整个任务时限。
     web_search_timeout_seconds: float = Field(default=30, gt=0, le=120)
 
@@ -128,15 +122,6 @@ class Settings(BaseSettings):
     # 网页HTTPS证书校验开关：默认True；False跳过全部目标的证书身份校验。
     # 只控制外层连接策略，模型不能通过工具参数修改，不保证所有网站均可读。
     webpage_tls_verify: bool = Field(default=True, description="是否校验网页HTTPS证书，默认开启。")
-
-    def get_searxng_allowed_engines(self) -> tuple[str, ...]:
-        """返回去空白、去重后的Agent可选搜索引擎名称。
-
-        该方法只解析配置，不检查远端SearXNG当前是否启用；远端可用性需要
-        在真实搜索时由适配器或手工验证确认。返回元组避免调用方意外修改配置结果。
-        """
-        names = (name.strip() for name in self.searxng_allowed_engines.split(","))
-        return tuple(dict.fromkeys(name for name in names if name))
 
     def get_model(self, task: ModelTask) -> str:
         """返回任务专用模型，未配置时退回默认模型。
