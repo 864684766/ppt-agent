@@ -8,3 +8,5 @@
 | research_query.md / research_review.md | 查询与检查子Agent（外层读取并注入） | 独立多引擎研究流程使用，不代表已接聊天 |
 
 该提示词定义视觉观察规则。输出字段Schema由适配器根据TemplateVisualAnalysis动态附加，避免提示词与数据模型重复维护字段定义。正式子Agent提示词后续按任务增加。
+
+`web_research_summary.md`：根据成功读取的网页正文整理可追溯要点和缺口；不依据摘要编造事实。

@@ -1,12 +1,12 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>开发任务列表</title><link rel="stylesheet" href="文档样式.css"></head><body><header><p>项目进度 · 2026-11-16</p><h1>开发任务列表</h1><p>一次一项，完成后由你测试和讨论。</p></header><main>
 <nav><a href="文档首页.html">文档入口</a><a href="产品文档.html">产品</a><a href="技术文档.html">技术</a><a href="Agent工具清单.html">工具</a><a href="Store清单.html">字段</a></nav>
-<div class="notice"><strong>当前项：</strong>独立网页资料收集图已实现，正在用六个真实主题验证；正文读取、完整大纲与chat接入仍待开发。</div>
+<div class="notice"><strong>当前项：</strong>独立网页资料收集图已实现，正在用六个真实主题验证；正文读取和模型整理已接入资料收集图，真实验证中；正文充分性、完整大纲与chat接入仍待开发。</div>
 <h2>已完成与当前边界</h2><table><tr><th>状态</th><th>内容</th><th>实际边界</th></tr>
 <tr><td>已完成</td><td>Python / uv 环境、FastAPI 基础服务、统一配置与日志、模型客户端</td><td>模型工厂和独立调用不等于 Agent 已接入；依赖见技术文档。</td></tr>
 <tr><td>基础已实现</td><td>12 项 Agent 工具、文档解析、OCR、模板结构、转换、页面图片和视觉模块</td><td>工具可独立测试，不等于模型会调用；模板复制、页面创建、成品生成和检查均为基础能力，复杂对象及WPS显示仍需核验。</td></tr>
 <tr><td>部分完成</td><td>chat 解析文本、文档附件及读取所选 RustFS 模板；模板列表接口</td><td>chat 当前只返回 JSON，不调用AI、Agent或SSE；真实资料接入资料工具、媒体上传登记未完成。</td></tr></table>
 <h2 id="next">未完成任务与建议顺序</h2><ol>
-<li><strong>网页资料收集（进行中）：</strong>查询Agent生成搜索词并调用工具，检查Agent区分符合要求及备用候选；图已累计正式和备用候选，调用方可选择备用编号；真实用户询问与恢复待实现；每轮使用服务器默认搜索，不足时返回用户选择契约。多主题真实验证和用户验收进行中，接下来需读取正文及二次核验。</li>
+<li><strong>网页资料收集（进行中）：</strong>查询Agent生成搜索词并调用工具，检查Agent区分符合要求及备用候选；图已累计正式和备用候选，调用方可选择备用编号；真实用户询问与恢复待实现；每轮使用服务器默认搜索，不足时返回用户选择契约。多主题真实验证和用户验收进行中，正文读取与模型整理已接入图；接下来需二次核验及交互接入。</li>
 <li><strong>LangGraph 与通用人工反馈：</strong>最小编排和 ask_user；用户收到问题、输入真实回答后恢复。确定问题关联、取消、重试和等待期间资源管理；先验证当前进程内行为。</li>
 <li><strong>内容子智能体：</strong>问题、上传资料和搜索结果按来源接入资料工具；制定资料搜集方案、选用技能和提示词、生成并对话修改大纲；前端手动合并和编辑后的结果由后端接收、校验和确认。</li>
 <li><strong>Harness SDK 接入：</strong>验证 Python SDK、百舸代理模型、工具/MCP、技能资源及脚本、取消/错误与提问桥接；与LangChain/ LangGraph共享语义不代表API相同。</li>

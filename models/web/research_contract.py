@@ -10,6 +10,7 @@ from typing import TypedDict
 
 from pydantic import BaseModel, Field
 from models.web.search_web_contract import WebSearchItem
+from models.web.web_research_summary import WebResearchPage, WebResearchReadFailure
 
 
 class SearchPlan(BaseModel):
@@ -71,6 +72,10 @@ class ResearchState(TypedDict):
     accepted: list[ResearchCandidate]  # 跨轮去重后的初筛候选。
     alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
     selected_alternatives: list[ResearchAlternative]  # 用户明确选中的备用候选；仍不视为满足原要求的正式资料。
+    read_index: int  # 下一条待读正式候选的下标；每次读取后写入检查点。
+    pages: list[WebResearchPage]  # 成功读取非空正文的网页，含截断标记。
+    read_failures: list[WebResearchReadFailure]  # 读取失败的网页和原因。
+    summary: dict | None  # 模型整理结果的JSON字典；无正文时为None。
     failed_attempts: int  # 整次搜索工具调用失败次数，不代表某个具体引擎失败。
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。

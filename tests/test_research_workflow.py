@@ -11,9 +11,13 @@ import pytest
 
 from agents.research_query_agent import ResearchQueryAgent
 from agents.research_review_agent import ResearchReviewAgent
+from agents.web_research_summary_agent import WebResearchSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.http_webpage_reader import HttpWebpageReader
+from integrations.web.webpage_http_client import create_webpage_http_client
+from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
 from tools.web.search_web_tool import create_search_web_tool
 from workflows.web_research_workflow import WebResearchWorkflow
 from langchain_core.tools import ToolException
@@ -73,7 +77,8 @@ async def test_real_research(question: str) -> None:
     settings = Settings()
     # async with负责在测试结束或异常时关闭连接。模型沿用系统代理；
     # 本测试的搜索连接不读取系统代理，以直接访问配置的SearXNG服务。
-    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=False) as search_http:
+    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=False) as search_http, \
+            create_webpage_http_client(verify_tls=settings.webpage_tls_verify) as webpage_http:
         model = create_langchain_model(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
@@ -88,9 +93,14 @@ async def test_real_research(question: str) -> None:
         # 读取提示词文字后注入Agent；这里不把文件路径直接传给模型。
         query_prompt = (PROJECT_ROOT / "prompts" / "research_query.md").read_text(encoding="utf-8")
         review_prompt = (PROJECT_ROOT / "prompts" / "research_review.md").read_text(encoding="utf-8")
+        reader = HttpWebpageReader(client=webpage_http, timeout_seconds=settings.webpage_timeout_seconds,
+                                   max_download_bytes=settings.webpage_max_download_bytes)
         workflow = WebResearchWorkflow(
             query_agent=DisplayQueryAgent(model=model, tool=default_tool, prompt=query_prompt),
             review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
+            fetch_tool=create_fetch_webpage_tool(reader=reader),
+            summary_agent=WebResearchSummaryAgent(
+                model=model, prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8")),
         )
         print("\n【用户问题】", question, flush=True)
         # 编号需在run之前创建：即使run报错，也能用同一编号恢复。
@@ -107,4 +117,11 @@ async def test_real_research(question: str) -> None:
     print("【累计备用候选及原因】", json.dumps(result["alternatives"], ensure_ascii=False, indent=2))
     print("【因输出超限未检查完成】", json.dumps(result["unreviewed"], ensure_ascii=False, indent=2))
     print("【用户已选择的备用候选】", json.dumps(result["selected_alternatives"], ensure_ascii=False, indent=2))
+    print("【网页正文与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
+    print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user"}, result["message"]
+    # 成功读取到正文时，图应完成模型整理；没有正文则不能编造整理结果。
+    assert (result["summary"] is not None) == bool(result["pages"])
+    if result["summary"]:
+        page_ids = {page["candidate_id"] for page in result["pages"]}
+        assert all(set(point["candidate_ids"]) <= page_ids for point in result["summary"]["points"])
