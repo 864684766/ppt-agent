@@ -36,5 +36,7 @@ def build_research_report(state: ResearchState) -> ResearchReport:
             issues.append({"type": "webpage_truncated", "message": "该网页正文超过返回长度，已截断。", "candidate_ids": [page["candidate_id"]]})
     for item in state["unreviewed"]:
         issues.append({"type": "review_unfinished", "message": "该网页候选因模型输出超限未完成检查。", "candidate_ids": [item["candidate_id"]]})
+    for item in state["review_timeout_candidates"]:
+        issues.append({"type": "review_timeout", "message": "模型检查超时，本候选尚未完成检查。", "candidate_ids": [item["candidate_id"]]})
     return {"has_usable_content": usable, "source_count": state["effective_count"],
             "target_source_count": state["target_count"], "stop_reason": stop, "issues": issues}

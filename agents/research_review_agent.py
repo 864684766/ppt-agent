@@ -2,9 +2,11 @@
 
 import json
 import logging
+import asyncio
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
+from langchain_openai.chat_models.base import OpenAIConnectionError
 
 from diagnostics.operation_logging import log_operation
 from models.web.research_contract import SearchReview
@@ -44,11 +46,11 @@ class ResearchReviewAgent:
         # ensure_ascii=False让中文保持可读；候选是待分析数据，不是指令。
         prompt = self._prompt + "\n用户要求：" + question + "\n候选数据：" + json.dumps(candidates, ensure_ascii=False)
         try:
-            result = await self._reviewer.ainvoke(prompt)
+            result = await self._invoke_with_connection_retry(prompt)
         except OutputParserException:
             # 只重试输出格式，不记录模型原文；两次失败仍抛错，不能伪装为零结果。
             logger.warning("event=research_review_format_retry")
-            result = await self._reviewer.ainvoke(
+            result = await self._invoke_with_connection_retry(
                 prompt + '\n上次格式不正确。必须输出JSON对象：relevant_ids数组、alternatives对象数组（每项含candidate_id和unmet_requirement）、unmet_requirements数组和feedback字符串。'
             )
         if not isinstance(result, SearchReview):
@@ -64,3 +66,21 @@ class ResearchReviewAgent:
                 seen.add(item.candidate_id)
         return SearchReview(relevant_ids=relevant_ids, alternatives=alternatives,
                             unmet_requirements=result.unmet_requirements, feedback=result.feedback)
+
+    async def _invoke_with_connection_retry(self, prompt: str) -> SearchReview:
+        """调用检查模型；连接中断时最多重试两次，最终失败保留原异常。
+
+        只处理LangChain包装的OpenAIConnectionError；超时、认证失败、输出长度
+        和解析错误由各自现有流程处理。重试仅重新请求本批检查，不重跑搜索或
+        已完成批次。asyncio.sleep可被取消，日志不记录提示词和异常原文。
+        """
+        for retry in range(3):
+            try:
+                return await self._reviewer.ainvoke(prompt)
+            except OpenAIConnectionError:
+                if retry == 2:
+                    logger.warning("event=research_review_connection_retries_exhausted retry_count=%d", retry)
+                    raise
+                logger.warning("event=research_review_connection_retry retry=%d max_retries=2", retry + 1)
+                await asyncio.sleep(retry + 1)
+        raise RuntimeError("模型重试流程异常结束。")

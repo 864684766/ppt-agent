@@ -7,6 +7,7 @@ from typing import Any, Literal, cast
 
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.runnables import RunnableConfig
+from langchain_openai.chat_models.base import OpenAITimeoutError
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from openai import LengthFinishReasonError
@@ -101,6 +102,11 @@ class WebResearchWorkflow:
         batch, remaining = state["review_batches"][0], state["review_batches"][1:]
         try:
             review = await self._review_agent.review(question=state["question"], candidates=batch)
+        except OpenAITimeoutError:
+            # 当前批次及后续批次均尚未完成；按编号去重，不能误称不相关。
+            pending = {item["candidate_id"]: item for group in state["review_batches"] for item in group}
+            logger.warning("event=research_review_timeout unfinished_count=%d", len(pending))
+            return {"review_timeout_candidates": list(pending.values()), "review_batches": []}
         except LengthFinishReasonError:
             if len(batch) > 1:
                 # 二分后先检查左半，再检查右半；每次拆分都会减少批次大小。
@@ -129,6 +135,8 @@ class WebResearchWorkflow:
     @staticmethod
     def _next(state: ResearchState) -> Literal["query", "review", "fetch", "__end__"]:
         """条件边路由：返回query继续下一轮，返回END结束图。"""
+        if state["review_timeout_candidates"]:
+            return END
         if state["review_batches"]:
             return "review"
         if state["read_index"] >= state["max_pages"]:
@@ -240,7 +248,7 @@ class WebResearchWorkflow:
             raise ValueError("任务编号已存在，请使用新编号或恢复原任务。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
-            "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
+            "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "review_timeout_candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
             "failed_attempts": 0, "read_index": 0, "pages": [], "read_failures": [], "summary": None, "effective_count": 0,
             "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
@@ -274,7 +282,12 @@ class WebResearchWorkflow:
     def _finalize(result: ResearchState) -> ResearchState:
         """将图运行完成的状态整理为供调用方读取的结果。"""
         target_count = result["target_count"]
-        if (result["effective_count"] >= target_count and result["summary"]
+        if result["review_timeout_candidates"]:
+            result["status"] = "interrupted"
+            result["stop_reason"] = "model_timeout"
+            result["message"] = "模型检查超时，当前批次及后续候选未完成检查；已保留本次已完成的结果。"
+            result["user_options"] = []
+        elif (result["effective_count"] >= target_count and result["summary"]
                 and result["summary"]["points"] and not result["summary"]["gaps"]):
             # 最后一轮可能一次返回多条，只交付请求的数量，保持引擎原有顺序。
             result["status"] = "completed"

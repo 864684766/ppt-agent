@@ -54,9 +54,9 @@ class DisplayReviewAgent(ResearchReviewAgent):
 # pytest会对列表中每一个问题各运行一次test_real_research。
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
-    # "介绍一下黄芪。",
+    "介绍一下黄芪。",
     "查找中国居民膳食指南2022关于平衡饮食的资料。",
-    # "查找《本草纲目》中关于黄芪的记载。",
+    "查找《本草纲目》中关于黄芪的记载。",
     # "查找中国劳动合同解除的法律规定。",
     # "查找成年人每周身体活动建议。",
     # "查找中国垃圾分类的基本类别。",
@@ -124,10 +124,11 @@ async def test_real_research(question: str) -> None:
     print("【候选结果】", json.dumps(result["accepted"], ensure_ascii=False, indent=2))
     print("【累计备用候选及原因】", json.dumps(result["alternatives"], ensure_ascii=False, indent=2))
     print("【因输出超限未检查完成】", json.dumps(result["unreviewed"], ensure_ascii=False, indent=2))
+    print("【因模型超时未检查】", json.dumps(result["review_timeout_candidates"], ensure_ascii=False, indent=2))
     print("【用户已选择的备用候选】", json.dumps(result["selected_alternatives"], ensure_ascii=False, indent=2))
     print("【网页正文与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
     print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
-    assert result["status"] in {"completed", "awaiting_user"}, result["message"]
+    assert result["status"] in {"completed", "awaiting_user", "interrupted"}, result["message"]
     assert result["report"] is not None and result["report"]["stop_reason"] == result["stop_reason"]
     assert result["report"]["source_count"] == result["effective_count"]
     assert result["report"]["target_source_count"] == result["target_count"]
@@ -141,3 +142,4 @@ async def test_real_research(question: str) -> None:
         links_by_page = {page["candidate_id"]: {link["url"] for link in page["links"]} for page in result["pages"]}
         assert all(item["url"] in links_by_page.get(item["candidate_id"], set())
                    for item in result["summary"]["follow_links"])
+    print("【整体返回内容】",json.dumps(result, ensure_ascii=False, indent=2))

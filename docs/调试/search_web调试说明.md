@@ -128,3 +128,9 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 测试输出【网页资料检查报告】，report包含has_usable_content、source_count、target_source_count、stop_reason、issues；issues逐项给出类别、说明和相关候选编号。content_gap由模型生成，并不证明缺口真实；反馈feedback不放报告。报告是给后续卡片使用的数据，真实询问和上传文件尚未接入。
 
 2026-11-23检查报告真实验证：限制搜索1轮、读取2页，真实模型和SearXNG返回无关候选，报告返回无可用内容及来源数量不足；测试通过。网页读取失败、截断和模型缺口的报告分支本次未通过真实案例验证。
+
+检查Agent的单次模型调用遇到OpenAIConnectionError时最多重试2次，分别等待1秒、2秒；仅本批模型请求重试，不重跑搜索或已完成批次。日志记录research_review_connection_retry及次数，最终失败记录research_review_connection_retries_exhausted并抛原异常；超时、认证、输出长度与格式错误不走此连接重试。模型SDK自动重试仍为0。
+
+检查候选时模型超时立即停止图，不自动重试；返回status=interrupted、stop_reason=model_timeout、review_timeout_candidates及报告review_timeout问题，已有搜索与正文整理结果保留。超时后图已结束，当前resume不能重试本次中断；查询词生成和正文整理超时仍按原样抛出。
+
+2026-11-23真实验证：使用真实模型和SearXNG，将本次检查模型超时人为设置为0.001秒，实际触发OpenAITimeoutError；5条候选均返回为未检查，状态interrupted、原因model_timeout，报告包含5条review_timeout。未使用模拟数据；未覆盖此前已有整理结果的超时分支。

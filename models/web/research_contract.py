@@ -71,6 +71,7 @@ class ResearchState(TypedDict):
     candidates: list[WebSearchItem]  # 当前轮搜索候选，含实际引擎列表。
     review_batches: list[list[WebSearchItem]]  # 本轮尚待检查的批次；超限时拆成更小批次。
     unreviewed: list[WebSearchItem]  # 单条检查仍超限的候选；不是无关结果，可能在后续轮次重新检查。
+    review_timeout_candidates: list[WebSearchItem]  # 超时批次及本轮尚未检查的候选，不表示无关。
     accepted: list[ResearchCandidate]  # 跨轮去重后的初筛候选。
     alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
     selected_alternatives: list[ResearchAlternative]  # 用户明确选中的备用候选；仍不视为满足原要求的正式资料。
@@ -88,7 +89,8 @@ class ResearchState(TypedDict):
     # search_limit：搜索轮次用完，仍未满足上述目标和缺口条件。
     # page_limit：网页读取次数用完（包含失败），仍未满足停止条件。
     # search_failed：本次所有搜索调用均失败，而非某一轮或某个引擎失败。
-    # 同时满足多个原因时，当前按目标达到、全部搜索失败、读取上限、搜索上限依次判断。
+    # model_timeout：检查模型响应超时，本轮剩余候选未检查，已有结果保留。
+    # 同时满足多个原因时，优先报告模型超时，再判断目标、搜索失败和各项上限。
     # 这是内部状态，不自动传给模型；Literal只提供静态类型提示，不做运行时校验。
-    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed"]
+    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed", "model_timeout"]
     report: ResearchReport | None  # 程序生成的网页检查报告；图运行中为None，不含搜索feedback。
