@@ -3,6 +3,7 @@
 from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
+from models.web.webpage_content import WebpageLink
 
 
 class FetchWebpageInput(BaseModel):
@@ -40,3 +41,4 @@ class FetchWebpageOutput(TypedDict):
     extracted_chars: int
     # 抓取完成的UTC时间，ISO 8601字符串；不是发布日期。
     fetched_at: str
+    links: list[WebpageLink]  # 静态页面可见链接，最多100条，未验证可访问性。

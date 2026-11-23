@@ -193,3 +193,5 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 [presentations/check_presentation_contract.py](presentations/check_presentation_contract.py)集中定义CheckPresentationInput（模型输入artifact_id）、CheckPresentationOutput及PresentationCheckItem（检查器创建、工具公开）。输入由Pydantic校验，TypedDict结果只描述类型；工具不公开宿主路径/SDK对象。passed只覆盖本轮必过规则；未知值null，未实现规则not_checked。PresentationChecker协议和PresentationCheckError在domain/presentations。字段详见[字段清单](../docs/Store清单.html#presentation-check-fields)及[调试说明](../docs/调试/check_presentation调试说明.md)。
 
 网页正文整理：`web/web_research_summary.py` 的 `WebResearchPage` 与 `WebResearchReadFailure` 由资料收集图的读取节点创建，`WebResearchSummary` 与 `WebSummaryPoint` 由整理模型生成并校验候选编号；`ResearchState` 返回pages、read_failures、read_index和可为空的summary。正文仅随调用方保存在内存中，不是已登记资料。
+
+网页内容包含最多100条静态链接links；ResearchState的max_pages限制读取次数，effective_count统计模型要点引用的来源数，summary.follow_links记录已读页面编号及其实际链接。该计数不保证事实可靠，也不保证识别语义转载。

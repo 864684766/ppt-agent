@@ -13,11 +13,19 @@ class WebSummaryPoint(BaseModel):
     candidate_ids: list[str] = Field(min_length=1, description="支持本条内容的网页候选编号。")
 
 
+class WebFollowLink(BaseModel):
+    """模型建议从已读取页面继续访问的链接。"""
+
+    candidate_id: str = Field(description="包含此链接的已读取页面编号。")
+    url: str = Field(description="该页面links中实际存在的链接地址。")
+
+
 class WebResearchSummary(BaseModel):
     """正文整理结果；不表示已核实网页事实或完成最终PPT大纲。"""
 
     points: list[WebSummaryPoint] = Field(description="整理后的相关要点；无相关内容时为空列表。")
     gaps: list[str] = Field(description="根据已读取正文仍未满足的需求；没有时为空列表。")
+    follow_links: list[WebFollowLink] = Field(description="已读页面中值得继续读取的链接；没有则为空。")
 
 
 class WebResearchPage(FetchWebpageOutput):

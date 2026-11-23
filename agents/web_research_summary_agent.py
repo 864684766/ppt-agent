@@ -28,5 +28,9 @@ class WebResearchSummaryAgent:
             raise ValueError("模型未返回有效的网页整理结果。")
         valid_ids = {page["candidate_id"] for page in pages}
         if any(not set(point.candidate_ids).issubset(valid_ids) for point in result.points):
-            raise ValueError("模型引用了未提供正文的候选编号。")
+            raise ValueError("模型要点引用了未读取的网页编号。")
+        # 按页面编号核对链接确实来自该页面；无效编号或虚构链接直接忽略。
+        links_by_page = {page["candidate_id"]: {link["url"] for link in page["links"]} for page in pages}
+        result.follow_links = [item for item in result.follow_links
+                               if item.url in links_by_page.get(item.candidate_id, set())][:3]
         return result

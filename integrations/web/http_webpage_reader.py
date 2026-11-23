@@ -10,7 +10,7 @@ import httpx
 
 from diagnostics.operation_logging import log_operation
 from domain.web.webpage_reader_contract import WebpageReadError
-from integrations.web.html_text_extractor import HtmlTextExtractor
+from integrations.web.html_text_extractor import HtmlTextExtractor, HtmlLinkExtractor
 from models.web.webpage_content import WebpageContent
 
 
@@ -80,12 +80,16 @@ class HttpWebpageReader:
         parser.feed(html)
         parser.close()
         title, text = parser.result()
+        link_parser = HtmlLinkExtractor(final_url)
+        link_parser.feed(html)
+        link_parser.close()
         if not text:
             raise WebpageReadError("网页没有可提取文本，可能需要JavaScript、登录或其他读取方式。")
         logger.info("event=webpage_result downloaded_bytes=%s text_chars=%s", len(body), len(text))
         return WebpageContent(
             final_url=final_url, title=title, text=text,
             fetched_at=datetime.now(timezone.utc).isoformat(),
+            links=tuple(link_parser.links),
         )
 
 

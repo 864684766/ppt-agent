@@ -1,6 +1,13 @@
 """HTTP读取适配器交给业务层的网页内容，不包含项目登记信息。"""
 
 from dataclasses import dataclass
+from typing import TypedDict
+
+
+class WebpageLink(TypedDict):
+    """静态HTML中的链接文本与绝对地址；不保证链接可访问。"""
+    text: str  # 可见链接文字。
+    url: str  # 以最终页面地址解析的HTTP(S)绝对地址。
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +22,7 @@ class WebpageContent:
     text: str
     # 完成读取时的UTC时间，ISO 8601格式，非网页发布日期。
     fetched_at: str
+    links: tuple[WebpageLink, ...] = ()  # 最多100条去重链接，可能不完整。
 
 
 @dataclass(frozen=True, slots=True)

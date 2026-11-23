@@ -63,6 +63,7 @@ class ResearchState(TypedDict):
     question: str  # 用户主题和要求。
     target_count: int  # 期望候选数量；不是保证找到的数量。
     max_attempts: int  # 搜索总次数上限，每轮由服务器选择引擎。
+    max_pages: int  # 网页读取次数上限，包含失败。
     attempt: int  # 已尝试搜索总次数。
     query: str  # 当前实际搜索词。
     feedback: str  # 上一轮检查意见，提供给查询Agent。
@@ -76,6 +77,7 @@ class ResearchState(TypedDict):
     pages: list[WebResearchPage]  # 成功读取非空正文的网页，含截断标记。
     read_failures: list[WebResearchReadFailure]  # 读取失败的网页和原因。
     summary: dict | None  # 模型整理结果的JSON字典；无正文时为None。
+    effective_count: int  # 整理要点实际引用的去重网页数；不保证权威性。
     failed_attempts: int  # 整次搜索工具调用失败次数，不代表某个具体引擎失败。
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。

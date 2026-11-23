@@ -1,6 +1,42 @@
 """用标准库提取静态HTML可读文本，不引入浏览器或执行网页脚本。"""
 
 from html.parser import HTMLParser
+from urllib.parse import urljoin, urlsplit, urldefrag
+
+
+class HtmlLinkExtractor(HTMLParser):
+    """从静态HTML收集有文字的链接；不执行脚本，不访问链接。"""
+
+    def __init__(self, base_url: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.href: str | None = None
+        self.fragments: list[str] = []
+        self.links: list[dict[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == 'a':
+            self.href = dict(attrs).get('href')
+            self.fragments = []
+
+    def handle_data(self, data: str) -> None:
+        if self.href is not None:
+            self.fragments.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != 'a' or self.href is None:
+            return
+        try:
+            url = urldefrag(urljoin(self.base_url, self.href))[0]
+            parts = urlsplit(url)
+        except ValueError:
+            self.href = None
+            return
+        title = ' '.join(''.join(self.fragments).split())[:200]
+        if title and parts.scheme in {'http', 'https'} and parts.hostname and not parts.username and not parts.password:
+            if url not in {item['url'] for item in self.links} and len(self.links) < 100:
+                self.links.append({'text': title, 'url': url})
+        self.href = None
 
 
 class HtmlTextExtractor(HTMLParser):

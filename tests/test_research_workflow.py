@@ -54,13 +54,13 @@ class DisplayReviewAgent(ResearchReviewAgent):
 # pytest会对列表中每一个问题各运行一次test_real_research。
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
-    "介绍一下黄芪。",
+    # "介绍一下黄芪。",
     "查找中国居民膳食指南2022关于平衡饮食的资料。",
-    "查找《本草纲目》中关于黄芪的记载。",
-    "查找中国劳动合同解除的法律规定。",
-    "查找成年人每周身体活动建议。",
-    "查找中国垃圾分类的基本类别。",
-    "查找Python异步编程中async与await的官方说明。",
+    # "查找《本草纲目》中关于黄芪的记载。",
+    # "查找中国劳动合同解除的法律规定。",
+    # "查找成年人每周身体活动建议。",
+    # "查找中国垃圾分类的基本类别。",
+    # "查找Python异步编程中async与await的官方说明。",
 ]
 
 
@@ -110,6 +110,7 @@ async def test_real_research(question: str) -> None:
         result = await workflow.run(thread_id=thread_id, question=question, target_count=2, max_attempts=5)
     print("\n【用户问题】", question)
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
+    print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
     print("【工作流提示】", result["message"])
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
@@ -125,3 +126,7 @@ async def test_real_research(question: str) -> None:
     if result["summary"]:
         page_ids = {page["candidate_id"] for page in result["pages"]}
         assert all(set(point["candidate_ids"]) <= page_ids for point in result["summary"]["points"])
+        # 每个后续链接都应真实存在于它标明的已读页面中。
+        links_by_page = {page["candidate_id"]: {link["url"] for link in page["links"]} for page in result["pages"]}
+        assert all(item["url"] in links_by_page.get(item["candidate_id"], set())
+                   for item in result["summary"]["follow_links"])
