@@ -117,6 +117,7 @@ async def test_real_research(question: str) -> None:
     print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
     print("【结束原因】", result["stop_reason"])
+    print("【网页资料检查报告】", json.dumps(result["report"], ensure_ascii=False, indent=2))
     print("【正文截断的网页编号】", [page["candidate_id"] for page in result["pages"] if page["truncated"]])
     print("【工作流提示】", result["message"])
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
@@ -127,6 +128,10 @@ async def test_real_research(question: str) -> None:
     print("【网页正文与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
     print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user"}, result["message"]
+    assert result["report"] is not None and result["report"]["stop_reason"] == result["stop_reason"]
+    assert result["report"]["source_count"] == result["effective_count"]
+    assert result["report"]["target_source_count"] == result["target_count"]
+    assert "feedback" not in result["report"]
     # 成功读取到正文时，图应完成模型整理；没有正文则不能编造整理结果。
     assert (result["summary"] is not None) == bool(result["pages"])
     if result["summary"]:

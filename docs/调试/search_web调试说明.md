@@ -124,3 +124,7 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 网页资料图由外层Settings读取RESEARCH_TARGET_SOURCE_COUNT（默认5，1至20）、RESEARCH_MAX_SEARCH_ROUNDS（默认6，1至20）、RESEARCH_MAX_WEB_PAGES（默认15，1至50）并注入构造函数；run显式传参优先。测试输出stop_reason（target_reached目标达到、search_limit搜索轮次耗尽、page_limit读取次数耗尽、search_failed各轮搜索失败），并打印截断网页编号；summary.gaps和read_failures提供缺口及失败细节。以上配置当前只在真实研究测试入口接线，chat尚未接入。
 
 2026-11-23真实验证：进程临时覆盖目标2、搜索1轮、读取上限2；SearXNG返回无关候选，模型初筛后没有正式结果，流程返回搜索轮次耗尽，测试通过。未验证真实网页截断或读取上限分支。默认.env经Settings读取为5、6、15。
+
+测试输出【网页资料检查报告】，report包含has_usable_content、source_count、target_source_count、stop_reason、issues；issues逐项给出类别、说明和相关候选编号。content_gap由模型生成，并不证明缺口真实；反馈feedback不放报告。报告是给后续卡片使用的数据，真实询问和上传文件尚未接入。
+
+2026-11-23检查报告真实验证：限制搜索1轮、读取2页，真实模型和SearXNG返回无关候选，报告返回无可用内容及来源数量不足；测试通过。网页读取失败、截断和模型缺口的报告分支本次未通过真实案例验证。

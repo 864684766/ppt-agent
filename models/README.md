@@ -200,4 +200,6 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 
 询问演示的图状态使用列表保存options，恢复后构造UserQuestion时转成tuple；LangGraph检查点反序列化不应被假定会保留tuple。
 
-ResearchState.stop_reason标识网页资料图返回原因：target_reached、search_limit、page_limit或search_failed；模型缺口见summary.gaps，失败见read_failures，截断见pages.truncated。
+ResearchState.stop_reason运行中为空字符串，结束后按目标达到、全部搜索失败、读取上限、搜索上限顺序标识主要原因（Literal仅静态提示）：target_reached、search_limit、page_limit或search_failed；模型缺口见summary.gaps，失败见read_failures，截断见pages.truncated。
+
+网页检查报告：`web/research_report.py` 的ResearchReport与ResearchIssue由domain/web/research_report_builder.py在网页图结束后生成；报告包含可用内容、当前与目标来源数、停止原因和问题列表，不包含内部feedback，不直接实现前端卡片。

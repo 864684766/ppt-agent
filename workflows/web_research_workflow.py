@@ -14,6 +14,7 @@ from openai import LengthFinishReasonError
 from diagnostics.operation_logging import log_operation
 from domain.web.research_agents_contract import ResearchQueryAgentContract, ResearchReviewAgentContract
 from domain.web.research_candidate_merge import merge_research_candidates
+from domain.web.research_report_builder import build_research_report
 from models.web.research_contract import ResearchState
 from agents.web_research_summary_agent import WebResearchSummaryAgent
 
@@ -241,7 +242,7 @@ class WebResearchWorkflow:
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
             "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
             "failed_attempts": 0, "read_index": 0, "pages": [], "read_failures": [], "summary": None, "effective_count": 0,
-            "status": "running", "message": "", "user_options": [], "stop_reason": ""}
+            "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
@@ -308,6 +309,8 @@ class WebResearchWorkflow:
             result["user_options"] = options
         if result["unreviewed"]:
             result["message"] += f" 另有{len(result['unreviewed'])}条候选因模型输出超限未完成检查。"
+        # 图已经停止后再汇总已知问题；不把下一轮搜索用的feedback交给卡片。
+        result["report"] = build_research_report(result)
         return result
 
     @staticmethod

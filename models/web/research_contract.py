@@ -6,11 +6,12 @@ TypedDict描述字典应有哪些字段，
 仅提供类型提示，不会像Pydantic那样在运行时自动校验或创建对象。
 """
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 from models.web.search_web_contract import WebSearchItem
 from models.web.web_research_summary import WebResearchPage, WebResearchReadFailure
+from models.web.research_report import ResearchReport
 
 
 class SearchPlan(BaseModel):
@@ -82,4 +83,12 @@ class ResearchState(TypedDict):
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。
-    stop_reason: str  # 返回原因：target_reached、search_limit、page_limit或search_failed。
+    # 图运行中为空字符串；运行结束由工作流_finalize填写主要停止原因：
+    # target_reached：模型引用的网页来源数达到目标，且模型未报告明确缺口。
+    # search_limit：搜索轮次用完，仍未满足上述目标和缺口条件。
+    # page_limit：网页读取次数用完（包含失败），仍未满足停止条件。
+    # search_failed：本次所有搜索调用均失败，而非某一轮或某个引擎失败。
+    # 同时满足多个原因时，当前按目标达到、全部搜索失败、读取上限、搜索上限依次判断。
+    # 这是内部状态，不自动传给模型；Literal只提供静态类型提示，不做运行时校验。
+    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed"]
+    report: ResearchReport | None  # 程序生成的网页检查报告；图运行中为None，不含搜索feedback。
