@@ -103,7 +103,11 @@ async def test_real_research(question: str) -> None:
             max_attempts=settings.research_max_search_rounds,
             max_pages=settings.research_max_web_pages,
             summary_agent=WebResearchSummaryAgent(
-                model=model, prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8")),
+                model=model,
+                prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
+                page_prompt=(PROJECT_ROOT / "prompts" / "web_research_page.md").read_text(encoding="utf-8"),
+                summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
+                retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
         )
         print("\n【用户问题】", question, flush=True)
         # 编号需在run之前创建：即使run报错，也能用同一编号恢复。
@@ -117,6 +121,7 @@ async def test_real_research(question: str) -> None:
     print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
     print("【结束原因】", result["stop_reason"])
+    print("【累计汇总是否因输出超限中断】", result["summary_length_exceeded"])
     print("【网页资料检查报告】", json.dumps(result["report"], ensure_ascii=False, indent=2))
     print("【正文截断的网页编号】", [page["candidate_id"] for page in result["pages"] if page["truncated"]])
     print("【工作流提示】", result["message"])
@@ -126,20 +131,24 @@ async def test_real_research(question: str) -> None:
     print("【因输出超限未检查完成】", json.dumps(result["unreviewed"], ensure_ascii=False, indent=2))
     print("【因模型超时未检查】", json.dumps(result["review_timeout_candidates"], ensure_ascii=False, indent=2))
     print("【用户已选择的备用候选】", json.dumps(result["selected_alternatives"], ensure_ascii=False, indent=2))
-    print("【网页正文与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
+    print("【网页元数据与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
+    print("【逐页提炼结果】", json.dumps(result["page_extractions"], ensure_ascii=False, indent=2))
     print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
     assert result["status"] in {"completed", "awaiting_user", "interrupted"}, result["message"]
     assert result["report"] is not None and result["report"]["stop_reason"] == result["stop_reason"]
     assert result["report"]["source_count"] == result["effective_count"]
     assert result["report"]["target_source_count"] == result["target_count"]
     assert "feedback" not in result["report"]
-    # 成功读取到正文时，图应完成模型整理；没有正文则不能编造整理结果。
-    assert (result["summary"] is not None) == bool(result["pages"])
+    # 所有网页均无要点或汇总输出超限时，可能没有成功的汇总。
+    if result["summary"] is None:
+        assert result["summary_length_exceeded"] or not any(item["points"] for item in result["page_extractions"])
+    if result["summary_length_exceeded"]:
+        assert result["status"] == "interrupted" and result["stop_reason"] == "summary_length_exceeded"
+        assert any(issue["type"] == "summary_unfinished" for issue in result["report"]["issues"])
     if result["summary"]:
         page_ids = {page["candidate_id"] for page in result["pages"]}
         assert all(set(point["candidate_ids"]) <= page_ids for point in result["summary"]["points"])
-        # 每个后续链接都应真实存在于它标明的已读页面中。
-        links_by_page = {page["candidate_id"]: {link["url"] for link in page["links"]} for page in result["pages"]}
-        assert all(item["url"] in links_by_page.get(item["candidate_id"], set())
-                   for item in result["summary"]["follow_links"])
+        assert all(set(issue["candidate_ids"]) <= page_ids for issue in result["summary"]["issues"])
+        assert all("text" not in page for page in result["pages"])
+        assert {item["candidate_id"] for item in result["page_extractions"]} == page_ids
     print("【整体返回内容】",json.dumps(result, ensure_ascii=False, indent=2))

@@ -17,13 +17,19 @@ def build_research_report(state: ResearchState) -> ResearchReport:
     issues: list[ResearchIssue] = []
     summary = state["summary"]
     usable = bool(summary and summary["points"])
-    if not usable:
+    if stop == "summary_length_exceeded":
+        issues.append({"type": "summary_unfinished", "message": "模型输出超限，最新单页要点尚未完成汇总检查；已有汇总仅供参考。",
+                       "candidate_ids": [state["page_extractions"][-1]["candidate_id"]]})
+    if not usable and stop != "summary_length_exceeded":
         issues.append({"type": "no_usable_content", "message": "当前没有整理出可用的网页正文内容。", "candidate_ids": []})
-    if state["effective_count"] < state["target_count"]:
+    if state["effective_count"] < state["target_count"] and stop != "summary_length_exceeded":
         issues.append({"type": "source_count_insufficient", "message": f"当前有{state['effective_count']}个有效网页来源，目标为{state['target_count']}个。", "candidate_ids": []})
     if summary:
+        # 结构化问题来自模型；保留其来源编号，供前端展示和人工核对。
+        for issue in summary["issues"]:
+            issues.append({"type": issue["type"], "message": issue["message"], "candidate_ids": issue["candidate_ids"]})
         for gap in dict.fromkeys(summary["gaps"]):
-            if gap.strip():
+            if gap.strip() and not any(issue["message"] == gap for issue in issues):
                 issues.append({"type": "content_gap", "message": gap, "candidate_ids": []})
     if state["failed_attempts"]:
         all_failed = state["failed_attempts"] == state["attempt"]

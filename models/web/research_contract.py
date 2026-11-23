@@ -10,7 +10,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 from models.web.search_web_contract import WebSearchItem
-from models.web.web_research_summary import WebResearchPage, WebResearchReadFailure
+from models.web.web_research_summary import WebPageExtractionRecord, WebResearchPage, WebResearchReadFailure
 from models.web.research_report import ResearchReport
 
 
@@ -76,21 +76,25 @@ class ResearchState(TypedDict):
     alternatives: list[ResearchAlternative]  # 跨轮去重备用候选，不计入正式候选数量。
     selected_alternatives: list[ResearchAlternative]  # 用户明确选中的备用候选；仍不视为满足原要求的正式资料。
     read_index: int  # 下一条待读正式候选的下标；每次读取后写入检查点。
-    pages: list[WebResearchPage]  # 成功读取非空正文的网页，含截断标记。
+    pages: list[WebResearchPage]  # 已提炼网页的元数据，不含正文。
+    page_extractions: list[WebPageExtractionRecord]  # 单页提炼要点与来源，供后续汇总；不含网页正文。
+    needs_summary: bool  # 本页有新要点，需要重新检查累计要点。
+    summary_length_exceeded: bool  # 累计汇总输出超限且未完成；之前的汇总和单页要点保留。
     read_failures: list[WebResearchReadFailure]  # 读取失败的网页和原因。
-    summary: dict | None  # 模型整理结果的JSON字典；无正文时为None。
-    effective_count: int  # 整理要点实际引用的去重网页数；不保证权威性。
+    summary: dict | None  # 上次成功汇总的JSON；尚无成功汇总时为None。
+    effective_count: int  # 上次成功汇总实际引用的网页数；汇总失败时可能未包含最新单页。
     failed_attempts: int  # 整次搜索工具调用失败次数，不代表某个具体引擎失败。
-    status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
+    status: str  # running、completed、awaiting_user、interrupted、needs_materials或cancelled。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。
     # 图运行中为空字符串；运行结束由工作流_finalize填写主要停止原因：
-    # target_reached：模型引用的网页来源数达到目标，且模型未报告明确缺口。
+    # target_reached：模型引用的网页来源数达到目标，且未报告明确缺口或内容问题。
     # search_limit：搜索轮次用完，仍未满足上述目标和缺口条件。
     # page_limit：网页读取次数用完（包含失败），仍未满足停止条件。
     # search_failed：本次所有搜索调用均失败，而非某一轮或某个引擎失败。
     # model_timeout：检查模型响应超时，本轮剩余候选未检查，已有结果保留。
+    # summary_length_exceeded：累计汇总输出超限，最新单页要点尚未纳入汇总检查。
     # 同时满足多个原因时，优先报告模型超时，再判断目标、搜索失败和各项上限。
     # 这是内部状态，不自动传给模型；Literal只提供静态类型提示，不做运行时校验。
-    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed", "model_timeout"]
+    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed", "model_timeout", "summary_length_exceeded"]
     report: ResearchReport | None  # 程序生成的网页检查报告；图运行中为None，不含搜索feedback。

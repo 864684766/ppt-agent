@@ -155,53 +155,71 @@ class WebResearchWorkflow:
         except ToolException as error:
             logger.warning("event=research_page_failed")
             failure = {"candidate_id": candidate["candidate_id"], "url": candidate["url"], "reason": str(error)}
-            return {"read_index": state["read_index"] + 1, "read_failures": [*state["read_failures"], failure]}
+            return {"read_index": state["read_index"] + 1, "read_failures": [*state["read_failures"], failure], "needs_summary": False}
         if not page["text"].strip():
             failure = {"candidate_id": candidate["candidate_id"], "url": candidate["url"], "reason": "网页未提取到正文。"}
-            return {"read_index": state["read_index"] + 1, "read_failures": [*state["read_failures"], failure]}
-        # 相同最终地址或完全相同的可见文字不重复计数；近义内容仍需模型判断。
-        if any(old["final_url"] == page["final_url"] or old["text"] == page["text"] for old in state["pages"]):
+            return {"read_index": state["read_index"] + 1, "read_failures": [*state["read_failures"], failure], "needs_summary": False}
+        # 只保存正文指纹用于精确去重，不把原文写入图状态或检查点。
+        digest = sha256(page["text"].encode("utf-8")).hexdigest()
+        if any(old["final_url"] == page["final_url"] or old["text_hash"] == digest for old in state["pages"]):
             logger.info("event=research_page_duplicate")
-            return {"read_index": state["read_index"] + 1}
-        logger.info("event=research_page_read count=%d truncated=%s", state["read_index"] + 1, page["truncated"])
-        return {"read_index": state["read_index"] + 1,
-                "pages": [*state["pages"], {"candidate_id": candidate["candidate_id"], **page}]}
+            return {"read_index": state["read_index"] + 1, "needs_summary": False}
+        # 此模型调用只接收当前网页；成功后只保存提炼要点和必要的网页元数据。
+        extraction = await self._summary_agent.extract_page(
+            question=state["question"], page={"candidate_id": candidate["candidate_id"], **page})
+        metadata = {key: page[key] for key in ("requested_url", "final_url", "title", "truncated",
+                    "returned_chars", "extracted_chars", "fetched_at")}
+        metadata.update(candidate_id=candidate["candidate_id"], text_hash=digest)
+        existing = {item["url"] for item in state["accepted"]}
+        extra = []
+        for follow in extraction.follow_links:
+            link = next(link for link in page["links"] if link["url"] == follow.url)
+            if follow.url not in existing and urlsplit(follow.url).hostname == urlsplit(page["final_url"]).hostname:
+                extra.append({"candidate_id": "web_" + sha256(follow.url.encode()).hexdigest(),
+                              "url": follow.url, "title": link["text"], "snippet": "", "engines": [],
+                              "search_strategies": ["site_link"]})
+                existing.add(follow.url)
+        logger.info("event=research_page_read count=%d truncated=%s points=%d", state["read_index"] + 1,
+                    page["truncated"], len(extraction.points))
+        if not extraction.points:
+            logger.info("event=research_summary_skipped reason=no_new_points")
+        return {"read_index": state["read_index"] + 1, "pages": [*state["pages"], metadata],
+                # 空要点不能改变累计汇总；仍保留页面、截断标记和跟进链接。
+                "accepted": [*state["accepted"], *extra], "needs_summary": bool(extraction.points),
+                "page_extractions": [*state["page_extractions"], {
+                    "candidate_id": candidate["candidate_id"], "title": page["title"],
+                    "url": page["final_url"], "truncated": page["truncated"],
+                    "points": [point.model_dump() for point in extraction.points]}]}
 
     @staticmethod
     def _after_fetch(state: ResearchState) -> Literal["query", "fetch", "summarize", "__end__"]:
-        """优先处理剩余候选；没有可读正文时不请求整理模型。"""
-        if state["pages"]:
+        """仅有新要点时汇总；空要点、读取失败后继续处理其他候选。"""
+        if state["needs_summary"]:
             return "summarize"
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
         return "query" if state["attempt"] < state["max_attempts"] and state["read_index"] < state["max_pages"] else END
 
     async def _summarize(self, state: ResearchState) -> dict[str, Any]:
-        """只整理真实读到的正文；模型异常向外传播以便恢复节点。"""
-        summary = await self._summary_agent.summarize(question=state["question"], pages=state["pages"])
-        # 仅统计模型要点实际引用的网页，不把导航页或无关正文按来源计数。
+        """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
+        try:
+            summary = await self._summary_agent.summarize(question=state["question"], extractions=state["page_extractions"])
+        except LengthFinishReasonError:
+            # 不覆盖上一次成功汇总或最新单页提炼；本次检查未完成，不判断资料是否充分。
+            logger.warning("event=research_summary_length_interrupted page_count=%d", len(state["page_extractions"]))
+            return {"summary_length_exceeded": True, "needs_summary": False}
         used = {candidate_id for point in summary.points for candidate_id in point.candidate_ids}
-        # 只接收已读页面中真实存在的同站链接；避免模型凭空构造地址。
-        existing = {item["url"] for item in state["accepted"]}
-        pages = {page["candidate_id"]: page for page in state["pages"]}
-        extra = []
-        for follow in summary.follow_links:
-            page = pages[follow.candidate_id]
-            url = follow.url
-            link = next(link for link in page["links"] if link["url"] == url)
-            origin = page["final_url"]
-            if url not in existing and urlsplit(url).hostname == urlsplit(origin).hostname:
-                extra.append({"candidate_id": "web_" + sha256(url.encode()).hexdigest(), "url": url,
-                              "title": link["text"], "snippet": "", "engines": [],
-                              "search_strategies": ["site_link"]})
-                existing.add(url)
-        return {"summary": summary.model_dump(), "effective_count": len(used),
-                "accepted": [*state["accepted"], *extra], "feedback": "；".join(summary.gaps)[:300]}
+        # 问题也用于下一轮搜索方向；报告仍不展示这个内部反馈字符串。
+        feedback = [*summary.gaps, *(issue.message for issue in summary.issues)]
+        return {"summary": summary.model_dump(), "effective_count": len(used), "needs_summary": False,
+                "feedback": "；".join(feedback)[:300]}
 
     @staticmethod
     def _after_summary(state: ResearchState) -> Literal["query", "fetch", "__end__"]:
-        """有效来源和明确缺口共同决定是否停止；上限用尽时交给调用方。"""
-        if state["effective_count"] >= state["target_count"] and not state["summary"]["gaps"]:
+        """有效来源数、缺口和内容问题共同决定是否停止；上限用尽时交给调用方。"""
+        if state["summary_length_exceeded"]:
+            return END
+        if state["effective_count"] >= state["target_count"] and not state["summary"]["gaps"] and not state["summary"]["issues"]:
             return END
         if state["read_index"] >= state["max_pages"]:
             return END
@@ -223,12 +241,12 @@ class WebResearchWorkflow:
 
         Returns:
             ResearchState。accepted和alternatives分别为去重后的正式与备用候选，status为completed、awaiting_user
-            或failed，message解释结果；attempt为总次数，failed_attempts
+            或interrupted，message解释结果；attempt为总次数，failed_attempts
             为搜索工具失败次数。completed只代表数量达标，不代表网页内容可信。
 
         Raises:
             ValueError: 参数越界或问题为空。
-            模型调用、结构化解析和未被工具转换的其他异常继续向调用方传播。
+            除已处理的候选检查超时、汇总输出超限外，模型调用和解析异常继续传播。
         """
         # None采用宿主注入的默认值；显式传值优先，不能用or替换，否则0会被误接受。
         target_count = self._target_count if target_count is None else target_count
@@ -249,7 +267,7 @@ class WebResearchWorkflow:
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
             "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "review_timeout_candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
-            "failed_attempts": 0, "read_index": 0, "pages": [], "read_failures": [], "summary": None, "effective_count": 0,
+            "failed_attempts": 0, "read_index": 0, "pages": [], "page_extractions": [], "needs_summary": False, "summary_length_exceeded": False, "read_failures": [], "summary": None, "effective_count": 0,
             "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
@@ -282,14 +300,18 @@ class WebResearchWorkflow:
     def _finalize(result: ResearchState) -> ResearchState:
         """将图运行完成的状态整理为供调用方读取的结果。"""
         target_count = result["target_count"]
-        if result["review_timeout_candidates"]:
+        if result["summary_length_exceeded"]:
+            result["status"] = "interrupted"
+            result["stop_reason"] = "summary_length_exceeded"
+            result["message"] = "网页资料汇总因模型输出超限未完成；已保留单页要点及上一次成功的汇总，不能据此判断资料是否充分。"
+            result["user_options"] = []
+        elif result["review_timeout_candidates"]:
             result["status"] = "interrupted"
             result["stop_reason"] = "model_timeout"
             result["message"] = "模型检查超时，当前批次及后续候选未完成检查；已保留本次已完成的结果。"
             result["user_options"] = []
         elif (result["effective_count"] >= target_count and result["summary"]
-                and result["summary"]["points"] and not result["summary"]["gaps"]):
-            # 最后一轮可能一次返回多条，只交付请求的数量，保持引擎原有顺序。
+                and result["summary"]["points"] and not result["summary"]["gaps"] and not result["summary"]["issues"]):
             result["status"] = "completed"
             result["stop_reason"] = "target_reached"
             result["message"] = f"已整理{result['effective_count']}个有效来源；来源权威性和事实仍需核对。"

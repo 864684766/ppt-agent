@@ -134,3 +134,13 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 检查候选时模型超时立即停止图，不自动重试；返回status=interrupted、stop_reason=model_timeout、review_timeout_candidates及报告review_timeout问题，已有搜索与正文整理结果保留。超时后图已结束，当前resume不能重试本次中断；查询词生成和正文整理超时仍按原样抛出。
 
 2026-11-23真实验证：使用真实模型和SearXNG，将本次检查模型超时人为设置为0.001秒，实际触发OpenAITimeoutError；5条候选均返回为未检查，状态interrupted、原因model_timeout，报告包含5条review_timeout。未使用模拟数据；未覆盖此前已有整理结果的超时分支。
+
+
+逐页提炼与内容问题检查：运行 `uv run --no-sync pytest -s tests/test_research_workflow.py`。查看“逐页提炼结果”“正文整理结果”的issues和“网页资料检查报告”，对照用户问题人工核对content_gap、source_conflict、version_issue、source_requirement；这些字段来自模型，不保证每次均出现，也不代表事实核验。pages只保留来源元数据和正文指纹；单页超过3000字符会截断并在报告中提示，不自动续读。真实调用会访问搜索服务和模型并产生费用；chat和用户问询尚未接入。
+
+单页提炼发生 `LengthFinishReasonError` 时最多以更简短要求重试一次；再次超限会报错，内存检查点可在同一工作流实例中从失败节点恢复，但会重新读取并提炼该页。跨页汇总仍可能超限，本次没有加入自动拆分。
+
+
+空要点网页不会再次触发汇总。若累计汇总因模型输出超限，最终返回 `status=interrupted`、`stop_reason=summary_length_exceeded` 和报告问题 `summary_unfinished`；检查 `page_extractions` 与之前的 `summary`，后者可能为 null 或未包含最新要点。当前结束状态不支持调用 resume 重试。
+
+2026-11-23 真实验证：临时设定搜索1轮、最多读取4页、目标1个来源，运行 `pytest tests/test_research_workflow.py -k 4ecb -x -q -s`，1 passed。两页返回403，一页提炼8条并成功汇总，另一页提炼1条后汇总发生输出超限；实际返回interrupted、summary_length_exceeded、summary_unfinished，保留上一汇总和两页提炼。该次短网页返回1条而非空要点，因此未实际验证空要点跳过分支。环境变量只作用于测试进程。

@@ -192,7 +192,7 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 
 [presentations/check_presentation_contract.py](presentations/check_presentation_contract.py)集中定义CheckPresentationInput（模型输入artifact_id）、CheckPresentationOutput及PresentationCheckItem（检查器创建、工具公开）。输入由Pydantic校验，TypedDict结果只描述类型；工具不公开宿主路径/SDK对象。passed只覆盖本轮必过规则；未知值null，未实现规则not_checked。PresentationChecker协议和PresentationCheckError在domain/presentations。字段详见[字段清单](../docs/Store清单.html#presentation-check-fields)及[调试说明](../docs/调试/check_presentation调试说明.md)。
 
-网页正文整理：`web/web_research_summary.py` 的 `WebResearchPage` 与 `WebResearchReadFailure` 由资料收集图的读取节点创建，`WebResearchSummary` 与 `WebSummaryPoint` 由整理模型生成并校验候选编号；`ResearchState` 返回pages、read_failures、read_index和可为空的summary。正文仅随调用方保存在内存中，不是已登记资料。
+网页资料整理：`web/web_research_summary.py` 中 `WebResearchPage` 是不含正文的网页元数据；`WebPageExtraction` 是单页模型提炼，`WebResearchSummary`、`WebSummaryPoint` 和 `WebContentIssue` 是累计要点的模型汇总及内容问题。工作流检查候选编号并维护 `ResearchState.page_extractions`；临时正文仅用于单页模型调用，不进入图状态或检查点，也不是已登记资料。
 
 网页内容包含最多100条静态链接links；ResearchState的max_pages限制读取次数，effective_count统计模型要点引用的来源数，summary.follow_links记录已读页面编号及其实际链接。该计数不保证事实可靠，也不保证识别语义转载。
 
@@ -205,3 +205,5 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 网页检查报告：`web/research_report.py` 的ResearchReport与ResearchIssue由domain/web/research_report_builder.py在网页图结束后生成；报告包含可用内容、当前与目标来源数、停止原因和问题列表，不包含内部feedback，不直接实现前端卡片。
 
 网页候选检查超时时ResearchState.stop_reason为model_timeout、status为interrupted，review_timeout_candidates保留当前及本轮剩余未检查候选；报告issues中类型review_timeout逐条关联编号。已结束图不支持直接resume，进程退出内存状态丢失。
+
+网页资料汇总中，`ResearchState.summary_length_exceeded` 表示累计汇总因输出超限未完成；`summary` 与 `effective_count` 是上次成功汇总的结果，最新单页要点仍在 `page_extractions`。最终 `stop_reason=summary_length_exceeded`，报告 `issues` 中的 `summary_unfinished` 指向尚未完成汇总的候选编号；不能据此判断资料不足或充分。图已结束，不支持直接通过 `resume` 重试该结束状态。
