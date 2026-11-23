@@ -99,6 +99,9 @@ async def test_real_research(question: str) -> None:
             query_agent=DisplayQueryAgent(model=model, tool=default_tool, prompt=query_prompt),
             review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
             fetch_tool=create_fetch_webpage_tool(reader=reader),
+            target_count=settings.research_target_source_count,
+            max_attempts=settings.research_max_search_rounds,
+            max_pages=settings.research_max_web_pages,
             summary_agent=WebResearchSummaryAgent(
                 model=model, prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8")),
         )
@@ -107,11 +110,14 @@ async def test_real_research(question: str) -> None:
         thread_id = uuid4().hex
         print("【任务编号】", thread_id, flush=True)
         # 在此打断点；可进入两个Agent，观察每轮搜索词和筛选反馈。
-        result = await workflow.run(thread_id=thread_id, question=question, target_count=2, max_attempts=5)
+        # 不传三个参数时使用.env默认值；需要临时覆盖时可传target_count=2等。
+        result = await workflow.run(thread_id=thread_id, question=question)
     print("\n【用户问题】", question)
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
+    print("【结束原因】", result["stop_reason"])
+    print("【正文截断的网页编号】", [page["candidate_id"] for page in result["pages"] if page["truncated"]])
     print("【工作流提示】", result["message"])
     print("【最后一轮搜索词和检查反馈】", result["query"], result["feedback"])
     print("【候选结果】", json.dumps(result["accepted"], ensure_ascii=False, indent=2))

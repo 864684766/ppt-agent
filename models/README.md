@@ -199,3 +199,5 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 通用问询：UserQuestion由宿主创建并在进入中断节点前保存；workflows/ask_user.py输出问题数据并校验恢复时的question_id和answer。ask_user_contract.py仍为模型工具预留契约，当前不是已接入的Agent工具。终端演示见examples/ask_user_demo.py。
 
 询问演示的图状态使用列表保存options，恢复后构造UserQuestion时转成tuple；LangGraph检查点反序列化不应被假定会保留tuple。
+
+ResearchState.stop_reason标识网页资料图返回原因：target_reached、search_limit、page_limit或search_failed；模型缺口见summary.gaps，失败见read_failures，截断见pages.truncated。

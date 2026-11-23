@@ -30,7 +30,8 @@ class WebResearchWorkflow:
     """
 
     def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract,
-                 fetch_tool: BaseTool, summary_agent: WebResearchSummaryAgent) -> None:
+                 fetch_tool: BaseTool, summary_agent: WebResearchSummaryAgent,
+                 target_count: int = 5, max_attempts: int = 6, max_pages: int = 15) -> None:
         """创建图但不运行；调用run才会请求模型或搜索服务。
 
         Args:
@@ -38,11 +39,15 @@ class WebResearchWorkflow:
             review_agent: 提供review方法的检查子Agent，由它判断候选是否相关。
             fetch_tool: 已由宿主绑定网页读取器的工具；网络资源由宿主管理。
             summary_agent: 根据已读正文整理要点的Agent。
+            target_count、max_attempts、max_pages: 宿主注入的默认目标和上限；run传值可覆盖。
         """
         self._query_agent = query_agent
         self._review_agent = review_agent
         self._fetch_tool = fetch_tool
         self._summary_agent = summary_agent
+        self._target_count = target_count
+        self._max_attempts = max_attempts
+        self._max_pages = max_pages
         # StateGraph像一张执行路线图：State定义节点之间共享哪些字段。
         # add_node注册步骤，add_edge连接固定路线；条件边决定循环或结束。
         graph = StateGraph(ResearchState)
@@ -125,6 +130,8 @@ class WebResearchWorkflow:
         """条件边路由：返回query继续下一轮，返回END结束图。"""
         if state["review_batches"]:
             return "review"
+        if state["read_index"] >= state["max_pages"]:
+            return END
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
         if state["attempt"] < state["max_attempts"]:
@@ -194,8 +201,8 @@ class WebResearchWorkflow:
         return "query" if state["attempt"] < state["max_attempts"] else END
 
     @log_operation("workflow.web_research")
-    async def run(self, *, thread_id: str, question: str, target_count: int = 5, max_attempts: int = 6,
-                  max_pages: int = 15) -> ResearchState:
+    async def run(self, *, thread_id: str, question: str, target_count: int | None = None, max_attempts: int | None = None,
+                  max_pages: int | None = None) -> ResearchState:
         """启动一次独立搜索任务并返回完整ResearchState。
 
         Args:
@@ -214,6 +221,10 @@ class WebResearchWorkflow:
             ValueError: 参数越界或问题为空。
             模型调用、结构化解析和未被工具转换的其他异常继续向调用方传播。
         """
+        # None采用宿主注入的默认值；显式传值优先，不能用or替换，否则0会被误接受。
+        target_count = self._target_count if target_count is None else target_count
+        max_attempts = self._max_attempts if max_attempts is None else max_attempts
+        max_pages = self._max_pages if max_pages is None else max_pages
         if not question.strip() or not 1 <= target_count <= 20 or not 1 <= max_attempts <= 20 or not 1 <= max_pages <= 50:
             raise ValueError("问题不能为空；目标数量和最大搜索次数必须为1至20。")
         if not thread_id or not thread_id.strip():
@@ -230,7 +241,7 @@ class WebResearchWorkflow:
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
             "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
             "failed_attempts": 0, "read_index": 0, "pages": [], "read_failures": [], "summary": None, "effective_count": 0,
-            "status": "running", "message": "", "user_options": []}
+            "status": "running", "message": "", "user_options": [], "stop_reason": ""}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
@@ -266,9 +277,16 @@ class WebResearchWorkflow:
                 and result["summary"]["points"] and not result["summary"]["gaps"]):
             # 最后一轮可能一次返回多条，只交付请求的数量，保持引擎原有顺序。
             result["status"] = "completed"
+            result["stop_reason"] = "target_reached"
             result["message"] = f"已整理{result['effective_count']}个有效来源；来源权威性和事实仍需核对。"
         else:
             result["status"] = "awaiting_user"
+            if result["failed_attempts"] == result["attempt"]:
+                result["stop_reason"] = "search_failed"
+            elif result["read_index"] >= result["max_pages"]:
+                result["stop_reason"] = "page_limit"
+            else:
+                result["stop_reason"] = "search_limit"
             # 按已有结果提供选项；备用资料必须由用户明确选择，不能自动混入正式池。
             options = ["provide_materials"]
             if result["summary"] and result["summary"]["points"]:

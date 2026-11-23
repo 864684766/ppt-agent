@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     # HTTP各阶段等待超时秒数，默认30、范围(0,120]；不是整个任务时限。
     web_search_timeout_seconds: float = Field(default=30, gt=0, le=120)
 
+    # 网页资料收集默认值；由宿主传入工作流，单次调用可覆盖。
+    research_target_source_count: int = Field(default=5, ge=1, le=20, description="期望有效网页来源数，默认5，范围1至20；不代表已核实事实。")
+    research_max_search_rounds: int = Field(default=6, ge=1, le=20, description="最多搜索轮数，默认6，范围1至20。")
+    research_max_web_pages: int = Field(default=15, ge=1, le=50, description="最多网页读取次数，包含失败，默认15，范围1至50。")
+
     # 读取网页的HTTP各阶段超时秒数，与SearXNG搜索超时分别配置。
     webpage_timeout_seconds: float = Field(default=20, gt=0, le=120)
     # 解压后HTML下载字节上限，默认200万，范围1024至1000万；不是max_chars。

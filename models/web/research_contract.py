@@ -61,7 +61,7 @@ class ResearchState(TypedDict):
     """一次研究流程的临时状态；调用者负责保管，不提供跨进程持久化。"""
 
     question: str  # 用户主题和要求。
-    target_count: int  # 期望候选数量；不是保证找到的数量。
+    target_count: int  # 期望有效网页来源数；不是保证找到的数量。
     max_attempts: int  # 搜索总次数上限，每轮由服务器选择引擎。
     max_pages: int  # 网页读取次数上限，包含失败。
     attempt: int  # 已尝试搜索总次数。
@@ -82,3 +82,4 @@ class ResearchState(TypedDict):
     status: str  # running、completed、awaiting_user、needs_materials、cancelled或failed。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。
+    stop_reason: str  # 返回原因：target_reached、search_limit、page_limit或search_failed。
