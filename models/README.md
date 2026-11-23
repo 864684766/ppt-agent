@@ -195,3 +195,7 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 网页正文整理：`web/web_research_summary.py` 的 `WebResearchPage` 与 `WebResearchReadFailure` 由资料收集图的读取节点创建，`WebResearchSummary` 与 `WebSummaryPoint` 由整理模型生成并校验候选编号；`ResearchState` 返回pages、read_failures、read_index和可为空的summary。正文仅随调用方保存在内存中，不是已登记资料。
 
 网页内容包含最多100条静态链接links；ResearchState的max_pages限制读取次数，effective_count统计模型要点引用的来源数，summary.follow_links记录已读页面编号及其实际链接。该计数不保证事实可靠，也不保证识别语义转载。
+
+通用问询：UserQuestion由宿主创建并在进入中断节点前保存；workflows/ask_user.py输出问题数据并校验恢复时的question_id和answer。ask_user_contract.py仍为模型工具预留契约，当前不是已接入的Agent工具。终端演示见examples/ask_user_demo.py。
+
+询问演示的图状态使用列表保存options，恢复后构造UserQuestion时转成tuple；LangGraph检查点反序列化不应被假定会保留tuple。
