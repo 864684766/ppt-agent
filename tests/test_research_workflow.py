@@ -85,9 +85,9 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
 # pytest会对列表中每一个问题各运行一次test_real_research。
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
-    "介绍一下黄芪。",
+    # "介绍一下黄芪。",
     "查找中国居民膳食指南2022关于平衡饮食的资料。",
-    "查找《本草纲目》中关于黄芪的记载。",
+    # "查找《本草纲目》中关于黄芪的记载。",
     # "查找中国劳动合同解除的法律规定。",
     # "查找成年人每周身体活动建议。",
     # "查找中国垃圾分类的基本类别。",

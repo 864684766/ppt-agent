@@ -1,4 +1,4 @@
-"""当前对话仅接收消息、参考附件和OSS模板标识，不执行AI分析。"""
+"""对话接收消息、可选参考附件和OSS模板标识。"""
 
 from typing import Annotated, Literal
 
@@ -9,10 +9,10 @@ class ChatRequest(BaseModel):
     """接收消息及可选模板标识；文件通过multipart单独上传。"""
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    message: str = Field(min_length=1, max_length=10000, description="用户消息，1–10000字符；当前仅接收回显，不交给模型分析。")
+    message: str = Field(min_length=1, max_length=10000, description="用户问题，1–10000字符；用于联网搜索与网页资料整理。")
     template_key: Annotated[str, StringConstraints(strip_whitespace=False)] | None = Field(
         default=None, min_length=1, max_length=1024,
-        description="从模板列表object_key原样回填，如公司模板.pptx或business/模板.pptx；不是URL，不做URL编码。默认null不读取模板；指定时从服务端配置桶下载并解析PPTX，不调用AI。",
+        description="从模板列表object_key原样回填，如公司模板.pptx或business/模板.pptx；不是URL，不做URL编码。默认null不读取模板；指定时从服务端配置桶下载并解析PPTX；模板内容暂不参与网页资料分析。",
     )
 
 

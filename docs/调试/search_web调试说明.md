@@ -121,7 +121,7 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 
 2026-11-23按用户要求删除正文后的页面分类；使用真实膳食指南官网首页和真实模型验证，模型返回缺口并选择两条该页面真实链接；本次未重跑整个搜索图。
 
-网页资料图由外层Settings读取RESEARCH_TARGET_SOURCE_COUNT（默认5，1至20）、RESEARCH_MAX_SEARCH_ROUNDS（默认6，1至20）、RESEARCH_MAX_WEB_PAGES（默认15，1至50）并注入构造函数；run显式传参优先。测试输出stop_reason（target_reached目标达到、search_limit搜索轮次耗尽、page_limit读取次数耗尽、search_failed各轮搜索失败），并打印截断网页编号；summary.gaps和read_failures提供缺口及失败细节。以上配置当前只在真实研究测试入口接线，chat尚未接入。
+网页资料图由外层Settings读取RESEARCH_TARGET_SOURCE_COUNT（默认5，1至20）、RESEARCH_MAX_SEARCH_ROUNDS（默认6，1至20）、RESEARCH_MAX_WEB_PAGES（默认15，1至50）并注入构造函数；run显式传参优先。测试输出stop_reason（target_reached目标达到、search_limit搜索轮次耗尽、page_limit读取次数耗尽、search_failed各轮搜索失败），并打印截断网页编号；summary.gaps和read_failures提供缺口及失败细节。以上配置在真实研究测试入口及chat网页研究中生效。
 
 2026-11-23真实验证：进程临时覆盖目标2、搜索1轮、读取上限2；SearXNG返回无关候选，模型初筛后没有正式结果，流程返回搜索轮次耗尽，测试通过。未验证真实网页截断或读取上限分支。默认.env经Settings读取为5、6、15。
 

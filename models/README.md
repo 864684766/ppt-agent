@@ -84,7 +84,7 @@ list_project_materials 执行查询 → MaterialPage
 5. 同一操作的输入输出放在同一契约文件；相关内部查询结果集中在 material_query_results.py。按职责、依赖和实际复用需求拆分，不按类数量机械拆文件，不强制复用HTTP与工具类型。
 6. __init__.py不批量加载所有类型，使用时显式导入具体模块，避免依赖扩散。
 
-当前所有对话请求统一返回ChatReadResponse JSON；不调用模型/SSE。有附件返回读取内容，无附件attachment=null。template_key指定后实际下载并解析OSS模板，结果位于template。
+对话请求返回ChatReadResponse JSON：网页研究状态、来源、汇总、报告和询问，以及可选附件与模板解析结果；附件和模板尚未参与模型分析。
 当前未开发大纲、模板识别等结构化Agent结果，它们尚无可供导航的类型定义。
 
 ## 当前附件数据来源（2026-11-05）
@@ -208,4 +208,6 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 
 网页资料汇总中，`ResearchState.summary_length_exceeded` 表示累计汇总因输出超限未完成；`summary` 与 `effective_count` 是上次成功汇总的结果，最新单页要点仍在 `page_extractions`。最终 `stop_reason=summary_length_exceeded`，报告 `issues` 中的 `summary_unfinished` 指向尚未完成汇总的候选编号；不能据此判断资料不足或充分。图已结束，不支持直接通过 `resume` 重试该结束状态。
 
-网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据仅在工作流实例内存中，尚未作为HTTP响应公开。
+网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat通过research.waiting_question公开，HTTP回答接口尚未实现。
+
+ChatResearchResult、ChatResearchSource、ChatPageExtraction和ChatQuestion定义在chat/chat_response.py：由HTTP路由根据网页图结果构造，仅公开网页来源、要点、检查报告与询问，不包含内部搜索反馈或网页正文。ChatReadResponse含task_id、status、notice、attachment_analyzed及可选附件/模板；attachment_analyzed固定false。

@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from api.api_router import api_router
 from api.request_logging_middleware import RequestLoggingMiddleware
+from api.web_research_runtime import WebResearchRuntime
 from config.logging_config import configure_logging
 from config.settings import PROJECT_ROOT, Settings
 
@@ -25,6 +26,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     当前暂不需要使用；仅导入main不会进入生命周期，也不会创建日志文件。
     """
     settings = Settings()
+    application.state.web_research_runtime = WebResearchRuntime(settings)
     configure_logging(
         directory=PROJECT_ROOT / "log", level=settings.log_level, output=settings.log_output,
     )
@@ -36,6 +38,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await application.state.web_research_runtime.close()
         logging.getLogger(__name__).info("FastAPI服务关闭。")
 
 
@@ -43,7 +46,7 @@ def create_app() -> FastAPI:
     """创建应用并注册路由。
 
     将应用组装放入函数，便于后续注入配置，也便于需要时创建独立实例。
-    注册健康检查、文件解析对话和OSS模板列表路由；当前对话不创建模型，
+    注册健康检查、对话和OSS模板列表路由；模型在首次资料研究请求时创建，
     应用组装本身不发起模型请求，也不初始化 Harness 等外部运行时。
 
     Returns:
