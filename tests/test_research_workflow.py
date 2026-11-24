@@ -80,7 +80,8 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
             retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
         material_summary_agent=MaterialSummaryAgent(model=model,
             prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
-            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8")),
+            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
+            output_tokens=settings.llm_max_tokens),
     )
     return workflow
 
@@ -89,11 +90,11 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
     # "介绍一下黄芪。",
-    "查找中国居民膳食指南2022关于平衡饮食的资料。",
+    # "查找中国居民膳食指南2022关于平衡饮食的资料。",
     # "查找《本草纲目》中关于黄芪的记载。",
     # "查找中国劳动合同解除的法律规定。",
     # "查找成年人每周身体活动建议。",
-    # "查找中国垃圾分类的基本类别。",
+    "查找中国垃圾分类的基本类别。",
     # "查找Python异步编程中async与await的官方说明。",
 ]
 
@@ -117,7 +118,7 @@ async def test_real_research(question: str) -> None:
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
             # 推理模型可能将思考计入输出预算；当前真实验证至少给4096。
-            max_tokens=max(settings.llm_max_tokens, 4096), http_client=model_http,
+            max_tokens=settings.llm_max_tokens, http_client=model_http,
         )
         workflow = _create_workflow(settings=settings, model=model, search_http=search_http, webpage_http=webpage_http)
         print("\n【用户问题】", question, flush=True)

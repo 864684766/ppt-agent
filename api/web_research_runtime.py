@@ -54,7 +54,7 @@ class WebResearchRuntime:
         model = create_langchain_model(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
-            max_tokens=max(settings.llm_max_tokens, 4096), http_client=model_http,
+            max_tokens=settings.llm_max_tokens, http_client=model_http,
             streaming=settings.llm_show_thinking,
         )
         prompts = PROJECT_ROOT / "prompts"
@@ -73,7 +73,8 @@ class WebResearchRuntime:
                 model=model, prompt=prompt("web_research_summary.md"), page_prompt=prompt("web_research_page.md"),
                 retry_prompt=prompt("web_research_page_retry.md")),
             material_summary_agent=MaterialSummaryAgent(model=model, prompt=prompt("web_research_summary.md"),
-                                                        summary_prompt=prompt("web_research_merge.md")),
+                                                        summary_prompt=prompt("web_research_merge.md"),
+                                                        output_tokens=settings.llm_max_tokens),
             target_count=settings.research_target_source_count, max_attempts=settings.research_max_search_rounds,
             max_pages=settings.research_max_web_pages,
         )

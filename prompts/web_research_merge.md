@@ -14,5 +14,6 @@
 }
 
 每个 issue 的 type 必须从 content_gap、source_conflict、version_issue、source_requirement 中选择一个值。
+follow_links 必须始终是空数组 []；不要输出网址，本阶段不选择后续链接。
 仅对用户明确要求或资料中实际可见的冲突、版本及来源问题作判断；无法确认时明确说明。
 全局缺口的 candidate_ids 可为空；没有问题时 issues 为空。gaps 仅列影响用户明确要求的重要缺口。
