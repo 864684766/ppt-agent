@@ -17,7 +17,7 @@ PDF识别器由API每次请求创建，各页复用同一实例；没有全局�
 
 ## Postman测试
 
-先重启服务，向POST http://127.0.0.1:<APP_PORT>/ppt-agent/v1/chat发送请求，主机及端口以本机实际启动配置为准。
+先重启服务，向POST http://127.0.0.1:<APP_PORT>/ppt-agent/v1/chat/stream发送请求，主机及端口以本机实际启动配置为准。
 Body选择form-data，不手填Content-Type，让Postman生成multipart边界：
 
 | 字段 | 类型 | 内容 |

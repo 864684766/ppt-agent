@@ -173,7 +173,7 @@ request_id、operation_id等是diagnostics管理的运行上下文与日志摘�
 
 ChatRequest及其内部派生ChatSubmission新增template_key: str | None，默认None，1–1024字符，保留完整对象名（含目录/空格），不是URL；指定后真实下载读取。
 ChatReadResponse回显template_key，attachment改为可选，status为attachment_read、template_read、files_read或message_received，分别表示附件/模板/两份文件/只有消息。所有分支model_called=false。
-api/chat_dependencies.py及路由SSE分支移除，独立模型工厂/SDK/SSE编码保留，当前不接入AI。
+此前旧版api/chat_dependencies.py已移除；当前/chat/stream接入网页资料研究和SSE。
 
 ## OSS模板读取响应（2026-11-06）
 
@@ -208,8 +208,8 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 
 网页资料汇总中，`ResearchState.summary_length_exceeded` 表示累计汇总因输出超限未完成；`summary` 与 `effective_count` 是上次成功汇总的结果，最新单页要点仍在 `page_extractions`。最终 `stop_reason=summary_length_exceeded`，报告 `issues` 中的 `summary_unfinished` 指向尚未完成汇总的候选编号；不能据此判断资料不足或充分。图已结束，不支持直接通过 `resume` 重试该结束状态。
 
-网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat通过research.waiting_question公开，HTTP回答接口尚未实现。
+网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat/stream通过research.waiting_question公开，HTTP回答接口尚未实现。
 
 ChatResearchResult、ChatResearchSource、ChatPageExtraction和ChatQuestion定义在chat/chat_response.py：由HTTP路由根据网页图结果构造，仅公开网页来源、要点、检查报告与询问，不包含内部搜索反馈或网页正文。ChatReadResponse含task_id、status、notice、attachment_analyzed及可选附件/模板；attachment_analyzed固定false。
 
-/chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲或思考流。
+/chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲；thinking事件仅在配置开启且LangChain返回标准推理块时出现。

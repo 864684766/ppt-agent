@@ -27,6 +27,11 @@ class WebResearchRuntime:
         self._resources: AsyncExitStack | None = None
         self._workflow: WebResearchWorkflow | None = None
 
+    @property
+    def show_thinking(self) -> bool:
+        """是否允许当前运行时向SSE请求暴露标准推理块。"""
+        return self._settings.llm_show_thinking
+
     async def get_workflow(self) -> WebResearchWorkflow:
         """并发请求只创建一次工作流；初始化失败时关闭已创建的资源。"""
         async with self._lock:
@@ -49,6 +54,7 @@ class WebResearchRuntime:
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
             max_tokens=max(settings.llm_max_tokens, 4096), http_client=model_http,
+            streaming=settings.llm_show_thinking,
         )
         prompts = PROJECT_ROOT / "prompts"
         def prompt(name: str) -> str:

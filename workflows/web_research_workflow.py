@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_openai.chat_models.base import OpenAITimeoutError
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -237,7 +238,8 @@ class WebResearchWorkflow:
 
     @log_operation("workflow.web_research")
     async def run(self, *, thread_id: str, question: str, target_count: int | None = None, max_attempts: int | None = None,
-                  max_pages: int | None = None) -> ResearchState:
+                  max_pages: int | None = None,
+                  callbacks: list[BaseCallbackHandler] | None = None) -> ResearchState:
         """启动一次独立搜索任务并返回完整ResearchState。
 
         Args:
@@ -246,6 +248,7 @@ class WebResearchWorkflow:
             target_count: 希望得到的有效网页来源数量，1至20，默认5；不足时不会凑数。
             max_attempts: 搜索总轮数，范围1至20，默认6；每轮使用服务器默认搜索。
             max_pages: 最多读取网页次数（包含失败），范围1至50，默认15。
+            callbacks: 本次任务的LangChain回调，可用于接收模型流；默认不注册。
 
         Returns:
             ResearchState。accepted和alternatives分别为去重后的正式与备用候选，status为completed、awaiting_user
@@ -269,6 +272,9 @@ class WebResearchWorkflow:
         # configurable和recursion_limit分别允许字典与整数。
         config: RunnableConfig = {"configurable": {"thread_id": thread_id},
                                   "recursion_limit": max(25, max_attempts * 12 + max_pages * 2 + 4)}
+        # 回调由本次调用方注入并传递给图内模型，不写入共享状态。
+        if callbacks:
+            config["callbacks"] = callbacks
         # 同一实例内不得覆盖已有任务；失败后应调用resume，而不是重新run。
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在，请使用新编号或恢复原任务。")

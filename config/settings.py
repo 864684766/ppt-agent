@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # 最大输出token数，默认1024、范围1–32768；仍受模型实际限制。
     llm_max_tokens: int = Field(default=1024, ge=1, le=32768)
 
+    # 仅控制向SSE客户端展示标准推理内容，不改变模型自身是否开启推理。
+    llm_show_thinking: bool = Field(default=False, description="是否在SSE中展示LangChain标准推理内容，默认关闭；供应商未返回时不会产生事件。")
+
     # 留空表示使用 llm_model；后续可独立替换每种任务的模型。
     # 大纲任务模型，空值回退llm_model；业务尚未接线。
     llm_outline_model: str = ""

@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 from diagnostics.operation_logging import log_operation
+from integrations.llm.reasoning_compatible_chat import ReasoningCompatibleChatOpenAI
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class ModelConfigurationError(ValueError):
 def create_langchain_model(
     *, base_url: str, api_key: SecretStr, model_name: str,
     timeout_seconds: float, max_tokens: int, http_client: httpx.AsyncClient,
+    streaming: bool = False,
 ) -> ChatOpenAI:
     """创建可用于文本或多模态输入的模型，调用本函数不会发送请求。
 
@@ -31,7 +33,7 @@ def create_langchain_model(
     base_url为供应商要求的HTTP(S)基础地址；api_key为遮蔽显示的密钥；
     model_name为当前任务模型名（名称不保证图片能力）；timeout_seconds为
     单次请求超时秒数；max_tokens为输出预算，不是输入字符数。
-    http_client由调用方创建并关闭，模型工厂不拥有其生命周期。
+    http_client由调用方创建并关闭，模型工厂不拥有其生命周期；streaming开启SDK流式接收，默认关闭。
 
     返回ChatOpenAI实例：聊天适配器可调用astream，视觉适配器可调用ainvoke。
     固定一次尝试、Chat Completions接口和系统代理兼容选项，统一连接行为。
@@ -47,10 +49,12 @@ def create_langchain_model(
     if timeout_seconds <= 0 or max_tokens <= 0:
         raise ModelConfigurationError("模型超时秒数和输出token预算必须大于0。")
     logger.debug("event=model_configuration model=%r timeout_seconds=%s max_tokens=%s", model_name, timeout_seconds, max_tokens)
-    return ChatOpenAI(
+    model_class = ReasoningCompatibleChatOpenAI if streaming else ChatOpenAI
+    return model_class(
         base_url=base_url, api_key=api_key, model=model_name,
         timeout=timeout_seconds, max_tokens=max_tokens, max_retries=0,
         http_async_client=http_client, use_responses_api=False,
-        # 不由SDK另建带socket选项的transport，保留传入httpx的系统代理行为。
+        streaming=streaming,
+        # 异步请求使用外层传入的客户端；空元组让SDK自行创建的客户端不额外注入socket选项。
         http_socket_options=(),
     )

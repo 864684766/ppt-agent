@@ -9,10 +9,11 @@ from fastapi import HTTPException, Request
 
 from api.chat_attachment_processing import read_chat_attachment
 from api.chat_template_processing import read_chat_template
-from api.routes.chat_routes import build_chat_response
+from api.chat_response_builder import build_chat_response
 from api.sse_encoder import encode_event
 from diagnostics.operation_logging import operation_scope, safe_error_location
 from models.chat.chat_request import ChatSubmission
+from integrations.llm.reasoning_stream_handler import ReasoningStreamHandler
 from workflows.research_progress import research_progress
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,12 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
                 progress("template")
             template = await read_chat_template(submission.template_key) if submission.template_key else None
             workflow = await request.app.state.web_research_runtime.get_workflow()
-            result = await workflow.run(thread_id=task_id, question=submission.message)
+            # 只为当前SSE请求注册回调；不影响并发请求，也不记录推理正文。
+            callbacks = None
+            if request.app.state.web_research_runtime.show_thinking:
+                callbacks = [ReasoningStreamHandler(lambda text: queue.put_nowait(
+                    ("thinking", {"task_id": task_id, "text": text})))]
+            result = await workflow.run(thread_id=task_id, question=submission.message, callbacks=callbacks)
             response = build_chat_response(submission=submission, task_id=task_id, result=result,
                                            attachment=attachment, template=template)
             await queue.put(("result", response.model_dump(mode="json")))

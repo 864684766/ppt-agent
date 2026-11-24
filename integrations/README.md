@@ -94,3 +94,5 @@ LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位�
 ## 模块内部职责整理（2026-11-24）
 
 网页读取分别负责受限下载、HTML解析和错误映射；搜索适配器逐条转换结果。模板检查区分包校验与实际页面检查，模板结构按母版版式和真实页面分别提取；PDF OCR按页识别，调用方仍负责原生PDF资源和锁的生命周期。图表轴样式按轴线、刻度标签、数值范围和网格线分组。工具输入输出和资源归属不因内部拆分改变。
+
+`llm/reasoning_stream_handler.py` 从LangChain模型流回调的标准reasoning内容块提取文本；不处理供应商私有字段，不记录推理内容；reasoning_compatible_chat.py负责将兼容代理的reasoning_content转换为标准块，依赖锁定版LangChain内部转换钩子，升级时需真实验证。是否向SSE展示由宿主配置。
