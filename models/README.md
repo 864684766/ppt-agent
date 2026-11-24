@@ -211,3 +211,5 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat通过research.waiting_question公开，HTTP回答接口尚未实现。
 
 ChatResearchResult、ChatResearchSource、ChatPageExtraction和ChatQuestion定义在chat/chat_response.py：由HTTP路由根据网页图结果构造，仅公开网页来源、要点、检查报告与询问，不包含内部搜索反馈或网页正文。ChatReadResponse含task_id、status、notice、attachment_analyzed及可选附件/模板；attachment_analyzed固定false。
+
+/chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲或思考流。

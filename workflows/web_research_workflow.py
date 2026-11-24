@@ -23,6 +23,7 @@ from models.web.research_contract import ResearchState
 from agents.web_research_summary_agent import WebResearchSummaryAgent
 from models.interaction.user_question import UserQuestion
 from workflows.ask_user import ask_user
+from workflows.research_progress import notify_progress
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class WebResearchWorkflow:
         合并到状态。每轮都使用宿主注入的同一个搜索工具。
         搜索工具抛ToolException时记录失败并继续；模型输出等其他错误传播。
         """
+        notify_progress("search")
         logger.info("event=research_search attempt=%d", state["attempt"] + 1)
         try:
             query, candidates = await self._query_agent.search(
@@ -105,6 +107,7 @@ class WebResearchWorkflow:
         的编号。按完整URL去重：同一URL重复出现时只保留一条并记录发现策略。
         不比较网页正文；不同URL指向同一篇转载文章时仍可能被当成不同候选。
         """
+        notify_progress("review")
         if not state["review_batches"]:
             return {"feedback": "本轮没有候选或搜索失败，请调整搜索词后重试。"}
         # 节点每次只处理队首一批；返回后LangGraph会保存状态和下一节点。
@@ -158,6 +161,7 @@ class WebResearchWorkflow:
 
     async def _fetch(self, state: ResearchState) -> dict[str, Any]:
         """读取一条正式候选；每次节点完成后检查点记录进度和结果。"""
+        notify_progress("read_webpage")
         candidate = state["accepted"][state["read_index"]]
         try:
             page = await self._fetch_tool.ainvoke({"url": candidate["url"], "max_chars": 3000})
@@ -174,6 +178,7 @@ class WebResearchWorkflow:
             logger.info("event=research_page_duplicate")
             return {"read_index": state["read_index"] + 1, "needs_summary": False}
         # 此模型调用只接收当前网页；成功后只保存提炼要点和必要的网页元数据。
+        notify_progress("extract")
         extraction = await self._summary_agent.extract_page(
             question=state["question"], page={"candidate_id": candidate["candidate_id"], **page})
         metadata = {key: page[key] for key in ("requested_url", "final_url", "title", "truncated",
@@ -204,6 +209,7 @@ class WebResearchWorkflow:
 
     async def _summarize(self, state: ResearchState) -> dict[str, Any]:
         """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
+        notify_progress("summarize")
         try:
             summary = await self._summary_agent.summarize(question=state["question"], extractions=state["page_extractions"])
         except LengthFinishReasonError:

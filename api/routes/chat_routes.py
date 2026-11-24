@@ -12,7 +12,8 @@ from api.chat_request_parser import get_chat_submission
 from api.chat_openapi import CHAT_REQUEST_BODY, CHAT_RESPONSES
 from diagnostics.operation_logging import log_operation, safe_error_location
 from models.chat.chat_request import ChatSubmission
-from models.chat.chat_response import ChatReadResponse, ChatResearchResult, ChatResearchSource
+from models.chat.chat_response import ChatAttachmentResponse, ChatReadResponse, ChatResearchResult, ChatResearchSource, ChatTemplateResponse
+from models.web.research_contract import ResearchState
 
 router = APIRouter(tags=["对话"])
 logger = logging.getLogger(__name__)
@@ -43,6 +44,13 @@ async def chat(
         # 不向客户端或日志暴露模型异常原文、网页内容或密钥。
         logger.error("event=chat_research_failed error_location=%s", safe_error_location(error))
         raise HTTPException(502, detail={"code": "research_failed", "message": "网页资料研究执行失败，请检查模型与搜索服务日志后重试。"}) from None
+    return build_chat_response(submission=submission, task_id=task_id, result=result,
+                               attachment=attachment, template=template)
+
+
+def build_chat_response(*, submission: ChatSubmission, task_id: str, result: ResearchState,
+                        attachment: ChatAttachmentResponse | None, template: ChatTemplateResponse | None) -> ChatReadResponse:
+    """只选择公开资料字段，供JSON与SSE最终事件共用。"""
     sources = [ChatResearchSource(candidate_id=page["candidate_id"], title=page["title"],
                                   url=page["final_url"], truncated=page["truncated"]) for page in result["pages"]]
     research = ChatResearchResult(summary=result["summary"], sources=sources,
