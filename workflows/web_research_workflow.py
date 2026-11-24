@@ -2,22 +2,27 @@
 
 import logging
 from hashlib import sha256
-from urllib.parse import urlsplit
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.runnables import RunnableConfig
 from langchain_openai.chat_models.base import OpenAITimeoutError
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
 from openai import LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
 from domain.web.research_agents_contract import ResearchQueryAgentContract, ResearchReviewAgentContract
 from domain.web.research_candidate_merge import merge_research_candidates
-from domain.web.research_report_builder import build_research_report
+from domain.web.research_outcome import finalize_research
+from domain.web.research_decision import apply_research_decision
+from domain.web.research_follow_links import select_followup_candidates
 from models.web.research_contract import ResearchState
 from agents.web_research_summary_agent import WebResearchSummaryAgent
+from models.interaction.user_question import UserQuestion
+from workflows.ask_user import ask_user
 
 
 logger = logging.getLogger(__name__)
@@ -57,12 +62,16 @@ class WebResearchWorkflow:
         graph.add_node("review", self._review)
         graph.add_node("fetch", self._fetch)
         graph.add_node("summarize", self._summarize)
+        graph.add_node("finalize", self._finalize)
+        graph.add_node("ask", self._ask)
         graph.add_edge(START, "query")
         graph.add_edge("query", "review")
         # 路由函数直接返回目标节点名或END；无需额外的路径映射。
         graph.add_conditional_edges("review", self._next)
         graph.add_conditional_edges("fetch", self._after_fetch)
         graph.add_conditional_edges("summarize", self._after_summary)
+        graph.add_conditional_edges("finalize", self._after_finalize)
+        graph.add_edge("ask", END)
         # compile将路线图编译为可调用对象；此时不会运行节点。
         # 检查点保存在这个工作流实例的内存中。节点成功结束后，LangGraph
         # 保存状态和下一节点；实例销毁或进程退出后无法再恢复。
@@ -133,19 +142,19 @@ class WebResearchWorkflow:
                 "review_batches": remaining, "unreviewed": unreviewed}
 
     @staticmethod
-    def _next(state: ResearchState) -> Literal["query", "review", "fetch", "__end__"]:
+    def _next(state: ResearchState) -> Literal["query", "review", "fetch", "finalize"]:
         """条件边路由：返回query继续下一轮，返回END结束图。"""
         if state["review_timeout_candidates"]:
-            return END
+            return "finalize"
         if state["review_batches"]:
             return "review"
         if state["read_index"] >= state["max_pages"]:
-            return END
+            return "finalize"
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
         if state["attempt"] < state["max_attempts"]:
             return "query"
-        return END
+        return "finalize"
 
     async def _fetch(self, state: ResearchState) -> dict[str, Any]:
         """读取一条正式候选；每次节点完成后检查点记录进度和结果。"""
@@ -170,15 +179,8 @@ class WebResearchWorkflow:
         metadata = {key: page[key] for key in ("requested_url", "final_url", "title", "truncated",
                     "returned_chars", "extracted_chars", "fetched_at")}
         metadata.update(candidate_id=candidate["candidate_id"], text_hash=digest)
-        existing = {item["url"] for item in state["accepted"]}
-        extra = []
-        for follow in extraction.follow_links:
-            link = next(link for link in page["links"] if link["url"] == follow.url)
-            if follow.url not in existing and urlsplit(follow.url).hostname == urlsplit(page["final_url"]).hostname:
-                extra.append({"candidate_id": "web_" + sha256(follow.url.encode()).hexdigest(),
-                              "url": follow.url, "title": link["text"], "snippet": "", "engines": [],
-                              "search_strategies": ["site_link"]})
-                existing.add(follow.url)
+        extra = select_followup_candidates(page=page, follow_links=extraction.follow_links,
+                                           accepted=state["accepted"])
         logger.info("event=research_page_read count=%d truncated=%s points=%d", state["read_index"] + 1,
                     page["truncated"], len(extraction.points))
         if not extraction.points:
@@ -192,13 +194,13 @@ class WebResearchWorkflow:
                     "points": [point.model_dump() for point in extraction.points]}]}
 
     @staticmethod
-    def _after_fetch(state: ResearchState) -> Literal["query", "fetch", "summarize", "__end__"]:
+    def _after_fetch(state: ResearchState) -> Literal["query", "fetch", "summarize", "finalize"]:
         """仅有新要点时汇总；空要点、读取失败后继续处理其他候选。"""
         if state["needs_summary"]:
             return "summarize"
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
-        return "query" if state["attempt"] < state["max_attempts"] and state["read_index"] < state["max_pages"] else END
+        return "query" if state["attempt"] < state["max_attempts"] and state["read_index"] < state["max_pages"] else "finalize"
 
     async def _summarize(self, state: ResearchState) -> dict[str, Any]:
         """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
@@ -215,17 +217,17 @@ class WebResearchWorkflow:
                 "feedback": "；".join(feedback)[:300]}
 
     @staticmethod
-    def _after_summary(state: ResearchState) -> Literal["query", "fetch", "__end__"]:
+    def _after_summary(state: ResearchState) -> Literal["query", "fetch", "finalize"]:
         """有效来源数、缺口和内容问题共同决定是否停止；上限用尽时交给调用方。"""
         if state["summary_length_exceeded"]:
-            return END
+            return "finalize"
         if state["effective_count"] >= state["target_count"] and not state["summary"]["gaps"] and not state["summary"]["issues"]:
-            return END
+            return "finalize"
         if state["read_index"] >= state["max_pages"]:
-            return END
+            return "finalize"
         if state["read_index"] < len(state["accepted"]):
             return "fetch"
-        return "query" if state["attempt"] < state["max_attempts"] else END
+        return "query" if state["attempt"] < state["max_attempts"] else "finalize"
 
     @log_operation("workflow.web_research")
     async def run(self, *, thread_id: str, question: str, target_count: int | None = None, max_attempts: int | None = None,
@@ -268,7 +270,8 @@ class WebResearchWorkflow:
         state: ResearchState = {"question": question.strip(), "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
             "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "review_timeout_candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
             "failed_attempts": 0, "read_index": 0, "pages": [], "page_extractions": [], "needs_summary": False, "summary_length_exceeded": False, "read_failures": [], "summary": None, "effective_count": 0,
-            "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None}
+            "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None,
+            "waiting_question": None}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
         # 不是模型输出token或单次HTTP超时。
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
@@ -276,7 +279,9 @@ class WebResearchWorkflow:
         result = cast(ResearchState, await self._graph.ainvoke(
             state, config=config,
         ))
-        return self._finalize(result)
+        # LangGraph的Interrupt对象不是JSON；公开问题字段已保存在waiting_question中。
+        result.pop("__interrupt__", None)  # type: ignore[typeddict-item]
+        return result
 
     @log_operation("workflow.web_research_resume")
     async def resume(self, *, thread_id: str) -> ResearchState:
@@ -291,98 +296,60 @@ class WebResearchWorkflow:
         snapshot = await self._graph.aget_state(config)
         if not snapshot.values or not snapshot.next:
             raise ValueError("任务不存在或没有待恢复的节点。")
+        if "ask" in snapshot.next:
+            raise ValueError("任务正在等待用户回答，请使用回答恢复方法。")
         # 输入None表示继续检查点中的待执行节点，不重新提交初始状态。
         config["recursion_limit"] = max(25, snapshot.values["max_attempts"] * 12 + snapshot.values["max_pages"] * 2 + 4)
         result = cast(ResearchState, await self._graph.ainvoke(None, config=config))
-        return self._finalize(result)
-
-    @staticmethod
-    def _finalize(result: ResearchState) -> ResearchState:
-        """将图运行完成的状态整理为供调用方读取的结果。"""
-        target_count = result["target_count"]
-        if result["summary_length_exceeded"]:
-            result["status"] = "interrupted"
-            result["stop_reason"] = "summary_length_exceeded"
-            result["message"] = "网页资料汇总因模型输出超限未完成；已保留单页要点及上一次成功的汇总，不能据此判断资料是否充分。"
-            result["user_options"] = []
-        elif result["review_timeout_candidates"]:
-            result["status"] = "interrupted"
-            result["stop_reason"] = "model_timeout"
-            result["message"] = "模型检查超时，当前批次及后续候选未完成检查；已保留本次已完成的结果。"
-            result["user_options"] = []
-        elif (result["effective_count"] >= target_count and result["summary"]
-                and result["summary"]["points"] and not result["summary"]["gaps"] and not result["summary"]["issues"]):
-            result["status"] = "completed"
-            result["stop_reason"] = "target_reached"
-            result["message"] = f"已整理{result['effective_count']}个有效来源；来源权威性和事实仍需核对。"
-        else:
-            result["status"] = "awaiting_user"
-            if result["failed_attempts"] == result["attempt"]:
-                result["stop_reason"] = "search_failed"
-            elif result["read_index"] >= result["max_pages"]:
-                result["stop_reason"] = "page_limit"
-            else:
-                result["stop_reason"] = "search_limit"
-            # 按已有结果提供选项；备用资料必须由用户明确选择，不能自动混入正式池。
-            options = ["provide_materials"]
-            if result["summary"] and result["summary"]["points"]:
-                result["message"] = f"本次得到{result['effective_count']}个有效来源，目标为{target_count}；请查看缺口，可补充资料或使用当前资料。"
-                options.append("use_current")
-            else:
-                if result["failed_attempts"] == result["attempt"]:
-                    result["message"] = "本次搜索全部失败，未能取得候选。是否自行提供资料？如果不提供，本次对话将结束。"
-                elif result["unreviewed"]:
-                    result["message"] = "部分候选尚未完成检查，目前无法确定是否有可用资料；可提供资料或结束。"
-                elif result["read_failures"]:
-                    result["message"] = "候选网页读取失败，没有可用的正文要点；可提供资料或结束。"
-                else:
-                    result["message"] = "本次未找到可用候选，是否自行提供资料？如果不提供，本次对话将结束。"
-            if result["alternatives"]:
-                result["message"] += f" 另有{len(result['alternatives'])}条备用候选，请查看原因后选择。"
-                options.append("use_alternatives")
-            options.append("end_conversation")
-            result["user_options"] = options
-        if result["unreviewed"]:
-            result["message"] += f" 另有{len(result['unreviewed'])}条候选因模型输出超限未完成检查。"
-        # 图已经停止后再汇总已知问题；不把下一轮搜索用的feedback交给卡片。
-        result["report"] = build_research_report(result)
+        result.pop("__interrupt__", None)  # type: ignore[typeddict-item]
         return result
 
     @staticmethod
-    def apply_user_decision(state: ResearchState, decision: str, *,
-                            alternative_ids: list[str] | None = None) -> ResearchState:
-        """处理调用方的选择，返回新状态；不实现前端交互或会话恢复。
+    def _after_finalize(state: ResearchState) -> Literal["ask", "__end__"]:
+        """仅资料不足时暂停；模型故障与正常完成均直接结束。"""
+        return "ask" if state["waiting_question"] is not None else END
 
-        use_alternatives须提供用户选中的备用candidate_id；至少一项且必须属于
-        当前备用池。正式候选保留，选中的备用单独记录，不能伪装成正式资料。
-        其他选择不接受alternative_ids，避免把错误的调用误认为用户已确认。
-        """
-        if state["status"] != "awaiting_user" or decision not in state["user_options"]:
-            raise ValueError("当前状态或用户选择无效。")
-        # 先建立编号索引，确保后面的校验和选取都使用同一份候选列表。
-        available = {item["candidate_id"]: item for item in state["alternatives"]}
-        if decision == "use_alternatives":
-            if not alternative_ids or len(set(alternative_ids)) != len(alternative_ids) or any(
-                item not in available for item in alternative_ids
-            ):
-                raise ValueError("请选择当前备用池中至少一个不重复的候选编号。")
-        elif alternative_ids is not None:
-            raise ValueError("只有选择备用资料时才能传入备用候选编号。")
-        result = dict(state)
-        result["user_options"] = []
-        if decision == "provide_materials":
-            result["status"] = "needs_materials"
-            result["message"] = "请提供参考资料，收到并解析后再继续。"
-        elif decision == "use_current":
-            result["status"] = "completed"
-            result["message"] = "用户选择使用当前候选；正文和来源仍需核对。"
-        elif decision == "use_alternatives":
-            # 根据已校验的编号选择，不修改原备用池，也不把它们加入accepted。
-            assert alternative_ids is not None
-            result["selected_alternatives"] = [available[item] for item in alternative_ids]
-            result["status"] = "completed"
-            result["message"] = "用户已选择备用候选；其未满足的要求、正文和来源仍需核对。"
-        else:
-            result["status"] = "cancelled"
-            result["message"] = "当前信息不足，本次对话结束；可以换一个主题试试。"
-        return cast(ResearchState, result)
+    def _ask(self, state: ResearchState) -> ResearchState:
+        """调用通用询问；恢复时节点重跑，问题编号来自此前保存的状态。"""
+        data = state["waiting_question"]
+        if data is None:
+            raise ValueError("任务没有待回答的问题。")
+        question = UserQuestion(**{**data, "options": tuple(data["options"])})
+        answer = ask_user(question)
+        result = self.apply_user_decision(state, answer)
+        result["waiting_question"] = None
+        return result
+
+    @log_operation("workflow.web_research_answer")
+    async def answer(self, *, thread_id: str, question_id: str, answer: str) -> ResearchState:
+        """在同一实例中恢复待回答任务；此方法不接收文件，也不是HTTP接口。"""
+        if not thread_id.strip() or not question_id.strip():
+            raise ValueError("任务编号和问题编号不能为空。")
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        snapshot = await self._graph.aget_state(config)
+        if not snapshot.values or "ask" not in snapshot.next:
+            raise ValueError("任务不存在或当前没有等待回答的问题。")
+        # 先核对编号，错误请求不能触发图执行或覆盖已保存的暂停状态。
+        question = snapshot.values.get("waiting_question")
+        if not question or question["question_id"] != question_id:
+            raise ValueError("问题编号与当前等待的问题不一致。")
+        config["recursion_limit"] = max(25, snapshot.values["max_attempts"] * 12 + snapshot.values["max_pages"] * 2 + 4)
+        return cast(ResearchState, await self._graph.ainvoke(
+            Command(resume={"question_id": question_id, "answer": answer}), config=config))
+
+    async def get_pending_question(self, *, thread_id: str) -> dict | None:
+        """查询本实例中真正处于暂停状态的问题；不存在或未暂停时返回None。"""
+        if not thread_id.strip():
+            raise ValueError("任务编号不能为空。")
+        snapshot = await self._graph.aget_state({"configurable": {"thread_id": thread_id}})
+        if "ask" not in snapshot.next:
+            return None
+        return snapshot.values.get("waiting_question")
+
+    @staticmethod
+    def _finalize(state: ResearchState) -> ResearchState:
+        """图节点分配问题编号，结束规则和报告由领域模块负责。"""
+        return finalize_research(state, question_id=uuid4().hex)
+
+    # 保持已有Python调用入口；实现与工作流编排分离。
+    apply_user_decision = staticmethod(apply_research_decision)

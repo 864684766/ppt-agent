@@ -14,9 +14,20 @@ def build_research_report(state: ResearchState) -> ResearchReport:
     stop = state["stop_reason"]
     if not stop:
         raise ValueError("资料收集尚未结束，无法生成检查报告。")
-    issues: list[ResearchIssue] = []
     summary = state["summary"]
     usable = bool(summary and summary["points"])
+    issues = _content_issues(state, usable=usable)
+    issues.extend(_access_issues(state))
+    issues.extend(_review_issues(state))
+    return {"has_usable_content": usable, "source_count": state["effective_count"],
+            "target_source_count": state["target_count"], "stop_reason": stop, "issues": issues}
+
+
+def _content_issues(state: ResearchState, *, usable: bool) -> list[ResearchIssue]:
+    """整理内容缺口和来源数量；未完成汇总不能断言资料不足。"""
+    issues: list[ResearchIssue] = []
+    summary = state["summary"]
+    stop = state["stop_reason"]
     if stop == "summary_length_exceeded":
         issues.append({"type": "summary_unfinished", "message": "模型输出超限，最新单页要点尚未完成汇总检查；已有汇总仅供参考。",
                        "candidate_ids": [state["page_extractions"][-1]["candidate_id"]]})
@@ -31,6 +42,12 @@ def build_research_report(state: ResearchState) -> ResearchReport:
         for gap in dict.fromkeys(summary["gaps"]):
             if gap.strip() and not any(issue["message"] == gap for issue in issues):
                 issues.append({"type": "content_gap", "message": gap, "candidate_ids": []})
+    return issues
+
+
+def _access_issues(state: ResearchState) -> list[ResearchIssue]:
+    """整理搜索失败、网页读取失败和正文截断。"""
+    issues: list[ResearchIssue] = []
     if state["failed_attempts"]:
         all_failed = state["failed_attempts"] == state["attempt"]
         issues.append({"type": "search_failed" if all_failed else "search_partially_failed",
@@ -40,9 +57,14 @@ def build_research_report(state: ResearchState) -> ResearchReport:
     for page in state["pages"]:
         if page["truncated"]:
             issues.append({"type": "webpage_truncated", "message": "该网页正文超过返回长度，已截断。", "candidate_ids": [page["candidate_id"]]})
+    return issues
+
+
+def _review_issues(state: ResearchState) -> list[ResearchIssue]:
+    """整理候选检查未完成或模型超时的问题。"""
+    issues: list[ResearchIssue] = []
     for item in state["unreviewed"]:
         issues.append({"type": "review_unfinished", "message": "该网页候选因模型输出超限未完成检查。", "candidate_ids": [item["candidate_id"]]})
     for item in state["review_timeout_candidates"]:
         issues.append({"type": "review_timeout", "message": "模型检查超时，本候选尚未完成检查。", "candidate_ids": [item["candidate_id"]]})
-    return {"has_usable_content": usable, "source_count": state["effective_count"],
-            "target_source_count": state["target_count"], "stop_reason": stop, "issues": issues}
+    return issues

@@ -15,6 +15,15 @@ def apply_chart_axis_style(axis, style: ChartAxisStyle, *, is_value_axis: bool) 
         axis.has_title = bool(style.title)
         if style.title:
             axis.axis_title.text_frame.text = style.title
+    _apply_line(axis, style)
+    _apply_tick_labels(axis, style)
+    if is_value_axis:
+        _apply_value_scale(axis, style)
+    _apply_gridlines(axis, style)
+
+
+def _apply_line(axis, style: ChartAxisStyle) -> None:
+    """设置坐标轴线的可见性、颜色和宽度。"""
     # 图表轴线与刻度标签是不同对象，需要分别设置。
     if style.line_visible is False:
         axis.format.line.fill.background()
@@ -24,6 +33,10 @@ def apply_chart_axis_style(axis, style: ChartAxisStyle, *, is_value_axis: bool) 
         axis.format.line.color.rgb = RGBColor.from_string(style.line_color[1:])
     if style.line_width is not None:
         axis.format.line.width = Pt(style.line_width)
+
+
+def _apply_tick_labels(axis, style: ChartAxisStyle) -> None:
+    """设置主次刻度以及标签位置与字体。"""
     if style.major_tick is not None:
         axis.major_tick_mark = {"none": XL_TICK_MARK.NONE, "inside": XL_TICK_MARK.INSIDE,
                                 "outside": XL_TICK_MARK.OUTSIDE, "cross": XL_TICK_MARK.CROSS}[style.major_tick]
@@ -40,17 +53,24 @@ def apply_chart_axis_style(axis, style: ChartAxisStyle, *, is_value_axis: bool) 
         font.size = Pt(style.label_font_size)
     if style.label_color is not None:
         font.color.rgb = RGBColor.from_string(style.label_color[1:])
-    if is_value_axis:
-        if style.minimum is not None:
-            axis.minimum_scale = style.minimum
-        if style.maximum is not None:
-            axis.maximum_scale = style.maximum
-        if style.major_unit is not None:
-            axis.major_unit = style.major_unit
-        if style.minor_unit is not None:
-            axis.minor_unit = style.minor_unit
-        if style.number_format is not None:
-            axis.tick_labels.number_format = style.number_format
+
+
+def _apply_value_scale(axis, style: ChartAxisStyle) -> None:
+    """仅数值轴使用范围、间隔和数值格式。"""
+    if style.minimum is not None:
+        axis.minimum_scale = style.minimum
+    if style.maximum is not None:
+        axis.maximum_scale = style.maximum
+    if style.major_unit is not None:
+        axis.major_unit = style.major_unit
+    if style.minor_unit is not None:
+        axis.minor_unit = style.minor_unit
+    if style.number_format is not None:
+        axis.tick_labels.number_format = style.number_format
+
+
+def _apply_gridlines(axis, style: ChartAxisStyle) -> None:
+    """按需设置主网格线，不更改其他网格配置。"""
     if style.major_gridlines is not None:
         axis.has_major_gridlines = style.major_gridlines
     if style.major_gridlines:

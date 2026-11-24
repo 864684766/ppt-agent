@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time
 from io import BytesIO
+from typing import Any
 
 from openpyxl import load_workbook
 
@@ -27,20 +28,7 @@ class XlsxDocumentReader:
                 try:
                     for sheet in workbook.worksheets:
                         hidden = hidden or sheet.sheet_state != "visible"
-                        for row_number, row in enumerate(sheet.iter_rows(), start=1):
-                            builder.count_cells(len(row))
-                            values = []
-                            for cell in row:
-                                formula_count += cell.data_type == "f"
-                                value = cell.value
-                                if value is None:
-                                    values.append("")
-                                elif isinstance(value, (date, datetime, time)):
-                                    values.append(value.isoformat())
-                                else:
-                                    values.append(str(value))
-                            cells = tuple(values)
-                            builder.add(text="\t".join(cells), kind="sheet_row", location=f"工作表{sheet.title}第{row_number}行", sheet_name=sheet.title, row_number=row_number, cells=cells)
+                        formula_count += _read_sheet(sheet, builder)
                 finally:
                     workbook.close()
         except Exception as error:
@@ -53,3 +41,24 @@ class XlsxDocumentReader:
         if hidden:
             warnings.append("结果包含隐藏工作表，请结合用途决定是否采用。")
         return builder.finish(warnings=tuple(warnings))
+
+
+def _read_sheet(sheet: Any, builder: DocumentContentBuilder) -> int:
+    """读取单个工作表的行和单元格，返回公式数量；空单元格也计入限额。"""
+    formula_count = 0
+    for row_number, row in enumerate(sheet.iter_rows(), start=1):
+        builder.count_cells(len(row))
+        values = []
+        for cell in row:
+            formula_count += cell.data_type == "f"
+            value = cell.value
+            if value is None:
+                values.append("")
+            elif isinstance(value, (date, datetime, time)):
+                values.append(value.isoformat())
+            else:
+                values.append(str(value))
+        cells = tuple(values)
+        builder.add(text="\t".join(cells), kind="sheet_row", location=f"工作表{sheet.title}第{row_number}行",
+                    sheet_name=sheet.title, row_number=row_number, cells=cells)
+    return formula_count

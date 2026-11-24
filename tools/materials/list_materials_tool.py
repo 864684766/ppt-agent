@@ -15,6 +15,7 @@ from langchain_core.tools import BaseTool
 from diagnostics.operation_logging import log_operation
 from models.materials.material_source import MaterialSummary
 from domain.materials import list_project_materials
+from domain.materials.material_validator import validate_material_catalog
 from models.materials.list_materials_contract import (
     ListMaterialsInput,
     ListMaterialsOutput,
@@ -37,7 +38,7 @@ def create_list_materials_tool(
     """
     # tuple 保存序列快照；MaterialSummary 也不可变，因此查询期间内容稳定。
     snapshot = tuple(materials)
-    list_project_materials(snapshot, project_id=project_id, limit=1)
+    validate_material_catalog(project_id=project_id, materials=snapshot)
 
     # description 面向模型，说明使用场景和边界；函数 docstring 面向开发者。
     # args_schema 的 Field.description 则分别解释每个参数怎样填写。

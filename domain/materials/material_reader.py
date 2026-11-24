@@ -23,14 +23,8 @@ def read_project_material(
     validate_material_content_data(
         project_id=project_id, materials=materials, fragments=fragments,
     )
-    # 纯Python调用不一定经过Pydantic，所以业务入口也检查自己的参数。
-    for name, value in (("source_id", source_id), ("version", version), ("block_id", block_id)):
-        if not isinstance(value, str) or not value.strip() or len(value) > 200:
-            raise ValueError(f"{name}必须为1至200字符的非空字符串。")
-    if type(offset) is not int or offset < 0:
-        raise ValueError("offset必须为非负整数。")
-    if type(max_chars) is not int or not 1 <= max_chars <= 8000:
-        raise ValueError("max_chars必须为1至8000的整数。")
+    _validate_read_parameters(source_id=source_id, version=version, block_id=block_id,
+                              offset=offset, max_chars=max_chars)
 
     source = next((item for item in materials
                    if item.project_id == project_id and item.source_id == source_id), None)
@@ -56,3 +50,16 @@ def read_project_material(
         offset=offset, end_offset=end_offset,
         next_offset=end_offset if end_offset < total_chars else None,
     )
+
+
+def _validate_read_parameters(*, source_id: str, version: str, block_id: str,
+                              offset: int, max_chars: int) -> None:
+    """纯Python入口也检查定位标识、偏移和返回长度。"""
+    # 纯Python调用不一定经过Pydantic，所以业务入口也检查自己的参数。
+    for name, value in (("source_id", source_id), ("version", version), ("block_id", block_id)):
+        if not isinstance(value, str) or not value.strip() or len(value) > 200:
+            raise ValueError(f"{name}必须为1至200字符的非空字符串。")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("offset必须为非负整数。")
+    if type(max_chars) is not int or not 1 <= max_chars <= 8000:
+        raise ValueError("max_chars必须为1至8000的整数。")

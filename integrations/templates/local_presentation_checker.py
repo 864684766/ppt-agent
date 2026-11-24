@@ -87,11 +87,34 @@ class LocalPresentationChecker:
     def _check_content(self, *, content: bytes, artifact_id: str, file_name: str) -> CheckPresentationOutput:
         """复用包校验后才解析；前置失败的后续规则留not_checked，绝不假装通过。"""
         complete = len(content) <= self._max_file_bytes
+        rules = self._initial_rules()
+        count = None
+        # 每一步成功后才执行下一步；未执行的规则保留not_checked。
+        if not content or not complete:
+            rules[0] = _rule("file_size", "fail", True, "文件为空或超过本轮原文件字节上限。",
+                             expected=f"1–{self._max_file_bytes}字节", actual=len(content) if complete else "超过上限，未完整读取")
+        else:
+            rules[0] = _rule("file_size", "pass", True, "原文件非空且未超过字节上限。",
+                             expected=f"1–{self._max_file_bytes}字节", actual=len(content))
+            if self._check_package(content, rules):
+                count = self._check_slides(content, rules)
+        # all(...)只要求required=True的前4条全部pass；任一fail或not_checked即False。
+        # 第5条警告不否决基础检查；后4条未实现也不参与计算。因此passed=True
+        # 不能解读为大纲、来源、排版及Office打开均已通过，调用方仍须阅读checks。
+        return dict(
+            artifact_id=artifact_id, file_name=file_name,
+            sha256=hashlib.sha256(content).hexdigest() if complete else None,
+            size_bytes=len(content) if complete else None, slide_count=count,
+            passed=all(r["status"] == "pass" for r in rules if r["required"]), checks=rules,
+        )
+
+    def _initial_rules(self) -> list[PresentationCheckItem]:
+        """创建固定顺序的检查项；未实现或前置失败的项保留not_checked。"""
         # 先建立报告，再根据实际执行结果替换对应项。Python列表下标从0开始：
         # rules[0:5]对应下面前5条已实现检查，rules[5:9]仅说明尚未实现的能力。
         # not_checked有两种原因：已实现但前置条件失败而跳过；或者能力尚未实现。
         # 需要结合message区分，不能把它理解为通过，也不能直接理解为文件有错。
-        rules = [
+        return [
             # 前4条required=True：属于本轮必过规则，影响最终passed。
             _rule("file_size", "not_checked", True, "尚未检查文件大小。"),
             _rule("package_structure", "not_checked", True, "文件大小/非空检查通过后才检查包结构。"),
@@ -109,51 +132,36 @@ class LocalPresentationChecker:
             _rule("visual_layout", "not_checked", False, "未检查字号、越界、占位符残留、实际溢出或审美。"),
             _rule("office_open", "not_checked", False, "未使用PowerPoint/WPS实际打开，请人工核对显示与修复提示。"),
         ]
-        count = None
-        # 后续步骤依赖前一步成功：大小→包结构→页面解析→页数/文字存在性。
-        # 前置失败时不继续处理；保留后续项的not_checked，而不是伪造pass或页数0。
-        if not content or not complete:
-            rules[0] = _rule("file_size", "fail", True, "文件为空或超过本轮原文件字节上限。",
-                             expected=f"1–{self._max_file_bytes}字节", actual=len(content) if complete else "超过上限，未完整读取")
-        else:
-            rules[0] = _rule("file_size", "pass", True, "原文件非空且未超过字节上限。",
-                             expected=f"1–{self._max_file_bytes}字节", actual=len(content))
-            try:
-                validate_office_package(content=content, file_format="pptx", max_uncompressed_bytes=self._max_uncompressed_bytes)
-            except FileUploadError as error:
-                # 该错误在共享校验函数中只使用固定安全文案，不含PPT正文/路径。
-                rules[1] = _rule("package_structure", "fail", True, str(error), actual=error.code)
-            else:
-                rules[1] = _rule("package_structure", "pass", True, "Office包基础检查通过，不代表所有关系或显示效果正确。")
-                try:
-                    with BytesIO(content) as stream:
-                        presentation = Presentation(stream)
-                        # slides是实际幻灯片集合，含隐藏页，不是母版/布局数量。
-                        count = len(presentation.slides)
-                        # enumerate(..., 1)将页面从1编号；missing只收集无可提取文字页。
-                        # 它不表示“空白页”：图片、图表等也可能构成完整的页面内容。
-                        missing = [number for number, slide in enumerate(presentation.slides, 1)
-                                   if not self._has_text(slide.shapes)]
-                except Exception as error:
-                    logger.warning("event=presentation_parse_failed error_location=%s", safe_error_location(error))
-                    rules[2] = _rule("pptx_parse", "fail", True, "python-pptx无法解析实际页面，需检查文件或兼容性。")
-                    count = None
-                else:
-                    rules[2] = _rule("pptx_parse", "pass", True, "python-pptx能够读取实际页面，不等于Office真实打开通过。")
-                    rules[3] = _rule("page_count", "pass" if self._min_slides <= count <= self._max_slides else "fail", True,
-                                     "按宿主本次要求核对总页数。", expected=rules[3]["expected"], actual=count)
-                    rules[4] = _rule("pages_without_text", "warning" if missing else "pass", False,
-                                     "无可提取文字页可能是合法图片页，不等于空白、内容缺失或错误。" if missing else "每页至少有一处可提取文字，不保证内容完整。",
-                                     actual=missing, slides=missing)
-        # all(...)只要求required=True的前4条全部pass；任一fail或not_checked即False。
-        # 第5条警告不否决基础检查；后4条未实现也不参与计算。因此passed=True
-        # 不能解读为大纲、来源、排版及Office打开均已通过，调用方仍须阅读checks。
-        return dict(
-            artifact_id=artifact_id, file_name=file_name,
-            sha256=hashlib.sha256(content).hexdigest() if complete else None,
-            size_bytes=len(content) if complete else None, slide_count=count,
-            passed=all(r["status"] == "pass" for r in rules if r["required"]), checks=rules,
-        )
+
+    def _check_package(self, content: bytes, rules: list[PresentationCheckItem]) -> bool:
+        """检查Office包并更新对应报告项；失败时不继续解析。"""
+        try:
+            validate_office_package(content=content, file_format="pptx", max_uncompressed_bytes=self._max_uncompressed_bytes)
+        except FileUploadError as error:
+            rules[1] = _rule("package_structure", "fail", True, str(error), actual=error.code)
+            return False
+        rules[1] = _rule("package_structure", "pass", True, "Office包基础检查通过，不代表所有关系或显示效果正确。")
+        return True
+
+    def _check_slides(self, content: bytes, rules: list[PresentationCheckItem]) -> int | None:
+        """解析实际页，更新解析、页数和无文字页报告；错误仅输出安全位置。"""
+        try:
+            with BytesIO(content) as stream:
+                presentation = Presentation(stream)
+                count = len(presentation.slides)
+                missing = [number for number, slide in enumerate(presentation.slides, 1)
+                           if not self._has_text(slide.shapes)]
+        except Exception as error:
+            logger.warning("event=presentation_parse_failed error_location=%s", safe_error_location(error))
+            rules[2] = _rule("pptx_parse", "fail", True, "python-pptx无法解析实际页面，需检查文件或兼容性。")
+            return None
+        rules[2] = _rule("pptx_parse", "pass", True, "python-pptx能够读取实际页面，不等于Office真实打开通过。")
+        rules[3] = _rule("page_count", "pass" if self._min_slides <= count <= self._max_slides else "fail", True,
+                         "按宿主本次要求核对总页数。", expected=rules[3]["expected"], actual=count)
+        rules[4] = _rule("pages_without_text", "warning" if missing else "pass", False,
+                         "无可提取文字页可能是合法图片页，不等于空白、内容缺失或错误。" if missing else "每页至少有一处可提取文字，不保证内容完整。",
+                         actual=missing, slides=missing)
+        return count
 
     @staticmethod
     def _has_text(shapes) -> bool:

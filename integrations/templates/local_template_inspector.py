@@ -10,6 +10,7 @@ from zipfile import BadZipFile
 
 from pptx import Presentation
 from pptx.exc import PackageNotFoundError
+from pptx.presentation import Presentation as PresentationDocument
 
 from diagnostics.operation_logging import log_operation
 from domain.templates.template_inspector_contract import TemplateInspectionError
@@ -50,41 +51,8 @@ class LocalTemplateInspector:
                 "母版/版式/页面对象分别返回，背景、主题字体、完整样式继承及视觉效果未解析。",
                 "组合子对象使用局部坐标，未展开缩放/旋转/裁剪；绘制顺序不等于阅读顺序。",
             ]
-            masters: list[TemplateMaster] = []
-            layouts: list[TemplateLayout] = []
-            # 第一步：读取“设计定义”。外层遍历母版，内层遍历这个母版管理的版式。
-            # 母版好比一套设计规范，版式好比规范中的标题页/正文页排版方案。
-            # 这里不是按实际页数循环，也没有只取前11项之类的数量限制。
-            for master in presentation.slide_masters:
-                master_id = str(master.part.partname)
-                # append每次只添加一个母版字典。字典里的layout_ids是版式编号列表；
-                # 一个母版管理11个版式时，masters增加1项，layout_ids内部有11项。
-                masters.append({
-                    "master_id": master_id,
-                    "layout_ids": [str(layout.part.partname) for layout in master.slide_layouts],
-                    "shapes": extract_shapes(master.shapes, part_id=master_id, warnings=warnings),
-                })
-                for layout in master.slide_layouts:
-                    # partname是PPTX压缩包里的文件路径，用作关联编号；不是本机路径。
-                    layout_id = str(layout.part.partname)
-                    layouts.append({
-                        "layout_id": layout_id, "name": layout.name, "master_id": master_id,
-                        "shapes": extract_shapes(layout.shapes, part_id=layout_id, warnings=warnings),
-                    })
-            slides: list[TemplateSlide] = []
-            # 第二步：独立遍历实际页面。enumerate(..., start=1)同时得到从1开始的
-            # 页码number和当前页面slide；不因为版式重复就跳过页面。
-            # 15张页面完全可以共用一个版式，所以slides与layouts数量无需相同。
-            for number, slide in enumerate(presentation.slides, start=1):
-                slides.append({
-                    "slide_id": str(slide.slide_id), "slide_number": number,
-                    "layout_id": str(slide.slide_layout.part.partname),
-                    # 只提取这张页面自己的对象。母版/版式对象在上面单独保存，
-                    # 不复制进这里，避免把设计提示文字误认为每页都有的真实正文。
-                    "shapes": extract_shapes(
-                        slide.shapes, part_id=str(slide.part.partname), warnings=warnings,
-                    ),
-                })
+            masters, layouts = _extract_designs(presentation, warnings)
+            slides = _extract_slides(presentation, warnings)
             logger.info("event=template_structure slides=%s layouts=%s masters=%s warnings=%s", len(slides), len(layouts), len(masters), len(warnings))
             return {
                 "template_id": template_id, "file_name": path.name,
@@ -101,3 +69,48 @@ class LocalTemplateInspector:
             raise TemplateInspectionError(
                 "无法解析模板，请确认是可打开、未加密的PPTX文件。"
             ) from None
+
+
+def _extract_designs(presentation: PresentationDocument, warnings: list[str]) -> tuple[list[TemplateMaster], list[TemplateLayout]]:
+    """读取母版和版式的定义，不把它们当成实际页面。"""
+    masters: list[TemplateMaster] = []
+    layouts: list[TemplateLayout] = []
+    # 第一步：读取“设计定义”。外层遍历母版，内层遍历这个母版管理的版式。
+    # 母版好比一套设计规范，版式好比规范中的标题页/正文页排版方案。
+    # 这里不是按实际页数循环，也没有只取前11项之类的数量限制。
+    for master in presentation.slide_masters:
+        master_id = str(master.part.partname)
+        # append每次只添加一个母版字典。字典里的layout_ids是版式编号列表；
+        # 一个母版管理11个版式时，masters增加1项，layout_ids内部有11项。
+        masters.append({
+            "master_id": master_id,
+            "layout_ids": [str(layout.part.partname) for layout in master.slide_layouts],
+            "shapes": extract_shapes(master.shapes, part_id=master_id, warnings=warnings),
+        })
+        for layout in master.slide_layouts:
+            # partname是PPTX压缩包里的文件路径，用作关联编号；不是本机路径。
+            layout_id = str(layout.part.partname)
+            layouts.append({
+                "layout_id": layout_id, "name": layout.name, "master_id": master_id,
+                "shapes": extract_shapes(layout.shapes, part_id=layout_id, warnings=warnings),
+            })
+    return masters, layouts
+
+
+def _extract_slides(presentation: PresentationDocument, warnings: list[str]) -> list[TemplateSlide]:
+    """按真实页码读取页面自身对象及其版式关联。"""
+    slides: list[TemplateSlide] = []
+    # 第二步：独立遍历实际页面。enumerate(..., start=1)同时得到从1开始的
+    # 页码number和当前页面slide；不因为版式重复就跳过页面。
+    # 15张页面完全可以共用一个版式，所以slides与layouts数量无需相同。
+    for number, slide in enumerate(presentation.slides, start=1):
+        slides.append({
+            "slide_id": str(slide.slide_id), "slide_number": number,
+            "layout_id": str(slide.slide_layout.part.partname),
+            # 只提取这张页面自己的对象。母版/版式对象在上面单独保存，
+            # 不复制进这里，避免把设计提示文字误认为每页都有的真实正文。
+            "shapes": extract_shapes(
+                slide.shapes, part_id=str(slide.part.partname), warnings=warnings,
+            ),
+        })
+    return slides

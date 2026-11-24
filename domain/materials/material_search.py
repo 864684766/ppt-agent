@@ -39,6 +39,19 @@ def search_project_materials(
     if type(max_chars_per_match) is not int or not 50 <= max_chars_per_match <= 1000:
         raise ValueError("max_chars_per_match必须为50至1000的整数。")
 
+    blocks = _select_searchable_blocks(project_id=project_id, materials=materials, fragments=fragments,
+                                       requested=requested, origin=origin)
+    # 页码未知的块排在已知页码之后；排序是确定顺序，不代表内容重要性。
+    blocks.sort(key=lambda block: (block.source_id, block.page is None, block.page or 0, block.block_id))
+    patterns = [(term, re.compile(re.escape(term), re.IGNORECASE)) for term in terms]
+    return _match_blocks(blocks=blocks, patterns=patterns, max_results=max_results,
+                         max_chars_per_match=max_chars_per_match)
+
+
+def _select_searchable_blocks(*, project_id: str, materials: Sequence[MaterialSummary],
+                              fragments: Sequence[MaterialFragment], requested: list[str] | None,
+                              origin: str) -> list[MaterialFragment]:
+    """验证指定来源的状态，选出已载入的正文块。"""
     sources = {item.source_id: item for item in materials if item.project_id == project_id}
     if requested is not None:
         if any(source_id not in sources for source_id in requested):
@@ -57,9 +70,12 @@ def search_project_materials(
     ]
     if selected - {block.source_id for block in blocks}:
         raise ValueError("目标资料正文尚未载入当前快照，不能进行检索。")
-    # 页码未知的块排在已知页码之后；排序是确定顺序，不代表内容重要性。
-    blocks.sort(key=lambda block: (block.source_id, block.page is None, block.page or 0, block.block_id))
-    patterns = [(term, re.compile(re.escape(term), re.IGNORECASE)) for term in terms]
+    return blocks
+
+
+def _match_blocks(*, blocks: list[MaterialFragment], patterns: list[tuple[str, re.Pattern[str]]],
+                  max_results: int, max_chars_per_match: int) -> MaterialSearchResult:
+    """统计命中并构造有限长度的正文片段，不改变块顺序。"""
     matches: list[MaterialSearchMatch] = []
     total_matches = 0
     for block in blocks:

@@ -87,6 +87,7 @@ class ResearchState(TypedDict):
     status: str  # running、completed、awaiting_user、interrupted、needs_materials或cancelled。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。
+    waiting_question: dict | None  # 提问节点的稳定问题字段；等待时非空，回答后清空。
     # 图运行中为空字符串；运行结束由工作流_finalize填写主要停止原因：
     # target_reached：模型引用的网页来源数达到目标，且未报告明确缺口或内容问题。
     # search_limit：搜索轮次用完，仍未满足上述目标和缺口条件。

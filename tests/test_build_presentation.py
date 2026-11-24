@@ -46,22 +46,8 @@ def _slide_text(shapes) -> list[str]:
     return result
 
 
-@pytest.mark.asyncio
-async def test_tool_result_with_real_template() -> None:
-    """根据公开运动指南手工准备8页示例；图表数值是计划示例，不是研究数据。"""
-    original = TEMPLATE_PATH.read_bytes()
-    # 测试模拟宿主读取文件后按编号提供字节；运行时工具不访问互联网或任意路径。
-    picture = (MEDIA_DIRECTORY / "fitness-treadmill.jpg").read_bytes()
-    video = (MEDIA_DIRECTORY / "fitness-squat.mp4").read_bytes()
-    video_poster = (MEDIA_DIRECTORY / "fitness-squat-poster.jpg").read_bytes()
-    # 原模板的内容区为绿色；白色底板让沿用主题色的图表保持足够对比度。
-    chart_background = BytesIO()
-    Image.new("RGB", (16, 16), "#FFFFFF").save(chart_background, format="PNG")
-    builder = LocalPresentationBuilder(templates={"demo": TEMPLATE_PATH}, output_directory=OUTPUT_DIRECTORY,
-                                       images={"fitness-photo": picture, "video-poster": video_poster,
-                                               "chart-background": chart_background.getvalue()},
-                                       videos={"squat-video": video})
-    tool = create_build_presentation_tool(builder=builder)
+def _fitness_pages() -> list[dict]:
+    """返回供真实模板生成测试使用的健身计划示例数据。"""
     # 以下辅助函数只组织测试数据。坐标和尺寸为英寸；引用原始实际页码。
     def text(value: str, x: float, y: float, width: float, height: float,
              size: int = 20, color: str = "#263747") -> dict:
@@ -122,6 +108,26 @@ async def test_tool_result_with_real_template() -> None:
         content_page("来源", "参考资料与素材", [],
                      "WHO：who.int/news-room/fact-sheets/detail/physical-activity\nCDC：cdc.gov/physical-activity-basics/guidelines/adults.html\n图片：Larry D. Moore，CC BY 4.0；视频：FitnessScape，CC BY 3.0（转码、提取封面）\n素材页面见配套调试文档。"),
     ]
+    return pages
+
+
+@pytest.mark.asyncio
+async def test_tool_result_with_real_template() -> None:
+    """根据公开运动指南手工准备8页示例；图表数值是计划示例，不是研究数据。"""
+    original = TEMPLATE_PATH.read_bytes()
+    # 测试模拟宿主读取文件后按编号提供字节；运行时工具不访问互联网或任意路径。
+    picture = (MEDIA_DIRECTORY / "fitness-treadmill.jpg").read_bytes()
+    video = (MEDIA_DIRECTORY / "fitness-squat.mp4").read_bytes()
+    video_poster = (MEDIA_DIRECTORY / "fitness-squat-poster.jpg").read_bytes()
+    # 原模板的内容区为绿色；白色底板让沿用主题色的图表保持足够对比度。
+    chart_background = BytesIO()
+    Image.new("RGB", (16, 16), "#FFFFFF").save(chart_background, format="PNG")
+    builder = LocalPresentationBuilder(templates={"demo": TEMPLATE_PATH}, output_directory=OUTPUT_DIRECTORY,
+                                       images={"fitness-photo": picture, "video-poster": video_poster,
+                                               "chart-background": chart_background.getvalue()},
+                                       videos={"squat-video": video})
+    tool = create_build_presentation_tool(builder=builder)
+    pages = _fitness_pages()
     arguments = {"template_id": "demo", "pages": pages}
     print("\n【2】调用参数：", json.dumps(arguments, ensure_ascii=False, indent=2), flush=True)
     # 在此处断点，可进入builder观察页面复制、组合对象查找与文字替换。

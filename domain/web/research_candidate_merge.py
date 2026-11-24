@@ -29,37 +29,48 @@ def merge_research_candidates(
     reasons = {item.candidate_id: item.unmet_requirement for item in review.alternatives}
 
     for item in candidates:
-        candidate_id, url = item["candidate_id"], item["url"]
+        candidate_id = item["candidate_id"]
         is_formal = candidate_id in formal_ids
         reason = reasons.get(candidate_id)
         if not is_formal and reason is None:
             continue
-        current = formal_by_url.get(url)
-        if current is None and is_formal:
-            previous = backup_by_url.pop(url, None)
-            if previous is not None:
-                backup.remove(previous)
-                current = ResearchCandidate(candidate_id=previous["candidate_id"], title=previous["title"],
-                    url=previous["url"], snippet=previous["snippet"], engines=list(previous["engines"]),
-                    search_strategies=list(previous["search_strategies"]))
-            else:
-                current = ResearchCandidate(candidate_id=candidate_id, title=item["title"], url=url,
-                    snippet=item["snippet"], engines=[], search_strategies=[])
-            formal.append(current)
-            formal_by_url[url] = current
-        if current is None:
-            alternative = backup_by_url.get(url)
-            if alternative is None:
-                alternative = ResearchAlternative(candidate_id=candidate_id, title=item["title"], url=url,
-                    snippet=item["snippet"], engines=[], search_strategies=[], unmet_reasons=[])
-                backup.append(alternative)
-                backup_by_url[url] = alternative
-            if reason and reason not in alternative["unmet_reasons"]:
-                alternative["unmet_reasons"].append(reason)
-            current = alternative
+        current = _select_candidate(item, is_formal=is_formal, reason=reason, formal=formal, backup=backup,
+                                    formal_by_url=formal_by_url, backup_by_url=backup_by_url)
         for engine in item["engines"]:
             if engine not in current["engines"]:
                 current["engines"].append(engine)
         if strategy not in current["search_strategies"]:
             current["search_strategies"].append(strategy)
     return formal, backup
+
+
+def _select_candidate(item: WebSearchItem, *, is_formal: bool, reason: str | None,
+                      formal: list[ResearchCandidate], backup: list[ResearchAlternative],
+                      formal_by_url: dict[str, ResearchCandidate],
+                      backup_by_url: dict[str, ResearchAlternative]) -> ResearchCandidate:
+    """按URL选取或创建候选；必要时将备用候选提升为正式候选。"""
+    url = item["url"]
+    current = formal_by_url.get(url)
+    if current is None and is_formal:
+        previous = backup_by_url.pop(url, None)
+        if previous is not None:
+            backup.remove(previous)
+            current = ResearchCandidate(candidate_id=previous["candidate_id"], title=previous["title"],
+                url=previous["url"], snippet=previous["snippet"], engines=list(previous["engines"]),
+                search_strategies=list(previous["search_strategies"]))
+        else:
+            current = ResearchCandidate(candidate_id=item["candidate_id"], title=item["title"], url=url,
+                snippet=item["snippet"], engines=[], search_strategies=[])
+        formal.append(current)
+        formal_by_url[url] = current
+    if current is not None:
+        return current
+    alternative = backup_by_url.get(url)
+    if alternative is None:
+        alternative = ResearchAlternative(candidate_id=item["candidate_id"], title=item["title"], url=url,
+            snippet=item["snippet"], engines=[], search_strategies=[], unmet_reasons=[])
+        backup.append(alternative)
+        backup_by_url[url] = alternative
+    if reason and reason not in alternative["unmet_reasons"]:
+        alternative["unmet_reasons"].append(reason)
+    return alternative

@@ -103,39 +103,39 @@ def parse_searxng_results(payload: object, *, max_results: int) -> tuple[WebSear
     candidates: list[WebSearchCandidate] = []
     seen_urls: set[str] = set()
     for item in payload["results"]:
-        if not isinstance(item, dict):
+        candidate = _parse_candidate(item)
+        if candidate is None or candidate.url in seen_urls:
             continue
-        url = item.get("url")
-        if not isinstance(url, str):
-            continue
-        url = url.strip()
-        try:
-            parts = urlsplit(url)
-            valid_url = parts.scheme in {"http", "https"} and bool(parts.hostname)
-        except ValueError:
-            valid_url = False
-        if not valid_url or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        # 对完整URL计算SHA-256，生成候选编号；它不是已登记资料的source_id。
-        # 优先读取合并结果的engines列表；旧版/单引擎结果仅有engine时使用它。
-        # 两者均无可靠名称就返回空元组，不从配置推测实际来源。
-        raw_engines = item.get("engines")
-        source_engines = tuple(dict.fromkeys(
-            name.strip() for name in raw_engines
-            if isinstance(name, str) and name.strip()
-        )) if isinstance(raw_engines, list) else ()
-        if not source_engines and isinstance(item.get("engine"), str) and item["engine"].strip():
-            source_engines = (item["engine"].strip(),)
-        candidates.append(WebSearchCandidate(
-            candidate_id="web_" + sha256(url.encode("utf-8")).hexdigest(),
-            title=item["title"].strip() if isinstance(item.get("title"), str) else "",
-            url=url,
-            snippet=item["content"].strip() if isinstance(item.get("content"), str) else "",
-            engines=source_engines,
-        ))
+        seen_urls.add(candidate.url)
+        candidates.append(candidate)
         if len(candidates) >= max_results:
             break
     if not candidates and payload.get("unresponsive_engines"):
         raise WebSearchError("本次未获得可用网页，且搜索引擎报告故障，请检查 SearXNG。")
     return tuple(candidates)
+
+
+def _parse_candidate(item: object) -> WebSearchCandidate | None:
+    """校验单条URL并转换字段；无效条目返回None，实际引擎以响应为准。"""
+    if not isinstance(item, dict) or not isinstance(item.get("url"), str):
+        return None
+    url = item["url"].strip()
+    try:
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            return None
+    except ValueError:
+        return None
+    raw_engines = item.get("engines")
+    source_engines = tuple(dict.fromkeys(
+        name.strip() for name in raw_engines if isinstance(name, str) and name.strip()
+    )) if isinstance(raw_engines, list) else ()
+    if not source_engines and isinstance(item.get("engine"), str) and item["engine"].strip():
+        source_engines = (item["engine"].strip(),)
+    # 候选编号按完整URL计算，不是资料库中的source_id。
+    return WebSearchCandidate(
+        candidate_id="web_" + sha256(url.encode("utf-8")).hexdigest(),
+        title=item["title"].strip() if isinstance(item.get("title"), str) else "",
+        url=url, snippet=item["content"].strip() if isinstance(item.get("content"), str) else "",
+        engines=source_engines,
+    )

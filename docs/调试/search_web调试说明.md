@@ -125,7 +125,7 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 
 2026-11-23真实验证：进程临时覆盖目标2、搜索1轮、读取上限2；SearXNG返回无关候选，模型初筛后没有正式结果，流程返回搜索轮次耗尽，测试通过。未验证真实网页截断或读取上限分支。默认.env经Settings读取为5、6、15。
 
-测试输出【网页资料检查报告】，report包含has_usable_content、source_count、target_source_count、stop_reason、issues；issues逐项给出类别、说明和相关候选编号。content_gap由模型生成，并不证明缺口真实；反馈feedback不放报告。报告是给后续卡片使用的数据，真实询问和上传文件尚未接入。
+测试输出【网页资料检查报告】，report包含has_usable_content、source_count、target_source_count、stop_reason、issues；issues逐项给出类别、说明和相关候选编号。content_gap由模型生成，并不证明缺口真实；反馈feedback不放报告。报告用于工作流内询问；HTTP卡片和上传文件尚未接入。
 
 2026-11-23检查报告真实验证：限制搜索1轮、读取2页，真实模型和SearXNG返回无关候选，报告返回无可用内容及来源数量不足；测试通过。网页读取失败、截断和模型缺口的报告分支本次未通过真实案例验证。
 
@@ -144,3 +144,10 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 空要点网页不会再次触发汇总。若累计汇总因模型输出超限，最终返回 `status=interrupted`、`stop_reason=summary_length_exceeded` 和报告问题 `summary_unfinished`；检查 `page_extractions` 与之前的 `summary`，后者可能为 null 或未包含最新要点。当前结束状态不支持调用 resume 重试。
 
 2026-11-23 真实验证：临时设定搜索1轮、最多读取4页、目标1个来源，运行 `pytest tests/test_research_workflow.py -k 4ecb -x -q -s`，1 passed。两页返回403，一页提炼8条并成功汇总，另一页提炼1条后汇总发生输出超限；实际返回interrupted、summary_length_exceeded、summary_unfinished，保留上一汇总和两页提炼。该次短网页返回1条而非空要点，因此未实际验证空要点跳过分支。环境变量只作用于测试进程。
+
+
+2026-11-24：资料不足时图调用ask_user暂停，测试输出“待回答问题”；使用同一工作流实例和thread_id通过get_pending_question查询。工作流层answer接收question_id和选项代码provide_materials、use_current或end_conversation；补充文件与HTTP接口暂未接入，实例销毁或服务重启后不能恢复。模型超时或汇总输出超限为interrupted，不进入询问。
+
+2026-11-24真实验证：临时设置搜索1轮、最多读取1页，执行 `pytest tests/test_research_workflow.py -k 4ecb -x -q -s`，真实模型与搜索服务返回候选，网页读取为403，工作流进入ask_user暂停；测试用相同任务编号和问题编号回答end_conversation，得到cancelled并验证状态保留，1 passed。临时配置不修改.env。有少量可用资料后选择use_current、模型中断与备用候选选择未在该次验证中覆盖。
+
+2026-11-24职责整理后，使用真实模型和SearXNG运行 `pytest tests/test_research_workflow.py -k 4ecb -x -q --capture=sys`（临时搜索1轮、最多1页），结果1 passed；`tests/test_search_web.py` 和 `tests/test_fetch_webpage.py` 共5 passed。其余模块回归及本地测试数据限制见技术文档。

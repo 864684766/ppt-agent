@@ -90,3 +90,7 @@ LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位�
 `presentations/`分类存放成品内容绘制模块，`presentation_element_dispatcher.py`按type分发文字、图片、视频、音频、图表、表格和列表；媒体字节按宿主编号注入，不允许模型传任意路径。表格及列表绘制由build_presentation复用，已移除独立工具。
 
 `presentation_chart_drawing.py`负责创建原生图表及数据；`presentation_chart_axis_style.py`负责坐标轴/刻度/网格线，`presentation_chart_display_style.py`负责标题/图例/标签/字体。仅支持契约列出的样式，未提供的项保留Office默认值。
+
+## 模块内部职责整理（2026-11-24）
+
+网页读取分别负责受限下载、HTML解析和错误映射；搜索适配器逐条转换结果。模板检查区分包校验与实际页面检查，模板结构按母版版式和真实页面分别提取；PDF OCR按页识别，调用方仍负责原生PDF资源和锁的生命周期。图表轴样式按轴线、刻度标签、数值范围和网格线分组。工具输入输出和资源归属不因内部拆分改变。

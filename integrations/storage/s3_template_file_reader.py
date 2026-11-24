@@ -47,11 +47,16 @@ class S3TemplateFileReader:
             logger.info("event=template_downloaded size_bytes=%s", len(content))
             return bytes(content)
         except ClientError as error:
-            code = error.response.get("Error", {}).get("Code", "")
-            if code in {"NoSuchKey", "NotFound", "404"}:
-                raise TemplateResourceError("template_not_found", "选中的OSS模板不存在，请刷新列表并原样传入object_key。") from None
-            if code in {"AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"}:
-                raise TemplateResourceError("storage_access_denied", "无法下载OSS模板，请检查访问凭据及ppts桶对象的s3:GetObject权限。") from None
-            raise TemplateResourceError("storage_unavailable", "对象存储读取失败，请检查桶配置和服务状态。") from None
+            raise _client_error(error) from None
         except BotoCoreError:
             raise TemplateResourceError("storage_unavailable", "模板下载失败或中断，请检查网络、超时及对象存储状态。") from None
+
+
+def _client_error(error: ClientError) -> TemplateResourceError:
+    """将对象不存在、访问受限和其他SDK错误映射成稳定的安全提示。"""
+    code = error.response.get("Error", {}).get("Code", "")
+    if code in {"NoSuchKey", "NotFound", "404"}:
+        return TemplateResourceError("template_not_found", "选中的OSS模板不存在，请刷新列表并原样传入object_key。")
+    if code in {"AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"}:
+        return TemplateResourceError("storage_access_denied", "无法下载OSS模板，请检查访问凭据及ppts桶对象的s3:GetObject权限。")
+    return TemplateResourceError("storage_unavailable", "对象存储读取失败，请检查桶配置和服务状态。")

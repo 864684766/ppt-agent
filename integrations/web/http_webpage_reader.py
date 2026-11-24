@@ -41,22 +41,7 @@ class HttpWebpageReader:
     async def read(self, *, url: str) -> WebpageContent:
         """读取一个HTML页面，失败抛安全错误；不捕获取消异常。"""
         try:
-            async with self._client.stream(
-                "GET", url, timeout=self._timeout_seconds, follow_redirects=True,
-                headers={"Accept": "text/html,application/xhtml+xml", "User-Agent": "PptAgent/0.1"},
-            ) as response:
-                response.raise_for_status()
-                media_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                if media_type not in {"text/html", "application/xhtml+xml"}:
-                    raise WebpageReadError("目标不是HTML网页；当前不读取PDF、图片或其他附件。")
-                # aiter_bytes返回解压后的数据；达到限制立即停止，退出上下文关闭响应。
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(body) + len(chunk) > self._max_download_bytes:
-                        raise WebpageReadError("网页超过下载字节上限，请选择更小的页面。")
-                    body.extend(chunk)
-                final_url = str(response.url)
-                header_encoding = response.charset_encoding
+            body, final_url, header_encoding = await self._download(url)
         except httpx.TimeoutException:
             raise WebpageReadError("网页读取超时，请稍后重试或选择其他来源。") from None
         except httpx.HTTPStatusError as error:
@@ -75,7 +60,7 @@ class HttpWebpageReader:
         except httpx.RequestError:
             raise WebpageReadError("无法连接网页，请检查网络或选择其他来源。") from None
 
-        html = decode_html(bytes(body), header_encoding=header_encoding)
+        html = decode_html(body, header_encoding=header_encoding)
         parser = HtmlTextExtractor()
         parser.feed(html)
         parser.close()
@@ -91,6 +76,26 @@ class HttpWebpageReader:
             fetched_at=datetime.now(timezone.utc).isoformat(),
             links=tuple(link_parser.links),
         )
+
+    async def _download(self, url: str) -> tuple[bytes, str, str | None]:
+        """流式下载受限HTML；HTTP响应在返回前关闭，异常由read统一转换。"""
+        async with self._client.stream(
+            "GET", url, timeout=self._timeout_seconds, follow_redirects=True,
+            headers={"Accept": "text/html,application/xhtml+xml", "User-Agent": "PptAgent/0.1"},
+        ) as response:
+            response.raise_for_status()
+            media_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if media_type not in {"text/html", "application/xhtml+xml"}:
+                raise WebpageReadError("目标不是HTML网页；当前不读取PDF、图片或其他附件。")
+            # aiter_bytes返回解压后的数据；达到限制立即停止，退出上下文关闭响应。
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(body) + len(chunk) > self._max_download_bytes:
+                    raise WebpageReadError("网页超过下载字节上限，请选择更小的页面。")
+                body.extend(chunk)
+            final_url = str(response.url)
+            header_encoding = response.charset_encoding
+        return bytes(body), final_url, header_encoding
 
 
 def decode_html(body: bytes, *, header_encoding: str | None) -> str:

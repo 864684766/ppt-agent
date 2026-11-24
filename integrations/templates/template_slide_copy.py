@@ -2,6 +2,9 @@
 
 from copy import deepcopy
 
+from lxml.etree import _Element
+from pptx.slide import Slide
+
 from domain.templates.template_completer_contract import TemplateCompletionError
 
 
@@ -24,6 +27,19 @@ def copy_template_slide(presentation, source):
     objects = [deepcopy(shape._element) for shape in source.shapes]
     background = deepcopy(source._element.cSld.bg) if source._element.cSld.bg is not None else None
     roots = objects + ([background] if background is not None else [])
+    _copy_relationships(source=source, destination=destination, roots=roots)
+    if background is not None:
+        existing = destination._element.cSld.bg
+        if existing is not None:
+            destination._element.cSld.remove(existing)
+        destination._element.cSld.insert(0, background)
+    for element in objects:
+        destination.shapes._spTree.insert_element_before(element, "p:extLst")
+    return destination
+
+
+def _copy_relationships(*, source: Slide, destination: Slide, roots: list[_Element]) -> None:
+    """只复制受支持的图片或超链接关系，并将新关系编号写回XML副本。"""
     relationships: dict[str, str] = {}
     for root in roots:
         for element in root.iter():
@@ -40,11 +56,3 @@ def copy_template_slide(presentation, source):
                     target = relation.target_ref if relation.is_external else relation.target_part
                     relationships[old_id] = destination.part.relate_to(target, relation.reltype, relation.is_external)
                 element.set(attr, relationships[old_id])
-    if background is not None:
-        existing = destination._element.cSld.bg
-        if existing is not None:
-            destination._element.cSld.remove(existing)
-        destination._element.cSld.insert(0, background)
-    for element in objects:
-        destination.shapes._spTree.insert_element_before(element, "p:extLst")
-    return destination

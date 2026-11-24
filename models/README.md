@@ -207,3 +207,5 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 网页候选检查超时时ResearchState.stop_reason为model_timeout、status为interrupted，review_timeout_candidates保留当前及本轮剩余未检查候选；报告issues中类型review_timeout逐条关联编号。已结束图不支持直接resume，进程退出内存状态丢失。
 
 网页资料汇总中，`ResearchState.summary_length_exceeded` 表示累计汇总因输出超限未完成；`summary` 与 `effective_count` 是上次成功汇总的结果，最新单页要点仍在 `page_extractions`。最终 `stop_reason=summary_length_exceeded`，报告 `issues` 中的 `summary_unfinished` 指向尚未完成汇总的候选编号；不能据此判断资料不足或充分。图已结束，不支持直接通过 `resume` 重试该结束状态。
+
+网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据仅在工作流实例内存中，尚未作为HTTP响应公开。

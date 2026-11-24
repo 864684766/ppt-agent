@@ -27,6 +27,13 @@ def configure_logging(
     if output not in {"file", "console", "both"}:
         raise ValueError("日志输出必须为file、console或both。")
 
+    handlers, log_path = _create_handlers(directory=directory, level=level, output=output)
+    _install_handlers(handlers, level=level)
+    return log_path
+
+
+def _create_handlers(*, directory: Path, level: str, output: str) -> tuple[list[logging.Handler], Path | None]:
+    """为本项目创建配置好的处理器，并返回日志文件路径。"""
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(name)s | request_id=%(request_id)s | operation_id=%(operation_id)s | %(message)s"
     )
@@ -49,6 +56,11 @@ def configure_logging(
         handler.setFormatter(formatter)
         handler.addFilter(LogContextFilter())
 
+    return handlers, log_path
+
+
+def _install_handlers(handlers: list[logging.Handler], *, level: str) -> None:
+    """替换项目拥有的处理器，保留宿主处理器并限制SDK调试日志。"""
     root_logger = logging.getLogger()
     # 名称标识本项目拥有的处理器，不能使用clear()破坏pytest等宿主的配置。
     for previous in tuple(root_logger.handlers):
@@ -62,4 +74,3 @@ def configure_logging(
     # 这里只设这些logger阈值，不接管它们自己的处理器或Uvicorn日志。
     for name in ("httpx", "httpcore", "openai", "langchain", "langchain_core", "langchain_openai", "boto3", "botocore", "s3transfer", "urllib3"):
         logging.getLogger(name).setLevel(logging.WARNING)
-    return log_path

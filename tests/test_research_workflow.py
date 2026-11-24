@@ -20,6 +20,7 @@ from integrations.web.webpage_http_client import create_webpage_http_client
 from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
 from tools.web.search_web_tool import create_search_web_tool
 from workflows.web_research_workflow import WebResearchWorkflow
+from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import ToolException
 from models.web.research_contract import SearchReview
 from models.web.search_web_contract import WebSearchItem
@@ -49,6 +50,36 @@ class DisplayReviewAgent(ResearchReviewAgent):
         print("【本轮检查结果】", result.model_dump_json(indent=2), flush=True)
         print("【说明】这是本轮检查；最终备用候选会跨轮按URL合并，尚未交给用户确认。", flush=True)
         return result
+
+
+def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: httpx.AsyncClient,
+                     webpage_http: httpx.AsyncClient) -> WebResearchWorkflow:
+    """为真实验证装配工具和子Agent；HTTP连接由调用方关闭。"""
+    # 显式使用空引擎配置；所有轮次不发送engines参数，由服务器决定。
+    default_tool = create_search_web_tool(client=SearxngSearchClient(
+        client=search_http, base_url=settings.searxng_base_url, engines="",
+        timeout_seconds=settings.web_search_timeout_seconds,
+    ))
+    # 读取提示词文字后注入Agent；这里不把文件路径直接传给模型。
+    query_prompt = (PROJECT_ROOT / "prompts" / "research_query.md").read_text(encoding="utf-8")
+    review_prompt = (PROJECT_ROOT / "prompts" / "research_review.md").read_text(encoding="utf-8")
+    reader = HttpWebpageReader(client=webpage_http, timeout_seconds=settings.webpage_timeout_seconds,
+                               max_download_bytes=settings.webpage_max_download_bytes)
+    workflow = WebResearchWorkflow(
+        query_agent=DisplayQueryAgent(model=model, tool=default_tool, prompt=query_prompt),
+        review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
+        fetch_tool=create_fetch_webpage_tool(reader=reader),
+        target_count=settings.research_target_source_count,
+        max_attempts=settings.research_max_search_rounds,
+        max_pages=settings.research_max_web_pages,
+        summary_agent=WebResearchSummaryAgent(
+            model=model,
+            prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
+            page_prompt=(PROJECT_ROOT / "prompts" / "web_research_page.md").read_text(encoding="utf-8"),
+            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
+            retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
+    )
+    return workflow
 
 
 # pytest会对列表中每一个问题各运行一次test_real_research。
@@ -85,30 +116,7 @@ async def test_real_research(question: str) -> None:
             # 推理模型可能将思考计入输出预算；当前真实验证至少给4096。
             max_tokens=max(settings.llm_max_tokens, 4096), http_client=model_http,
         )
-        # 显式使用空引擎配置；所有轮次不发送engines参数，由服务器决定。
-        default_tool = create_search_web_tool(client=SearxngSearchClient(
-            client=search_http, base_url=settings.searxng_base_url, engines="",
-            timeout_seconds=settings.web_search_timeout_seconds,
-        ))
-        # 读取提示词文字后注入Agent；这里不把文件路径直接传给模型。
-        query_prompt = (PROJECT_ROOT / "prompts" / "research_query.md").read_text(encoding="utf-8")
-        review_prompt = (PROJECT_ROOT / "prompts" / "research_review.md").read_text(encoding="utf-8")
-        reader = HttpWebpageReader(client=webpage_http, timeout_seconds=settings.webpage_timeout_seconds,
-                                   max_download_bytes=settings.webpage_max_download_bytes)
-        workflow = WebResearchWorkflow(
-            query_agent=DisplayQueryAgent(model=model, tool=default_tool, prompt=query_prompt),
-            review_agent=DisplayReviewAgent(model=model, prompt=review_prompt),
-            fetch_tool=create_fetch_webpage_tool(reader=reader),
-            target_count=settings.research_target_source_count,
-            max_attempts=settings.research_max_search_rounds,
-            max_pages=settings.research_max_web_pages,
-            summary_agent=WebResearchSummaryAgent(
-                model=model,
-                prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
-                page_prompt=(PROJECT_ROOT / "prompts" / "web_research_page.md").read_text(encoding="utf-8"),
-                summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
-                retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
-        )
+        workflow = _create_workflow(settings=settings, model=model, search_http=search_http, webpage_http=webpage_http)
         print("\n【用户问题】", question, flush=True)
         # 编号需在run之前创建：即使run报错，也能用同一编号恢复。
         thread_id = uuid4().hex
@@ -120,6 +128,7 @@ async def test_real_research(question: str) -> None:
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
+    print("【待回答问题】", json.dumps(result["waiting_question"], ensure_ascii=False, indent=2))
     print("【结束原因】", result["stop_reason"])
     print("【累计汇总是否因输出超限中断】", result["summary_length_exceeded"])
     print("【网页资料检查报告】", json.dumps(result["report"], ensure_ascii=False, indent=2))
@@ -139,6 +148,12 @@ async def test_real_research(question: str) -> None:
     assert result["report"]["source_count"] == result["effective_count"]
     assert result["report"]["target_source_count"] == result["target_count"]
     assert "feedback" not in result["report"]
+    if result["status"] == "awaiting_user":
+        assert result["waiting_question"] and result["waiting_question"]["question_id"]
+        assert set(result["waiting_question"]["options"]) <= set(result["user_options"])
+        assert await workflow.get_pending_question(thread_id=thread_id) == result["waiting_question"]
+    else:
+        assert result["waiting_question"] is None
     # 所有网页均无要点或汇总输出超限时，可能没有成功的汇总。
     if result["summary"] is None:
         assert result["summary_length_exceeded"] or not any(item["points"] for item in result["page_extractions"])
@@ -152,3 +167,11 @@ async def test_real_research(question: str) -> None:
         assert all("text" not in page for page in result["pages"])
         assert {item["candidate_id"] for item in result["page_extractions"]} == page_ids
     print("【整体返回内容】",json.dumps(result, ensure_ascii=False, indent=2))
+    if result["status"] == "awaiting_user":
+        # 仅验证工作流恢复；HTTP回答接口和文件补充仍未接入。
+        question_id = result["waiting_question"]["question_id"]
+        resumed = await workflow.answer(thread_id=thread_id, question_id=question_id, answer="end_conversation")
+        print("【选择结束后的状态】", resumed["status"], resumed["message"])
+        assert resumed["status"] == "cancelled" and resumed["waiting_question"] is None
+        assert resumed["summary"] == result["summary"]
+        assert await workflow.get_pending_question(thread_id=thread_id) is None

@@ -4,6 +4,9 @@ from collections.abc import Mapping
 import logging
 from pathlib import Path
 
+from pptx.presentation import Presentation as PresentationDocument
+from pptx.slide import Slide
+
 from diagnostics.operation_logging import log_operation, safe_error_location
 from domain.presentations.presentation_builder_contract import PresentationBuildError
 from domain.templates.template_completer_contract import TemplateCompletionError
@@ -41,17 +44,7 @@ class LocalPresentationBuilder:
             presentation = load_template(path)
             # 原页对象先保留引用：新页追加期间，计划只允许引用原模板，不能引用刚生成的页面。
             originals = list(presentation.slides)
-            built: list[BuiltPresentationPage] = []
-            for number, plan in enumerate(pages, start=1):
-                if plan.source_slide_number > len(originals):
-                    raise PresentationBuildError("参考页码超出原模板范围。")
-                slide = copy_template_slide(presentation, originals[plan.source_slide_number - 1])
-                replace_slide_text(slide, plan.replacements)
-                draw_page_elements(slide, plan.elements, images=self._images, videos=self._videos, audios=self._audios,
-                                   slide_width=presentation.slide_width, slide_height=presentation.slide_height)
-                built.append({"slide_number": number, "source_slide_number": plan.source_slide_number,
-                              "role": plan.role, "replacement_count": len(plan.replacements),
-                              "element_count": len(plan.elements)})
+            built = self._build_pages(presentation, originals, pages)
             # python-pptx没有公开删除幻灯片API：移除原页关系和列表项，保留后面按计划复制的页。
             # 这是对底层XML的受限操作，保存后仍需外部Office检查兼容性。
             slide_ids = presentation.slides._sldIdLst
@@ -77,3 +70,19 @@ class LocalPresentationBuilder:
                              "文字替换仅保留第一段及首个文字片段样式，多段样式、换行显示及溢出需核对。",
                              "动画、切换及备注未复制，复杂资源可能不支持；实际Office打开效果未验证。",
                              "未核验页数要求、事实、大纲覆盖或来源；产物编号需宿主登记后供检查工具使用。"]}
+
+    def _build_pages(self, presentation: PresentationDocument, originals: list[Slide],
+                     pages: list[PresentationPagePlan]) -> list[BuiltPresentationPage]:
+        """按计划复制原参考页、替换文字和绘制元素，并记录各页结果。"""
+        built: list[BuiltPresentationPage] = []
+        for number, plan in enumerate(pages, start=1):
+            if plan.source_slide_number > len(originals):
+                raise PresentationBuildError("参考页码超出原模板范围。")
+            slide = copy_template_slide(presentation, originals[plan.source_slide_number - 1])
+            replace_slide_text(slide, plan.replacements)
+            draw_page_elements(slide, plan.elements, images=self._images, videos=self._videos, audios=self._audios,
+                               slide_width=presentation.slide_width, slide_height=presentation.slide_height)
+            built.append({"slide_number": number, "source_slide_number": plan.source_slide_number,
+                          "role": plan.role, "replacement_count": len(plan.replacements),
+                          "element_count": len(plan.elements)})
+        return built

@@ -29,52 +29,62 @@ async def get_chat_submission(request: Request) -> ChatSubmission:
     try:
         media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
         if media_type == "application/json":
-            body = bytearray()
-            async for chunk in request.stream():
-                body.extend(chunk)
-                if len(body) > 64 * 1024:
-                    raise FileUploadError("file_too_large", "JSON消息请求超过64 KiB，请勿把文件正文或base64塞入消息。")
-            try:
-                parameters = ChatRequest.model_validate(json.loads(body))
-            except (ValueError, UnicodeError, ValidationError):
-                raise FileUploadError("invalid_message", "JSON需要1–10000字符的非空message，可选template_key（最多1024字符）。") from None
-            return ChatSubmission(**parameters.model_dump())
+            return await _parse_json(request)
         if media_type != "multipart/form-data":
             raise FileUploadError("unsupported_media_type", "请发送application/json消息，或multipart/form-data问题与附件。")
-        try:
-            settings = Settings()
-        except ValidationError:
-            raise FileUploadError("configuration_invalid", "附件配置无效，请检查环境变量。") from None
-        async with open_chat_form(request, max_file_bytes=settings.upload_max_file_bytes) as form:
-            items = form.multi_items()
-            names = [name for name, _ in items]
-            if len(names) != len(set(names)) or "message" not in names or not set(names) <= {"message", "file", "template_key"}:
-                raise FileUploadError("invalid_fields", "仅接受message、可选file和可选template_key，不能有重复或其他字段。")
-            try:
-                parameters = ChatRequest.model_validate({
-                    "message": form["message"], "template_key": form.get("template_key"),
-                })
-            except ValidationError:
-                raise FileUploadError("invalid_message", "message必须为1–10000字符的非空文本；template_key须为最多1024字符的文本。") from None
-            if "file" not in form:
-                return ChatSubmission(**parameters.model_dump())
-            upload = form["file"]
-            if not isinstance(upload, UploadFile):
-                raise FileUploadError("invalid_fields", "file必须为文件类型，不能是文本路径。")
-            name, file_format = validate_upload_metadata(file_name=upload.filename, content_type=upload.content_type)
-            content = await _read_attachment_bytes(upload, max_file_bytes=settings.upload_max_file_bytes)
-            # 退出open_chat_form前已把字节读到本请求的内存对象，
-            # 后续解析不再依赖已关闭的UploadFile临时句柄。
-            return ChatSubmission(
-                **parameters.model_dump(),
-                attachment=ChatAttachmentInput(
-                    file_name=name,
-                    format=file_format, content=content,
-                ),
-            )
+        return await _parse_multipart(request)
     except FileUploadError as error:
         logger.warning("event=chat_request_rejected code=%s", error.code)
         raise chat_http_error(error.code, str(error)) from None
+
+
+async def _parse_json(request: Request) -> ChatSubmission:
+    """限制JSON请求大小，并将消息校验为内部提交对象。"""
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 64 * 1024:
+            raise FileUploadError("file_too_large", "JSON消息请求超过64 KiB，请勿把文件正文或base64塞入消息。")
+    try:
+        parameters = ChatRequest.model_validate(json.loads(body))
+    except (ValueError, UnicodeError, ValidationError):
+        raise FileUploadError("invalid_message", "JSON需要1–10000字符的非空message，可选template_key（最多1024字符）。") from None
+    return ChatSubmission(**parameters.model_dump())
+
+
+async def _parse_multipart(request: Request) -> ChatSubmission:
+    """校验表单字段及单个文件，退出上下文前复制附件字节。"""
+    try:
+        settings = Settings()
+    except ValidationError:
+        raise FileUploadError("configuration_invalid", "附件配置无效，请检查环境变量。") from None
+    async with open_chat_form(request, max_file_bytes=settings.upload_max_file_bytes) as form:
+        items = form.multi_items()
+        names = [name for name, _ in items]
+        if len(names) != len(set(names)) or "message" not in names or not set(names) <= {"message", "file", "template_key"}:
+            raise FileUploadError("invalid_fields", "仅接受message、可选file和可选template_key，不能有重复或其他字段。")
+        try:
+            parameters = ChatRequest.model_validate({
+                "message": form["message"], "template_key": form.get("template_key"),
+            })
+        except ValidationError:
+            raise FileUploadError("invalid_message", "message必须为1–10000字符的非空文本；template_key须为最多1024字符的文本。") from None
+        if "file" not in form:
+            return ChatSubmission(**parameters.model_dump())
+        upload = form["file"]
+        if not isinstance(upload, UploadFile):
+            raise FileUploadError("invalid_fields", "file必须为文件类型，不能是文本路径。")
+        name, file_format = validate_upload_metadata(file_name=upload.filename, content_type=upload.content_type)
+        content = await _read_attachment_bytes(upload, max_file_bytes=settings.upload_max_file_bytes)
+        # 退出open_chat_form前已把字节读到本请求的内存对象，
+        # 后续解析不再依赖已关闭的UploadFile临时句柄。
+        return ChatSubmission(
+            **parameters.model_dump(),
+            attachment=ChatAttachmentInput(
+                file_name=name,
+                format=file_format, content=content,
+            ),
+        )
 
 
 async def _read_attachment_bytes(upload: UploadFile, *, max_file_bytes: int) -> bytes:
