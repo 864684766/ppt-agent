@@ -8,6 +8,7 @@ import httpx
 from agents.research_query_agent import ResearchQueryAgent
 from agents.research_review_agent import ResearchReviewAgent
 from agents.web_research_summary_agent import WebResearchSummaryAgent
+from agents.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.http_webpage_reader import HttpWebpageReader
@@ -70,7 +71,9 @@ class WebResearchRuntime:
             fetch_tool=create_fetch_webpage_tool(reader=reader),
             summary_agent=WebResearchSummaryAgent(
                 model=model, prompt=prompt("web_research_summary.md"), page_prompt=prompt("web_research_page.md"),
-                summary_prompt=prompt("web_research_merge.md"), retry_prompt=prompt("web_research_page_retry.md")),
+                retry_prompt=prompt("web_research_page_retry.md")),
+            material_summary_agent=MaterialSummaryAgent(model=model, prompt=prompt("web_research_summary.md"),
+                                                        summary_prompt=prompt("web_research_merge.md")),
             target_count=settings.research_target_source_count, max_attempts=settings.research_max_search_rounds,
             max_pages=settings.research_max_web_pages,
         )

@@ -1,4 +1,4 @@
-"""逐页提炼网页，再根据累计要点合并和检查资料。"""
+"""逐页提炼网页正文及可跟进链接。"""
 
 import json
 import logging
@@ -7,22 +7,19 @@ from langchain_core.language_models import BaseChatModel
 from openai import LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
-from models.web.web_research_summary import WebPageExtraction, WebResearchSummary
+from models.web.web_research_summary import WebPageExtraction
 
 logger = logging.getLogger(__name__)
 
 
 class WebResearchSummaryAgent:
-    """封装两种模型调用；网页正文只传给单页提炼，汇总只接收提炼结果。"""
+    """网页正文只传给单页提炼；跨页面汇总由独立Agent负责。"""
 
-    def __init__(self, *, model: BaseChatModel, prompt: str, page_prompt: str,
-                 summary_prompt: str, retry_prompt: str) -> None:
+    def __init__(self, *, model: BaseChatModel, prompt: str, page_prompt: str, retry_prompt: str) -> None:
         """接收模型、共同规则和各阶段提示词；读取文件和资源管理由调用方负责。"""
         self._page_model = model.with_structured_output(WebPageExtraction, method="json_mode")
-        self._summary_model = model.with_structured_output(WebResearchSummary, method="json_mode")
         self._prompt = prompt
         self._page_prompt = page_prompt
-        self._summary_prompt = summary_prompt
         self._retry_prompt = retry_prompt
 
     @log_operation("agent.web_research_extract_page")
@@ -46,21 +43,3 @@ class WebResearchSummaryAgent:
                                if item.candidate_id == page_id and item.url in links][:3]
         return result
 
-    @log_operation("agent.web_research_summary")
-    async def summarize(self, *, question: str, extractions: list[dict]) -> WebResearchSummary:
-        """合并单页要点并检查缺口；只接受本次实际提炼过的来源编号。"""
-        if not extractions:
-            raise ValueError("没有可整理的网页提炼结果。")
-        result = await self._summary_model.ainvoke(self._prompt + "\n" + self._summary_prompt + "\n用户要求：" + question
-                                                     + "\n单页提炼：" + json.dumps(extractions, ensure_ascii=False))
-        if not isinstance(result, WebResearchSummary):
-            raise ValueError("模型未返回有效的网页整理结果。")
-        valid_ids = {item["candidate_id"] for item in extractions}
-        point_ids = {item["candidate_id"] for item in extractions if item["points"]}
-        if any(not set(point.candidate_ids).issubset(point_ids) for point in result.points):
-            raise ValueError("模型要点引用了未提炼的网页编号。")
-        if any(not set(issue.candidate_ids).issubset(valid_ids) for issue in result.issues):
-            raise ValueError("模型问题引用了未提炼的网页编号。")
-        # 跟进链接由单页提炼阶段核对；汇总模型不能再生成新链接。
-        result.follow_links = []
-        return result

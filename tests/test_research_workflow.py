@@ -12,6 +12,7 @@ import pytest
 from agents.research_query_agent import ResearchQueryAgent
 from agents.research_review_agent import ResearchReviewAgent
 from agents.web_research_summary_agent import WebResearchSummaryAgent
+from agents.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.searxng_search_client import SearxngSearchClient
@@ -76,8 +77,10 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
             model=model,
             prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
             page_prompt=(PROJECT_ROOT / "prompts" / "web_research_page.md").read_text(encoding="utf-8"),
-            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
             retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
+        material_summary_agent=MaterialSummaryAgent(model=model,
+            prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
+            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8")),
     )
     return workflow
 

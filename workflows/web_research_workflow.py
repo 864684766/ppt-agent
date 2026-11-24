@@ -22,6 +22,7 @@ from domain.web.research_decision import apply_research_decision
 from domain.web.research_follow_links import select_followup_candidates
 from models.web.research_contract import ResearchState
 from agents.web_research_summary_agent import WebResearchSummaryAgent
+from agents.material_summary_agent import MaterialSummaryAgent
 from models.interaction.user_question import UserQuestion
 from workflows.ask_user import ask_user
 from workflows.research_progress import notify_progress
@@ -40,6 +41,7 @@ class WebResearchWorkflow:
 
     def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract,
                  fetch_tool: BaseTool, summary_agent: WebResearchSummaryAgent,
+                 material_summary_agent: MaterialSummaryAgent,
                  target_count: int = 5, max_attempts: int = 6, max_pages: int = 15) -> None:
         """创建图但不运行；调用run才会请求模型或搜索服务。
 
@@ -54,6 +56,7 @@ class WebResearchWorkflow:
         self._review_agent = review_agent
         self._fetch_tool = fetch_tool
         self._summary_agent = summary_agent
+        self._material_summary_agent = material_summary_agent
         self._target_count = target_count
         self._max_attempts = max_attempts
         self._max_pages = max_pages
@@ -212,7 +215,7 @@ class WebResearchWorkflow:
         """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
         notify_progress("summarize")
         try:
-            summary = await self._summary_agent.summarize(question=state["question"], extractions=state["page_extractions"])
+            summary = await self._material_summary_agent.summarize(question=state["question"], extractions=state["page_extractions"])
         except LengthFinishReasonError:
             # 不覆盖上一次成功汇总或最新单页提炼；本次检查未完成，不判断资料是否充分。
             logger.warning("event=research_summary_length_interrupted page_count=%d", len(state["page_extractions"]))

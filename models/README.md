@@ -213,3 +213,5 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 ChatResearchResult、ChatResearchSource、ChatPageExtraction和ChatQuestion定义在chat/chat_response.py：由HTTP路由根据网页图结果构造，仅公开网页来源、要点、检查报告与询问，不包含内部搜索反馈或网页正文。ChatReadResponse含task_id、status、notice、attachment_analyzed及可选附件/模板；attachment_analyzed固定false。
 
 /chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲；thinking事件仅在配置开启且LangChain返回标准推理块时出现。
+
+MaterialSummaryAgent目前继续使用web/web_research_summary.py的网页汇总契约；尚无文件或粘贴文字的汇总契约。FileExtractionAgent为空类，尚无输入或输出模型。
