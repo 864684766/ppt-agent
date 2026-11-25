@@ -16,7 +16,7 @@ router = APIRouter(tags=["对话"])
              responses={200: {"description": "SSE事件流：start、progress、result或error。",
                               "content": {"text/event-stream": {"schema": {"type": "string"}}}}, **CHAT_RESPONSES},
              openapi_extra=CHAT_REQUEST_BODY,
-             summary="流式返回网页研究进度与最终JSON")
+             summary="流式返回资料收集进度与最终JSON")
 async def chat_stream(request: Request, submission: Annotated[ChatSubmission, Depends(get_chat_submission)]) -> StreamingResponse:
     """请求校验在开始发送前完成；发送后错误通过SSE error事件报告。"""
     return StreamingResponse(stream_chat(request, submission), media_type="text/event-stream",

@@ -32,7 +32,7 @@ async def test_real_material_collection() -> None:
     settings = Settings()
     path = PROJECT_ROOT / "data" / "test_file" / "test6.docx"
     # 请根据所选文件内容修改问题；测试不把文件内容当作模拟模型结果。
-    question = "先分析文件内容，再根据文件主题搜索相关资料。"
+    question = "只根据上传文件介绍面试题，不要联网"
     reader = DocumentFileReader(readers=create_document_readers(),
         limits=DocumentReadLimits(max_characters=settings.document_max_characters,
             max_blocks=settings.document_max_blocks, max_cells=settings.document_max_cells),

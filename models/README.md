@@ -84,12 +84,12 @@ list_project_materials 执行查询 → MaterialPage
 5. 同一操作的输入输出放在同一契约文件；相关内部查询结果集中在 material_query_results.py。按职责、依赖和实际复用需求拆分，不按类数量机械拆文件，不强制复用HTTP与工具类型。
 6. __init__.py不批量加载所有类型，使用时显式导入具体模块，避免依赖扩散。
 
-对话请求返回ChatReadResponse JSON：网页研究状态、来源、汇总、报告和询问，以及可选附件与模板解析结果；附件和模板尚未参与模型分析。
+对话流的result返回ChatReadResponse：需求分析、资料汇总、来源映射、报告和询问；选中文件时会解析并提炼，模板仍单独解析。
 当前未开发大纲、模板识别等结构化Agent结果，它们尚无可供导航的类型定义。
 
 ## 当前附件数据来源（2026-11-05）
 
-用户问题＋附件 → HTTP接收并关闭表单句柄 → 内容校验 → 按格式读取 → DocumentContent → ChatReadResponse。
+用户问题＋附件 → HTTP接收并关闭表单句柄 → 需求分析 → 选择文件时校验、读取和提炼 → 汇总 → ChatReadResponse。
 不长期保存原文件，不创建项目/会话/资料目录Store，也不直接调用模型。DocumentBlock编号仅本次读取唯一。
 之前的项目目录/落盘设计已按用户最新要求延期；MaterialSummary/MaterialFragment等既有工具结构暂时保留，尚未接收当前附件数据，不能当作已接线。
 ChatAttachmentInput由接收层创建，包含原始bytes（禁止序列化/日志）；ChatSubmission仅内部使用，JSON客户端只能提交ChatRequest（message、可选template_key）。
@@ -172,7 +172,7 @@ request_id、operation_id等是diagnostics管理的运行上下文与日志摘�
 ## 当前对话字段调整（2026-11-06）
 
 ChatRequest及其内部派生ChatSubmission新增template_key: str | None，默认None，1–1024字符，保留完整对象名（含目录/空格），不是URL；指定后真实下载读取。
-ChatReadResponse回显template_key，attachment改为可选，status为attachment_read、template_read、files_read或message_received，分别表示附件/模板/两份文件/只有消息。所有分支model_called=false。
+历史版本仅回显解析结果；当前ChatReadResponse通过SSE result返回资料图状态。
 此前旧版api/chat_dependencies.py已移除；当前/chat/stream接入网页资料研究和SSE。
 
 ## OSS模板读取响应（2026-11-06）
@@ -186,7 +186,7 @@ S3TemplateFileReader通过TemplateFileReader协议返回bytes，不创建HTTP模
 
 ## PDF OCR读取字段语义（2026-11-06）
 
-未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。ChatReadResponse.model_called仍表示是否调用对话/云端视觉大模型，本地OCR不将其置true。见[PDF OCR说明](../docs/调试/PDF文字与OCR调试说明.md)。
+未新增类型或字段。DocumentBlock.text允许来自本地OCR，DocumentContent.pages_without_text表示本次读取后仍无文字的页（PDF启用OCR时为OCR后）；page保留原PDF页码。OCR区域结果由PDF读取器内部消费，不直接成为HTTP输出。本地OCR不是云端视觉大模型调用。见[PDF OCR说明](../docs/调试/PDF文字与OCR调试说明.md)。
 
 ## PPTX检查工具（2026-11-06）
 
@@ -208,9 +208,9 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 
 网页资料汇总中，`ResearchState.summary_length_exceeded` 表示累计汇总因输出超限未完成；`summary` 与 `effective_count` 是上次成功汇总的结果，最新单页要点仍在 `page_extractions`。最终 `stop_reason=summary_length_exceeded`，报告 `issues` 中的 `summary_unfinished` 指向尚未完成汇总的候选编号；不能据此判断资料不足或充分。图已结束，不支持直接通过 `resume` 重试该结束状态。
 
-网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat/stream通过research.waiting_question公开，HTTP回答接口尚未实现。
+网页资料图 `ResearchState.waiting_question` 保存由finalize节点创建的待回答问题字典，含question_id、question、reason、options、allow_free_text；ask_user暂停前写入检查点。无待回答问题时为None，回答后清空；数据在工作流实例内存中；/chat/stream通过waiting_question公开，HTTP回答接口尚未实现。
 
-ChatResearchResult、ChatResearchSource、ChatPageExtraction和ChatQuestion定义在chat/chat_response.py：由HTTP路由根据网页图结果构造，仅公开网页来源、要点、检查报告与询问，不包含内部搜索反馈或网页正文。ChatReadResponse含task_id、status、notice、attachment_analyzed及可选附件/模板；attachment_analyzed固定false。
+ChatReadResponse、ChatResearchSource和ChatQuestion定义在chat/chat_response.py，由API根据资料图构造：analysis为需求分析，summary及summary_inputs保留要点和来源映射，sources为网页来源，report为阶段报告，waiting_question为待回答问题；attachment_analyzed表示文件提炼成功，attachment_file_name为上传文件名。模板仍单独解析；不返回附件字节或正文。
 
 /chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲；thinking事件仅在配置开启且LangChain返回标准推理块时出现。
 
@@ -235,3 +235,5 @@ MaterialCollectionState、MaterialCollectionReport 定义在 materials/material_
 需求分析：materials/request_analysis.py 的 RequestAnalysis 由 RequestAnalysisAgent 返回，包含来源模式、执行顺序、是否询问、问题及简短原因；资料工作流使用它选择分支，不保证意图理解准确，尚未接入HTTP。
 
 RequestAnalysisResult为需求分析调用的内部结果：status、plan、error_code和安全message；失败时plan为None，不允许继续按计划执行。尚未接入HTTP。
+
+当前 `/chat/stream` 的 ChatReadResponse 是资料收集首轮SSE result：status、notice、analysis、summary、summary_inputs、sources、report、waiting_question、attachment_analyzed、attachment_file_name、template；尚未提供HTTP回答和上传补充资料后的恢复。旧版附件仅解析/网页专用结果描述属于历史。

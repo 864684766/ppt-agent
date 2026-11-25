@@ -6,6 +6,7 @@ import logging
 from typing import cast
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -20,6 +21,7 @@ from models.materials.file_extraction import FileExtraction
 from models.materials.material_collection_state import MaterialCollectionState
 from workflows.interaction.ask_user import ask_user
 from workflows.web.web_research_workflow import WebResearchWorkflow
+from workflows.web.research_progress import notify_progress
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +58,16 @@ class MaterialCollectionWorkflow:
 
     @log_operation("workflow.material_collection")
     async def run(self, *, thread_id: str, question: str, file_name: str | None = None,
-                  file_content: bytes | None = None, allow_web: bool | None = None) -> MaterialCollectionState:
-        """启动联网收集，可选一份附件；文件字节仅保存在本实例内存检查点。"""
+                  file_content: bytes | None = None, allow_web: bool | None = None,
+                  callbacks: list[BaseCallbackHandler] | None = None) -> MaterialCollectionState:
+        """按需求收集资料；回调只作用于本次调用，附件保存在内存检查点。"""
         if not thread_id.strip() or not question.strip():
             raise ValueError("任务编号和用户问题不能为空。")
         if (file_name is None) != (file_content is None) or (file_name is not None and not file_name.strip()):
             raise ValueError("附件文件名和字节必须同时提供。")
-        config = {"configurable": {"thread_id": thread_id}}
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        if callbacks:
+            config["callbacks"] = callbacks
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在。")
         state: MaterialCollectionState = {"question": question, "allow_web": allow_web, "analysis": None, "question_kind": None,
@@ -90,6 +95,7 @@ class MaterialCollectionWorkflow:
 
     async def _analyze(self, state: MaterialCollectionState) -> dict:
         """先判断需求；分析失败直接中断，不进入资料收集。"""
+        notify_progress("analyze")
         outcome = await self._request.analyze(message=state["question"], has_file=state["file_name"] is not None,
                                               allow_web=state["allow_web"])
         data = outcome.model_dump()
@@ -154,9 +160,10 @@ class MaterialCollectionWorkflow:
             return {"status": "interrupted", "message": "网页资料处理失败，请检查日志。"}
 
     async def _extract_file(self, state: MaterialCollectionState) -> dict:
-        """网页阶段失败时仍处理文件；附件不参与时不调用文件Agent。"""
+        """按选定分支提炼文件；并行分支与网页独立执行。"""
         if state["file_name"] is None:
             return {}
+        notify_progress("file")
         try:
             result = await self._file.extract_file(question=state["question"], file_name=state["file_name"],
                                                    content=state["file_content"] or b"")
@@ -180,6 +187,7 @@ class MaterialCollectionWorkflow:
             points.extend(file_summary_points(extraction=file, source_id="uploaded_file"))
         if not points:
             return {"summary_inputs": []}
+        notify_progress("summarize")
         try:
             summary = await self._summary.summarize(question=state["question"], points=points)
         except Exception as error:

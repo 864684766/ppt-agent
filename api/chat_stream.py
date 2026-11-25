@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from fastapi import HTTPException, Request
 
-from api.chat_attachment_processing import read_chat_attachment
 from api.chat_template_processing import read_chat_template
 from api.chat_response_builder import build_chat_response
 from api.sse_encoder import encode_event
@@ -18,7 +17,7 @@ from workflows.web.research_progress import research_progress
 
 logger = logging.getLogger(__name__)
 _MESSAGES = {
-    "attachment": "正在读取上传的附件。", "template": "正在读取所选模板。",
+    "analyze": "正在分析需求。", "file": "正在读取并提炼文件。", "template": "正在读取所选模板。",
     "search": "正在分析问题并搜索网页。", "review": "正在检查搜索候选。",
     "read_webpage": "正在读取网页。", "extract": "正在提炼网页要点。",
     "summarize": "正在汇总并检查资料。",
@@ -37,21 +36,21 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
     async def execute() -> None:
         token = research_progress.set(progress)
         try:
-            if submission.attachment:
-                progress("attachment")
-            attachment = await read_chat_attachment(submission.attachment) if submission.attachment else None
             if submission.template_key:
                 progress("template")
             template = await read_chat_template(submission.template_key) if submission.template_key else None
-            workflow = await request.app.state.web_research_runtime.get_workflow()
+            workflow = await request.app.state.web_research_runtime.get_material_workflow()
             # 只为当前SSE请求注册回调；不影响并发请求，也不记录推理正文。
             callbacks = None
             if request.app.state.web_research_runtime.show_thinking:
                 callbacks = [ReasoningStreamHandler(lambda text: queue.put_nowait(
                     ("thinking", {"task_id": task_id, "text": text})))]
-            result = await workflow.run(thread_id=task_id, question=submission.message, callbacks=callbacks)
+            attachment = submission.attachment
+            result = await workflow.run(thread_id=task_id, question=submission.message,
+                file_name=attachment.file_name if attachment else None,
+                file_content=attachment.content if attachment else None, callbacks=callbacks)
             response = build_chat_response(submission=submission, task_id=task_id, result=result,
-                                           attachment=attachment, template=template)
+                                           template=template)
             await queue.put(("result", response.model_dump(mode="json")))
         except HTTPException as error:
             await queue.put(("error", {"task_id": task_id, "code": error.detail.get("code", "request_failed"),
