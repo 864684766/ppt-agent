@@ -9,10 +9,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from agents.research_query_agent import ResearchQueryAgent
-from agents.research_review_agent import ResearchReviewAgent
-from agents.web_research_summary_agent import WebResearchSummaryAgent
-from agents.material_summary_agent import MaterialSummaryAgent
+from agents.web.research_query_agent import ResearchQueryAgent
+from agents.web.research_review_agent import ResearchReviewAgent
+from agents.web.webpage_extraction_agent import WebpageExtractionAgent
+from agents.materials.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.searxng_search_client import SearxngSearchClient
@@ -20,7 +20,7 @@ from integrations.web.http_webpage_reader import HttpWebpageReader
 from integrations.web.webpage_http_client import create_webpage_http_client
 from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
 from tools.web.search_web_tool import create_search_web_tool
-from workflows.web_research_workflow import WebResearchWorkflow
+from workflows.web.web_research_workflow import WebResearchWorkflow
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import ToolException
 from models.web.research_contract import SearchReview
@@ -62,8 +62,8 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
         timeout_seconds=settings.web_search_timeout_seconds,
     ))
     # 读取提示词文字后注入Agent；这里不把文件路径直接传给模型。
-    query_prompt = (PROJECT_ROOT / "prompts" / "research_query.md").read_text(encoding="utf-8")
-    review_prompt = (PROJECT_ROOT / "prompts" / "research_review.md").read_text(encoding="utf-8")
+    query_prompt = (PROJECT_ROOT / "prompts" / "web" / "research_query.md").read_text(encoding="utf-8")
+    review_prompt = (PROJECT_ROOT / "prompts" / "web" / "research_review.md").read_text(encoding="utf-8")
     reader = HttpWebpageReader(client=webpage_http, timeout_seconds=settings.webpage_timeout_seconds,
                                max_download_bytes=settings.webpage_max_download_bytes)
     workflow = WebResearchWorkflow(
@@ -73,14 +73,12 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
         target_count=settings.research_target_source_count,
         max_attempts=settings.research_max_search_rounds,
         max_pages=settings.research_max_web_pages,
-        summary_agent=WebResearchSummaryAgent(
+        webpage_extraction_agent=WebpageExtractionAgent(
             model=model,
-            prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
-            page_prompt=(PROJECT_ROOT / "prompts" / "web_research_page.md").read_text(encoding="utf-8"),
-            retry_prompt=(PROJECT_ROOT / "prompts" / "web_research_page_retry.md").read_text(encoding="utf-8")),
+            prompt=(PROJECT_ROOT / "prompts" / "web" / "web_research_page.md").read_text(encoding="utf-8"),
+            retry_prompt=(PROJECT_ROOT / "prompts" / "web" / "web_research_page_retry.md").read_text(encoding="utf-8")),
         material_summary_agent=MaterialSummaryAgent(model=model,
-            prompt=(PROJECT_ROOT / "prompts" / "web_research_summary.md").read_text(encoding="utf-8"),
-            summary_prompt=(PROJECT_ROOT / "prompts" / "web_research_merge.md").read_text(encoding="utf-8"),
+            prompt=(PROJECT_ROOT / "prompts" / "materials" / "material_summary.md").read_text(encoding="utf-8"),
             output_tokens=settings.llm_max_tokens),
     )
     return workflow
@@ -90,18 +88,19 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
     # "介绍一下黄芪。",
-    # "查找中国居民膳食指南2022关于平衡饮食的资料。",
+    "查找中国居民膳食指南2022关于平衡饮食的资料。",
     # "查找《本草纲目》中关于黄芪的记载。",
     # "查找中国劳动合同解除的法律规定。",
     # "查找成年人每周身体活动建议。",
-    "查找中国垃圾分类的基本类别。",
+    # "查找中国垃圾分类的基本类别。",
     # "查找Python异步编程中async与await的官方说明。",
 ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("question", QUESTIONS)
-async def test_real_research(question: str) -> None:
+@pytest.mark.parametrize("defer_user_question", [False, True], ids=["独立询问", "交给上层"])
+async def test_real_research(question: str, defer_user_question: bool) -> None:
     """真实模型和搜索服务集成测试，结果需要人工判断。
 
     pytest根据parametrize依次把QUESTIONS中的一条文字传给question；asyncio
@@ -117,7 +116,7 @@ async def test_real_research(question: str) -> None:
         model = create_langchain_model(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
-            # 推理模型可能将思考计入输出预算；当前真实验证至少给4096。
+            # 推理模型可能将思考计入输出预算；实际使用.env配置，不自动调大。
             max_tokens=settings.llm_max_tokens, http_client=model_http,
         )
         workflow = _create_workflow(settings=settings, model=model, search_http=search_http, webpage_http=webpage_http)
@@ -127,13 +126,15 @@ async def test_real_research(question: str) -> None:
         print("【任务编号】", thread_id, flush=True)
         # 在此打断点；可进入两个Agent，观察每轮搜索词和筛选反馈。
         # 不传三个参数时使用.env默认值；需要临时覆盖时可传target_count=2等。
-        result = await workflow.run(thread_id=thread_id, question=question)
+        result = await workflow.run(thread_id=thread_id, question=question, defer_user_question=defer_user_question)
+    print("【询问模式】", "交给上层" if defer_user_question else "网页流程独立询问")
     print("\n【用户问题】", question)
     print("【状态、次数、搜索调用失败次数】", result["status"], result["attempt"], result["failed_attempts"])
     print("【有效来源数量、目标、读取上限】", result["effective_count"], result["target_count"], result["max_pages"])
     print("【用户可选动作】", result["user_options"])
     print("【待回答问题】", json.dumps(result["waiting_question"], ensure_ascii=False, indent=2))
     print("【结束原因】", result["stop_reason"])
+    print("【执行故障节点和分类】", result["workflow_error_stage"], result["workflow_error_kind"])
     print("【累计汇总是否因输出超限中断】", result["summary_length_exceeded"])
     print("【网页资料检查报告】", json.dumps(result["report"], ensure_ascii=False, indent=2))
     print("【正文截断的网页编号】", [page["candidate_id"] for page in result["pages"] if page["truncated"]])
@@ -147,7 +148,15 @@ async def test_real_research(question: str) -> None:
     print("【网页元数据与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
     print("【逐页提炼结果】", json.dumps(result["page_extractions"], ensure_ascii=False, indent=2))
     print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
-    assert result["status"] in {"completed", "awaiting_user", "interrupted"}, result["message"]
+    assert result["status"] in {"completed", "awaiting_user", "interrupted", "insufficient"}, result["message"]
+    assert result["defer_user_question"] is defer_user_question
+    if defer_user_question:
+        assert result["status"] != "awaiting_user"
+        assert result["waiting_question"] is None
+        assert await workflow.get_pending_question(thread_id=thread_id) is None
+    if result["status"] == "insufficient":
+        assert defer_user_question and not result["user_options"]
+        assert result["stop_reason"] in {"search_limit", "page_limit", "search_failed"}
     assert result["report"] is not None and result["report"]["stop_reason"] == result["stop_reason"]
     assert result["report"]["source_count"] == result["effective_count"]
     assert result["report"]["target_source_count"] == result["target_count"]
@@ -158,12 +167,16 @@ async def test_real_research(question: str) -> None:
         assert await workflow.get_pending_question(thread_id=thread_id) == result["waiting_question"]
     else:
         assert result["waiting_question"] is None
-    # 所有网页均无要点或汇总输出超限时，可能没有成功的汇总。
+    # 尚无要点、汇总输出超限或节点执行故障时，可能没有成功的汇总。
     if result["summary"] is None:
-        assert result["summary_length_exceeded"] or not any(item["points"] for item in result["page_extractions"])
+        assert result["summary_length_exceeded"] or result["stop_reason"] == "workflow_error" or not any(item["points"] for item in result["page_extractions"])
     if result["summary_length_exceeded"]:
         assert result["status"] == "interrupted" and result["stop_reason"] == "summary_length_exceeded"
         assert any(issue["type"] == "summary_unfinished" for issue in result["report"]["issues"])
+    if result["stop_reason"] == "workflow_error":
+        assert result["status"] == "interrupted" and result["workflow_error_kind"]
+        assert result["waiting_question"] is None
+        assert any(issue["type"] == "workflow_failed" for issue in result["report"]["issues"])
     if result["summary"]:
         page_ids = {page["candidate_id"] for page in result["pages"]}
         assert all(set(point["candidate_ids"]) <= page_ids for point in result["summary"]["points"])

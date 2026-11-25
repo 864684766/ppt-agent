@@ -35,7 +35,7 @@ async def run_real_image_test(image: Path | None = None) -> None:
         image = images[0]
     if image.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
         raise ValueError("测试图片必须为PNG/JPEG。")
-    prompt = (PROJECT_ROOT / "prompts" / "template_visual_analysis.md").read_text(encoding="utf-8")
+    prompt = (PROJECT_ROOT / "prompts" / "templates" / "template_visual_analysis.md").read_text(encoding="utf-8")
     # async with确保正常结束或异常时都会释放网络连接；工厂只借用此客户端。
     async with httpx.AsyncClient(timeout=120) as http_client:
         model = create_langchain_model(

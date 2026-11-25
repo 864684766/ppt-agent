@@ -6,11 +6,12 @@ from domain.documents.text_decoding import decode_document_text
 
 
 # 格式列表与MIME策略集中维护；新增格式需要先落实对应校验/读取能力。
-_SUPPORTED_FORMATS = {"txt", "md", "pdf", "docx", "xlsx", "pptx"}
+_SUPPORTED_FORMATS = {"txt", "md", "pdf", "doc", "docx", "xlsx", "pptx"}
 _FORMAT_MIME_TYPES = {
     "txt": {"text/plain"},
     "md": {"text/markdown", "text/plain", "text/x-markdown"},
     "pdf": {"application/pdf"},
+    "doc": {"application/msword"},
     "docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", "application/x-zip-compressed"},
     "xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip", "application/x-zip-compressed"},
     "pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/zip", "application/x-zip-compressed"},
@@ -37,7 +38,7 @@ def validate_upload_metadata(
         raise FileUploadError("invalid_file_name", "文件名为空、过长或包含不支持的名称/字符。")
     extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     if extension not in _SUPPORTED_FORMATS:
-        raise FileUploadError("unsupported_format", "附件仅接受TXT、MD、PDF、DOCX、XLSX、PPTX。")
+        raise FileUploadError("unsupported_format", "附件仅接受TXT、MD、PDF、DOC、DOCX、XLSX、PPTX。")
     media_type = (content_type or "").split(";", 1)[0].strip().lower()
     if media_type not in {"", "application/octet-stream", *_FORMAT_MIME_TYPES[extension]}:
         raise FileUploadError("content_type_mismatch", "声明的Content-Type与文件扩展名不匹配，请检查上传类型。")
@@ -62,6 +63,9 @@ def validate_uploaded_content(
         # 只做基础PDF头尾特征检查。能否解密、读取页面及提取文字由后续PDF解析器确认。
         if not content.startswith(b"%PDF-") or b"%%EOF" not in content[-1024:]:
             raise FileUploadError("invalid_file", "文件不具备完整的PDF头尾特征，可能格式不符或已损坏。")
+    elif file_format == "doc":
+        if not content.startswith(bytes.fromhex("d0cf11e0a1b11ae1")):
+            raise FileUploadError("invalid_file", "DOC文件头不正确，请确认文件格式。")
     elif file_format in {"pptx", "docx", "xlsx"}:
         validate_office_package(content=content, file_format=file_format, max_uncompressed_bytes=max_uncompressed_bytes)
     else:

@@ -13,7 +13,7 @@ class ChatAttachmentResponse(BaseModel):
     """附件元数据与读取内容，不返回文件字节或不可查询的文件编号。"""
 
     file_name: str = Field(description="去除客户端目录的文件名，可作为本次响应的来源名称。")
-    format: Literal["txt", "md", "pdf", "docx", "xlsx", "pptx"] = Field(description="通过校验后实际分派给读取器的格式。")
+    format: Literal["txt", "md", "pdf", "doc", "docx", "xlsx", "pptx"] = Field(description="通过校验后实际分派给读取器的格式。")
     size_bytes: int = Field(gt=0, description="原附件实际字节数，不是解析文字长度。")
     content: DocumentContent = Field(description="正文块、位置、页数及读取限制；无正文须结合warnings和pages_without_text判断。")
 

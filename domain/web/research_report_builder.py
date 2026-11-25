@@ -31,9 +31,11 @@ def _content_issues(state: ResearchState, *, usable: bool) -> list[ResearchIssue
     if stop == "summary_length_exceeded":
         issues.append({"type": "summary_unfinished", "message": "模型输出超限，最新单页要点尚未完成汇总检查；已有汇总仅供参考。",
                        "candidate_ids": [state["page_extractions"][-1]["candidate_id"]]})
-    if not usable and stop != "summary_length_exceeded":
+    if stop == "workflow_error":
+        issues.append({"type": "workflow_failed", "message": "网页资料处理发生错误，未完成的内容无法判断；请检查服务日志或重试。", "candidate_ids": []})
+    if not usable and stop not in {"summary_length_exceeded", "workflow_error"}:
         issues.append({"type": "no_usable_content", "message": "当前没有整理出可用的网页正文内容。", "candidate_ids": []})
-    if state["effective_count"] < state["target_count"] and stop != "summary_length_exceeded":
+    if state["effective_count"] < state["target_count"] and stop not in {"summary_length_exceeded", "workflow_error"}:
         issues.append({"type": "source_count_insufficient", "message": f"当前有{state['effective_count']}个有效网页来源，目标为{state['target_count']}个。", "candidate_ids": []})
     if summary:
         # 结构化问题来自模型；保留其来源编号，供前端展示和人工核对。

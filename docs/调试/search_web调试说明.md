@@ -6,7 +6,7 @@
 
 资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；有备用时还可选`use_alternatives`并传入选中的候选编号；所有不足场景均可选`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
 
-**阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由代码调用宿主注入的默认搜索工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
+**阅读代码的顺序：**先看 `tests/test_research_workflow.py` 如何创建模型、客户端和工具，再看 `workflows/web/web_research_workflow.py` 的 `run → _query → _review → _next`。查询Agent使用模型生成搜索词，由代码调用宿主注入的默认搜索工具；它目前不是 `create_agent` 自动选择工具。检查Agent只返回候选编号和反馈；图会过滤不存在的编号、按完整URL合并候选。需要观察某一轮时，可在图的 `_query`、`_review` 打断点。
 
 `test_real_research` 的测试包装类会逐轮打印搜索策略、搜索词、候选与检查Agent输出，包括备用候选及原因；这些输出仅用于测试，不写入应用日志；最终结果另行输出图累计的备用候选。最后打印工作流的正式候选、状态、提示及用户选项。使用 `pytest -s` 或 PyCharm 的pytest运行器查看；运行会调用真实模型和搜索服务。
 

@@ -11,13 +11,25 @@ def finalize_research(state: ResearchState, *, question_id: str) -> ResearchStat
     if result["unreviewed"]:
         result["message"] += f" 另有{len(result['unreviewed'])}条候选因模型输出超限未完成检查。"
     result["report"] = build_research_report(result)
+    if result["status"] == "awaiting_user" and result["defer_user_question"]:
+        # 此时网页不足仅是上层的输入；不能创建问题或宣称正在等待用户。
+        result["status"] = "insufficient"
+        result["message"] = "网页资料未达到本次收集条件；请结合其他资料和检查报告继续判断。"
+        result["user_options"] = []
     result["waiting_question"] = _build_question(result, question_id) if result["status"] == "awaiting_user" else None
     return result
 
 
 def _set_result_status(result: ResearchState) -> None:
     """按执行失败、目标达成、资料不足的优先级设置结果。"""
-    if result["summary_length_exceeded"]:
+    if result["workflow_error_kind"]:
+        result["status"] = "interrupted"
+        result["stop_reason"] = "workflow_error"
+        result["user_options"] = []
+        descriptions = {"model_connection": "模型连接失败", "model_timeout": "模型请求超时", "execution_failed": "网页处理发生错误"}
+        reason = descriptions.get(result["workflow_error_kind"], "网页处理发生错误")
+        result["message"] = f"{reason}，网页资料处理未完成；已保留完成的结果，请检查服务日志或重试。"
+    elif result["summary_length_exceeded"]:
         result["status"] = "interrupted"
         result["stop_reason"] = "summary_length_exceeded"
         result["user_options"] = []

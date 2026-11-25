@@ -5,10 +5,10 @@ from contextlib import AsyncExitStack
 
 import httpx
 
-from agents.research_query_agent import ResearchQueryAgent
-from agents.research_review_agent import ResearchReviewAgent
-from agents.web_research_summary_agent import WebResearchSummaryAgent
-from agents.material_summary_agent import MaterialSummaryAgent
+from agents.web.research_query_agent import ResearchQueryAgent
+from agents.web.research_review_agent import ResearchReviewAgent
+from agents.web.webpage_extraction_agent import WebpageExtractionAgent
+from agents.materials.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.http_webpage_reader import HttpWebpageReader
@@ -16,7 +16,7 @@ from integrations.web.searxng_search_client import SearxngSearchClient
 from integrations.web.webpage_http_client import create_webpage_http_client
 from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
 from tools.web.search_web_tool import create_search_web_tool
-from workflows.web_research_workflow import WebResearchWorkflow
+from workflows.web.web_research_workflow import WebResearchWorkflow
 
 
 class WebResearchRuntime:
@@ -66,14 +66,13 @@ class WebResearchRuntime:
         reader = HttpWebpageReader(client=page_http, timeout_seconds=settings.webpage_timeout_seconds,
                                    max_download_bytes=settings.webpage_max_download_bytes)
         return WebResearchWorkflow(
-            query_agent=ResearchQueryAgent(model=model, tool=search, prompt=prompt("research_query.md")),
-            review_agent=ResearchReviewAgent(model=model, prompt=prompt("research_review.md")),
+            query_agent=ResearchQueryAgent(model=model, tool=search, prompt=prompt("web/research_query.md")),
+            review_agent=ResearchReviewAgent(model=model, prompt=prompt("web/research_review.md")),
             fetch_tool=create_fetch_webpage_tool(reader=reader),
-            summary_agent=WebResearchSummaryAgent(
-                model=model, prompt=prompt("web_research_summary.md"), page_prompt=prompt("web_research_page.md"),
-                retry_prompt=prompt("web_research_page_retry.md")),
-            material_summary_agent=MaterialSummaryAgent(model=model, prompt=prompt("web_research_summary.md"),
-                                                        summary_prompt=prompt("web_research_merge.md"),
+            webpage_extraction_agent=WebpageExtractionAgent(
+                model=model, prompt=prompt("web/web_research_page.md"),
+                retry_prompt=prompt("web/web_research_page_retry.md")),
+            material_summary_agent=MaterialSummaryAgent(model=model, prompt=prompt("materials/material_summary.md"),
                                                         output_tokens=settings.llm_max_tokens),
             target_count=settings.research_target_source_count, max_attempts=settings.research_max_search_rounds,
             max_pages=settings.research_max_web_pages,

@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from models.interaction.user_question import UserQuestion
-from workflows.ask_user import ask_user
+from workflows.interaction.ask_user import ask_user
 
 
 class DemoState(TypedDict):

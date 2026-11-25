@@ -46,8 +46,9 @@ async def read_chat_attachment(attachment: ChatAttachmentInput, *, max_file_byte
     # 每次请求独立持有识别器，内部各页复用引擎；暂不建立全局模型缓存。
     readers = create_document_readers(
         recognizer=RapidOcrTextRecognizer(model_directory=PROJECT_ROOT / "ocr-models"),
-        renderer=PdfiumPageRenderer(),
-    ) if attachment.format == "pdf" else create_document_readers()
+        renderer=PdfiumPageRenderer(), gotenberg_base_url=settings.gotenberg_base_url,
+        gotenberg_timeout_seconds=settings.gotenberg_timeout_seconds,
+    ) if attachment.format in {"pdf", "doc"} else create_document_readers()
     reader = readers[attachment.format]
 
     def validate_and_read() -> DocumentContent:

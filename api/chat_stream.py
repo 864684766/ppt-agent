@@ -14,7 +14,7 @@ from api.sse_encoder import encode_event
 from diagnostics.operation_logging import operation_scope, safe_error_location
 from models.chat.chat_request import ChatSubmission
 from integrations.llm.reasoning_stream_handler import ReasoningStreamHandler
-from workflows.research_progress import research_progress
+from workflows.web.research_progress import research_progress
 
 logger = logging.getLogger(__name__)
 _MESSAGES = {

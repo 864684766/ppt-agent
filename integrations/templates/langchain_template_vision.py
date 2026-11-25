@@ -30,7 +30,7 @@ class LangChainTemplateVisionAnalyzer:
     def __init__(self, *, model: BaseChatModel, prompt: str) -> None:
         """保存模型和已读取的提示词；创建实例时不发送请求。
 
-        prompt应由外层从prompts/template_visual_analysis.md读取。
+        prompt应由外层从prompts/templates/template_visual_analysis.md读取。
         不在本类中固定项目路径，复制此模块时不需要携带整个应用入口。
         """
         if not prompt.strip():

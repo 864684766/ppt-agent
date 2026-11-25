@@ -42,15 +42,15 @@ class Settings(BaseSettings):
         description="日志输出：file仅文件，console仅控制台标准错误，both两者；默认both。",
     )
 
-    # 上传原文件的实际字节上限；20 MiB=20×1024×1024字节，不是2000万字节。
+    # 上传原文件的实际字节上限；256 MiB=256×1024×1024字节。
     upload_max_file_bytes: int = Field(
-        default=20 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024,
-        description="单文件上传上限，单位字节，默认20 MiB，范围1 KiB–100 MiB；不代表解析后的内存占用。",
+        default=256 * 1024 * 1024, ge=1024, le=1024 * 1024 * 1024,
+        description="单文件上传上限，单位字节，默认256 MiB，范围1 KiB–1 GiB；不代表解析后的内存占用。",
     )
     # DOCX/XLSX/PPTX均是ZIP容器，还要限制展开规模，不能只看上传大小。
     upload_max_uncompressed_bytes: int = Field(
-        default=100 * 1024 * 1024, ge=1024, le=1024 * 1024 * 1024,
-        description="DOCX/XLSX/PPTX所有ZIP条目累计解压上限，单位字节，默认100 MiB，范围1 KiB–1 GiB。",
+        default=512 * 1024 * 1024, ge=1024, le=1024 * 1024 * 1024,
+        description="DOCX/XLSX/PPTX所有ZIP条目累计解压上限，单位字节，默认512 MiB，范围1 KiB–1 GiB。",
     )
 
     # 附件读取结果与遍历规模上限，避免把很长文件无限装入响应或模型上下文。
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     s3_secret_access_key: SecretStr = Field(default=SecretStr(""), description="RustFS访问密钥Secret，仅后端保存，不返回前端；两者均空则匿名。")
     s3_template_max_file_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, le=200 * 1024 * 1024,
-        description="OSS模板下载与解析原文件上限，默认50 MiB，范围1 KiB–200 MiB；与普通上传20 MiB分开，Office展开及正文读取上限仍独立生效。",
+        description="OSS模板下载与解析原文件上限，默认50 MiB，范围1 KiB–200 MiB；与普通上传上限分开，Office展开及正文读取上限仍独立生效。",
     )
     s3_region: str = Field(default="us-east-1", min_length=1, description="S3签名区域，默认us-east-1；按RustFS配置填写，不是物理部署位置推断。")
     s3_timeout_seconds: float = Field(default=20, gt=0, le=120, description="S3连接/读取阶段超时秒数，默认20，范围(0,120]；单次请求不自动重试，不是HTTP端到端总时限。")
@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     # 空字符串表示未配置。真实转换测试读取后注入适配器，启动服务不自动转换。
     gotenberg_base_url: str = Field(
         default="",
-        description="Gotenberg HTTP(S)服务根地址，不含/forms/libreoffice/convert；默认空，真实转换测试使用。",
+        description="Gotenberg HTTP(S)服务根地址，不含/forms/libreoffice/convert；默认空，供PPTX转换测试和DOC解析使用。",
     )
     # Gotenberg客户端HTTP各阶段等待上限（秒）；与服务端API超时分别设置。
     gotenberg_timeout_seconds: float = Field(

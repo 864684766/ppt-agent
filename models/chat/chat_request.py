@@ -21,7 +21,7 @@ class ChatAttachmentInput(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     file_name: str = Field(description="通过名称检查、已去除客户端目录的文件名。")
-    format: Literal["txt", "md", "pdf", "docx", "xlsx", "pptx"] = Field(description="扩展名与声明MIME初检后的规范化格式；实际字节仍需内容校验。")
+    format: Literal["txt", "md", "pdf", "doc", "docx", "xlsx", "pptx"] = Field(description="扩展名与声明MIME初检后的规范化格式；实际字节仍需内容校验。")
     content: bytes = Field(repr=False, exclude=True, description="请求内实际文件字节，由接收层创建，供读取器使用；不进入JSON响应或日志，不长期保存。")
 
 

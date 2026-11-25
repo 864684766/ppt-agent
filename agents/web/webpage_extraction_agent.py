@@ -12,21 +12,20 @@ from models.web.web_research_summary import WebPageExtraction
 logger = logging.getLogger(__name__)
 
 
-class WebResearchSummaryAgent:
+class WebpageExtractionAgent:
     """网页正文只传给单页提炼；跨页面汇总由独立Agent负责。"""
 
-    def __init__(self, *, model: BaseChatModel, prompt: str, page_prompt: str, retry_prompt: str) -> None:
-        """接收模型、共同规则和各阶段提示词；读取文件和资源管理由调用方负责。"""
+    def __init__(self, *, model: BaseChatModel, prompt: str, retry_prompt: str) -> None:
+        """接收单页提炼和超限重试提示词；资源由调用方负责。"""
         self._page_model = model.with_structured_output(WebPageExtraction, method="json_mode")
         self._prompt = prompt
-        self._page_prompt = page_prompt
         self._retry_prompt = retry_prompt
 
     @log_operation("agent.web_research_extract_page")
     async def extract_page(self, *, question: str, page: dict) -> WebPageExtraction:
         """提炼一篇网页；校验来源和后续链接确实来自本页。"""
-        # 共同规则和单页规则均由外层加载，动态数据单独追加，不参与模板替换。
-        prompt = self._prompt + "\n" + self._page_prompt + "\n用户要求：" + question + "\n网页数据：" + json.dumps(page, ensure_ascii=False)
+        # 动态数据单独追加，不参与提示词模板替换。
+        prompt = self._prompt + "\n用户要求：" + question + "\n网页数据：" + json.dumps(page, ensure_ascii=False)
         try:
             result = await self._page_model.ainvoke(prompt)
         except LengthFinishReasonError:
