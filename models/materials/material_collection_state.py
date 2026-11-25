@@ -19,6 +19,9 @@ class MaterialCollectionState(TypedDict):
     """图节点通过字典读写状态，原始附件只保存在当前进程检查点。"""
 
     question: str  # 用户需求。
+    allow_web: bool | None  # False明确禁止联网；None由需求分析判断。
+    analysis: dict[str, Any] | None  # 最近一次需求分析结果，失败时不包含计划。
+    question_kind: str | None  # clarification为需求澄清；materials为资料不足询问。
     file_name: str | None  # 可选附件文件名；没有附件时为None。
     file_content: bytes | None  # 附件字节，仅内存；不写日志或对外返回。
     target_count: int  # 期望有效来源数量，来自调用方。

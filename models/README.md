@@ -232,6 +232,6 @@ FileExtraction.failure_reason包含processing_failed：未知文件读取或批�
 
 MaterialCollectionState、MaterialCollectionReport 定义在 materials/material_collection_state.py，由资料图在内存检查点创建：记录问题、可选附件、网页与文件阶段结果、汇总输入与报告、状态和待回答问题；附件字节只在内存，非HTTP契约。
 
-需求分析：materials/request_analysis.py 的 RequestAnalysis 由 RequestAnalysisAgent 返回，包含来源模式、执行顺序、是否询问、问题及简短原因；仅内部计划，不执行工具、不保证意图理解准确，尚未接入工作流或HTTP。
+需求分析：materials/request_analysis.py 的 RequestAnalysis 由 RequestAnalysisAgent 返回，包含来源模式、执行顺序、是否询问、问题及简短原因；资料工作流使用它选择分支，不保证意图理解准确，尚未接入HTTP。
 
 RequestAnalysisResult为需求分析调用的内部结果：status、plan、error_code和安全message；失败时plan为None，不允许继续按计划执行。尚未接入HTTP。

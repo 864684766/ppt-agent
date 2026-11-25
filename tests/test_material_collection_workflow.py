@@ -7,6 +7,7 @@ import pytest
 
 from agents.materials.file_extraction_agent import FileExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
+from agents.materials.request_analysis_agent import RequestAnalysisAgent
 from config.settings import PROJECT_ROOT, Settings
 from domain.documents.document_file_reader import DocumentFileReader
 from integrations.documents.document_reader_registry import create_document_readers
@@ -16,14 +17,22 @@ from models.documents.document_content import DocumentReadLimits
 from tests.test_research_workflow import _create_workflow
 from workflows.materials.material_collection_workflow import MaterialCollectionWorkflow
 
+# cases = [
+#     ("根据这个文件分析，给我一个PPT。", True, "file", "single", False),
+#     ("搜集健康饮食资料，制作PPT。", False, "web", "single", False),
+#     ("结合上传文件和网上资料介绍健康饮食。", True, "both", "parallel", False),
+#     ("先分析文件内容，再根据文件主题搜索相关资料。", True, "both", "file_then_web", False),
+#     ("根据上传文件制作PPT。", False, "file", "single", True),
+#     ("帮我做一个PPT。", False, "undetermined", "undetermined", True),
+# ]
 
 @pytest.mark.asyncio
 async def test_real_material_collection() -> None:
-    """真实DOCX、搜索与模型；根据实际结果核对报告、暂停和来源。"""
+    """用真实文件和模型验证仅文件分支，检查报告、暂停和来源。"""
     settings = Settings()
     path = PROJECT_ROOT / "data" / "test_file" / "test6.docx"
     # 请根据所选文件内容修改问题；测试不把文件内容当作模拟模型结果。
-    question = "介绍前端开发中的HTML、CSS和JavaScript基础知识。"
+    question = "先分析文件内容，再根据文件主题搜索相关资料。"
     reader = DocumentFileReader(readers=create_document_readers(),
         limits=DocumentReadLimits(max_characters=settings.document_max_characters,
             max_blocks=settings.document_max_blocks, max_cells=settings.document_max_cells),
@@ -38,18 +47,22 @@ async def test_real_material_collection() -> None:
             prompt=(PROJECT_ROOT / "prompts/materials/file_extraction.md").read_text(encoding="utf-8"))
         summary_agent = MaterialSummaryAgent(model=model, output_tokens=settings.llm_max_tokens,
             prompt=(PROJECT_ROOT / "prompts/materials/material_summary.md").read_text(encoding="utf-8"))
-        flow = MaterialCollectionWorkflow(web_workflow=web, file_agent=file_agent,
+        request_agent = RequestAnalysisAgent(model=model,
+            prompt=(PROJECT_ROOT / "prompts/materials/request_analysis.md").read_text(encoding="utf-8"))
+        flow = MaterialCollectionWorkflow(request_agent=request_agent, web_workflow=web, file_agent=file_agent,
                                           summary_agent=summary_agent, target_count=settings.research_target_source_count)
         thread_id = uuid4().hex
         result = await flow.run(thread_id=thread_id, question=question, file_name=path.name, file_content=path.read_bytes())
         print("【状态】", result["status"], result["message"])
-        print("【网页报告】", result["report"]["web"])
-        print("【文件报告】", result["report"]["file"])
+        print("【需求分析】", result["analysis"])
+        print("【网页报告】", (result["report"] or {}).get("web"))
+        print("【文件报告】", (result["report"] or {}).get("file"))
         print("【统一报告】", result["report"])
         print("【汇总】", result["summary"])
         print("【等待问题】", result["waiting_question"])
         assert result["status"] != "interrupted", result["message"]
-        assert result["web"]["waiting_question"] is None
+        assert result["analysis"]["plan"]["source_mode"] == "file"
+        assert result["web"] is None, "仅文件分析不应启动网页搜索。"
         assert result["file"] and result["file"]["status"] == "completed"
         if result["status"] == "awaiting_user":
             assert result["waiting_question"]

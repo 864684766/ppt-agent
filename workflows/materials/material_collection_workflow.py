@@ -1,6 +1,7 @@
 """编排网页、文件、汇总及人工决定；不负责HTTP或资源创建。"""
 
 from uuid import uuid4
+import asyncio
 import logging
 from typing import cast
 
@@ -11,6 +12,7 @@ from langgraph.types import Command
 
 from agents.materials.file_extraction_agent import FileExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
+from agents.materials.request_analysis_agent import RequestAnalysisAgent
 from diagnostics.operation_logging import log_operation, safe_error_location
 from domain.materials.material_summary_inputs import file_summary_points, web_summary_points
 from models.interaction.user_question import UserQuestion
@@ -25,31 +27,36 @@ logger = logging.getLogger(__name__)
 class MaterialCollectionWorkflow:
     """同一实例管理内存检查点；调用方管理模型、网络连接和实例生命周期。"""
 
-    def __init__(self, *, web_workflow: WebResearchWorkflow, file_agent: FileExtractionAgent,
+    def __init__(self, *, request_agent: RequestAnalysisAgent, web_workflow: WebResearchWorkflow, file_agent: FileExtractionAgent,
                  summary_agent: MaterialSummaryAgent, target_count: int = 5) -> None:
         if not 1 <= target_count <= 20:
             raise ValueError("目标来源数须为1至20。")
         self._web = web_workflow
+        self._request = request_agent
         self._file = file_agent
         self._summary = summary_agent
         self._target_count = target_count
         graph = StateGraph(MaterialCollectionState)
+        graph.add_node("analyze", self._analyze)
+        graph.add_node("parallel", self._collect_parallel)
         graph.add_node("web", self._collect_web)
         graph.add_node("file", self._extract_file)
         graph.add_node("summarize", self._summarize)
         graph.add_node("finalize", self._finalize)
         graph.add_node("ask", self._ask)
-        graph.add_edge(START, "web")
-        graph.add_edge("web", "file")
-        graph.add_edge("file", "summarize")
+        graph.add_edge(START, "analyze")
+        graph.add_conditional_edges("analyze", self._route_analysis)
+        graph.add_edge("web", "summarize")
+        graph.add_edge("parallel", "summarize")
+        graph.add_conditional_edges("file", self._route_after_file)
         graph.add_edge("summarize", "finalize")
         graph.add_conditional_edges("finalize", lambda s: "ask" if s["waiting_question"] else END)
-        graph.add_edge("ask", END)
+        graph.add_conditional_edges("ask", lambda s: "analyze" if s["status"] == "running" else END)
         self._graph = graph.compile(checkpointer=InMemorySaver())
 
     @log_operation("workflow.material_collection")
     async def run(self, *, thread_id: str, question: str, file_name: str | None = None,
-                  file_content: bytes | None = None) -> MaterialCollectionState:
+                  file_content: bytes | None = None, allow_web: bool | None = None) -> MaterialCollectionState:
         """启动联网收集，可选一份附件；文件字节仅保存在本实例内存检查点。"""
         if not thread_id.strip() or not question.strip():
             raise ValueError("任务编号和用户问题不能为空。")
@@ -58,7 +65,8 @@ class MaterialCollectionWorkflow:
         config = {"configurable": {"thread_id": thread_id}}
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在。")
-        state: MaterialCollectionState = {"question": question, "file_name": file_name, "file_content": file_content,
+        state: MaterialCollectionState = {"question": question, "allow_web": allow_web, "analysis": None, "question_kind": None,
+            "file_name": file_name, "file_content": file_content,
             "target_count": self._target_count, "web": None, "file": None, "summary": None,
             "summary_inputs": [], "status": "running", "message": "", "report": None, "waiting_question": None}
         try:
@@ -76,13 +84,69 @@ class MaterialCollectionWorkflow:
                                 "file": file.get("report") if file else None,
                                 "source_count": None, "target_source_count": self._target_count, "issues": []}
         result.pop("__interrupt__", None)
+        # 不向调用方暴露附件字节；暂停后的检查点仍保留原始文件供恢复使用。
+        result["file_content"] = None
         return cast(MaterialCollectionState, result)
+
+    async def _analyze(self, state: MaterialCollectionState) -> dict:
+        """先判断需求；分析失败直接中断，不进入资料收集。"""
+        outcome = await self._request.analyze(message=state["question"], has_file=state["file_name"] is not None,
+                                              allow_web=state["allow_web"])
+        data = outcome.model_dump()
+        if outcome.status != "completed" or outcome.plan is None:
+            return {"analysis": data, "status": "interrupted", "message": outcome.message, "waiting_question": None}
+        plan = outcome.plan
+        if plan.needs_clarification:
+            question = {"question_id": uuid4().hex, "question": plan.clarification, "reason": plan.reason,
+                        "options": [], "allow_free_text": True}
+            return {"analysis": data, "status": "awaiting_user", "message": "需要补充需求。",
+                    "question_kind": "clarification", "waiting_question": question}
+        return {"analysis": data, "status": "running", "waiting_question": None, "question_kind": None}
+
+    @staticmethod
+    def _route_analysis(state: MaterialCollectionState) -> str:
+        """失败结束；需澄清先询问；否则按来源和顺序选择节点。"""
+        if state["status"] == "interrupted":
+            return END
+        if state["waiting_question"]:
+            return "ask"
+        plan = state["analysis"]["plan"]
+        if plan["source_mode"] == "web":
+            return "web"
+        if plan["source_mode"] == "file" or plan["execution_order"] == "file_then_web":
+            return "file"
+        return "parallel"
+
+    @staticmethod
+    def _route_after_file(state: MaterialCollectionState) -> str:
+        """仅文件直接汇总；先文件后网页必须在文件成功后才搜索。"""
+        file = state["file"]
+        if state["status"] == "interrupted" or not file or file["status"] != "completed":
+            return "summarize"
+        if state["analysis"]["plan"]["execution_order"] == "file_then_web":
+            return "web"
+        return "summarize"
+
+    async def _collect_parallel(self, state: MaterialCollectionState, config: RunnableConfig) -> dict:
+        """并发收集两个独立来源，等待两者结束后汇总。"""
+        web, file = await asyncio.gather(self._collect_web(state, config), self._extract_file(state))
+        result = {**web, **file}
+        if web.get("status") == "interrupted" or file.get("status") == "interrupted":
+            result.update(status="interrupted", message="资料处理未完成，请检查日志。")
+        return result
 
     async def _collect_web(self, state: MaterialCollectionState, config: RunnableConfig) -> dict:
         """先收集网页，不让网页子图提前询问；子图编号独立于上层编号。"""
         task_id = config["configurable"]["thread_id"]
         try:
-            web = await self._web.run(thread_id=f"material-web-{task_id}", question=state["question"],
+            question = state["question"]
+            if state["file"] and state["analysis"]["plan"]["execution_order"] == "file_then_web":
+                points = state["file"].get("points", [])
+                if not points:
+                    return {"status": "interrupted", "message": "文件未提炼出可用于搜索的内容。"}
+                context = "\n".join(item["content"] for item in points)[:4000]
+                question += "\n请根据以下文件要点确定搜索主题：\n" + context
+            web = await self._web.run(thread_id=f"material-web-{task_id}", question=question,
                                       target_count=state["target_count"], defer_user_question=True)
             return {"web": web}
         except Exception as error:
@@ -107,11 +171,11 @@ class MaterialCollectionWorkflow:
         file = FileExtraction.model_validate(state["file"]) if state["file"] else None
         if state["status"] == "interrupted":
             return {}
-        if not web or web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]:
+        if web and (web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]):
             return {"status": "interrupted", "message": "网页资料处理未完成；已有结果已保留。"}
         if file and file.status != "completed":
             return {"status": "interrupted", "message": "文件处理未完成；已有结果已保留。"}
-        points = web_summary_points(extractions=web["page_extractions"])
+        points = web_summary_points(extractions=web["page_extractions"]) if web else []
         if file:
             points.extend(file_summary_points(extraction=file, source_id="uploaded_file"))
         if not points:
@@ -150,7 +214,7 @@ class MaterialCollectionWorkflow:
         question = {"question_id": uuid4().hex, "question": "资料不足，请选择补充资料或其他可用操作。",
                     "reason": " ".join(details)[:1000],
                     "options": options, "allow_free_text": False}
-        return {"status": "awaiting_user", "message": "资料不足，等待用户决定。", "report": report,
+        return {"status": "awaiting_user", "message": "资料不足，等待用户决定。", "report": report, "question_kind": "materials",
                 "waiting_question": question}
 
     @staticmethod
@@ -159,6 +223,9 @@ class MaterialCollectionWorkflow:
         if not data:
             raise ValueError("没有等待回答的问题。")
         answer = ask_user(UserQuestion(**{**data, "options": tuple(data["options"])}))
+        if state["question_kind"] == "clarification":
+            return {"question": state["question"] + "\n用户补充：" + answer, "status": "running",
+                    "waiting_question": None, "question_kind": None}
         if answer == "provide_materials":
             return {"status": "needs_materials", "message": "等待用户提供资料。", "waiting_question": None}
         if answer == "use_current":
@@ -175,4 +242,6 @@ class MaterialCollectionWorkflow:
         if snapshot.values["waiting_question"]["question_id"] != question_id:
             raise ValueError("问题编号不匹配。")
         result = await self._graph.ainvoke(Command(resume={"question_id": question_id, "answer": answer}), config=config)
+        result.pop("__interrupt__", None)
+        result["file_content"] = None
         return cast(MaterialCollectionState, result)
