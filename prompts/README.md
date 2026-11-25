@@ -19,3 +19,5 @@
 图运行期间修改文件不会改变已构造的 Agent；重新构造 Agent 后才会读取更新内容。
 
 `materials/material_summary.md` 用于通用资料汇总（包括网页工作流），接收网页及文件提炼要点的统一编号，不读取正文。
+
+`materials/request_analysis.md` 定义独立需求分析Agent的来源选择、顺序及JSON结构；尚未接入工作流。

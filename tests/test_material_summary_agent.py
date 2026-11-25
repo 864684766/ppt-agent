@@ -7,7 +7,7 @@ from agents.materials.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
 from models.materials.file_extraction import FileExtraction, FileExtractionPoint
-from workflows.materials.material_collection_workflow import MaterialCollectionWorkflow
+from domain.materials.material_summary_inputs import file_summary_points, web_summary_points
 
 
 @pytest.mark.asyncio
@@ -21,9 +21,8 @@ async def test_real_material_summary() -> None:
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
             max_tokens=settings.llm_max_tokens, http_client=client)
         agent = MaterialSummaryAgent(model=model, prompt=(PROJECT_ROOT / "prompts/materials/material_summary.md").read_text(encoding="utf-8"))
-        workflow = MaterialCollectionWorkflow(summary_agent=agent)
-        summary, points = await workflow.run(question="介绍成年人每日蔬菜建议。", webpages=web,
-                                             files=[("file_demo", file)])
+        points = web_summary_points(extractions=web) + file_summary_points(extraction=file, source_id="file_demo")
+        summary = await agent.summarize(question="介绍成年人每日蔬菜建议。", points=points)
     print("【输入】", [p.model_dump() for p in points])
     print("【汇总】", summary.model_dump_json(indent=2))
     for point in summary.points:
