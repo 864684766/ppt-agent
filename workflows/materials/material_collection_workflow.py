@@ -190,15 +190,17 @@ class MaterialCollectionWorkflow:
         """仅完整阶段可进入汇总；故障与资料不足分开处理。"""
         web = state["web"]
         file = FileExtraction.model_validate(state["file"]) if state["file"] else None
-        if state["status"] == "interrupted":
-            return {}
-        if web and (web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]):
-            return {"status": "interrupted", "message": "网页资料处理未完成；已有结果已保留。"}
-        if file and file.status != "completed":
-            return {"status": "interrupted", "message": "文件处理未完成；已有结果已保留。"}
+        # 先保留已成功提炼的要点；后续阶段失败不表示此前资料为空。
         points = web_summary_points(extractions=web["page_extractions"]) if web else []
         if file:
             points.extend(file_summary_points(extraction=file, source_id="uploaded_file"))
+        partial_inputs = [item.model_dump() for item in points]
+        if state["status"] == "interrupted":
+            return {"summary_inputs": partial_inputs}
+        if web and (web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]):
+            return {"status": "interrupted", "message": web["message"], "summary_inputs": partial_inputs}
+        if file and file.status != "completed":
+            return {"status": "interrupted", "message": "文件处理未完成；已有结果已保留。", "summary_inputs": partial_inputs}
         if not points:
             return {"summary_inputs": []}
         # 已知未读链接或来源不足时不要求模型生成暂时无法使用的大纲。

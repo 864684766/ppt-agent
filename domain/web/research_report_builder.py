@@ -16,10 +16,15 @@ def build_research_report(state: ResearchState) -> ResearchReport:
         raise ValueError("资料收集尚未结束，无法生成检查报告。")
     summary = state["summary"]
     usable = bool(summary and summary["points"])
+    # 中断时可能尚未汇总，但已完成单页提炼；单独统计这些页面，不把它们当成已核实的资料。
+    extracted_sources = {page["candidate_id"] for page in state["page_extractions"] if page["points"]}
+    if stop == "workflow_error" and extracted_sources:
+        usable = True
     issues = _content_issues(state, usable=usable)
     issues.extend(_access_issues(state))
     issues.extend(_review_issues(state))
-    return {"has_usable_content": usable, "source_count": state["effective_count"],
+    source_count = len(extracted_sources) if stop == "workflow_error" and not summary else state["effective_count"]
+    return {"has_usable_content": usable, "source_count": source_count,
             "target_source_count": state["target_count"], "stop_reason": stop, "issues": issues}
 
 
@@ -34,7 +39,7 @@ def _content_issues(state: ResearchState, *, usable: bool) -> list[ResearchIssue
         issues.append({"type": "summary_unfinished", "message": "模型输出超限，最新单页要点尚未完成汇总检查；已有汇总仅供参考。",
                        "candidate_ids": [state["page_extractions"][-1]["candidate_id"]]})
     if stop == "workflow_error":
-        issues.append({"type": "workflow_failed", "message": "网页资料处理发生错误，未完成的内容无法判断；请检查服务日志或重试。", "candidate_ids": []})
+        issues.append({"type": "workflow_failed", "message": state["message"], "candidate_ids": []})
     if not usable and stop not in {"summary_length_exceeded", "workflow_error"}:
         issues.append({"type": "no_usable_content", "message": "当前没有整理出可用的网页正文内容。", "candidate_ids": []})
     if state["effective_count"] < state["target_count"] and stop not in {"summary_length_exceeded", "workflow_error", "summary_deferred"}:

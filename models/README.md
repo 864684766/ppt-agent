@@ -247,3 +247,5 @@ MaterialSummary.outline 在最终资料汇总中可包含 PresentationOutline，
 MaterialSummaryContent 是资料汇总的公开内容（points、issues），供聊天响应使用；MaterialSummary 扩展可选 outline，供汇总模型及工作流使用，避免聊天响应在 summary 内重复包含 outline。
 
 ResearchState.summary_deferred 表示网页要点统一汇总留给上层；状态 collected 和停止原因 summary_deferred 仅表示单页提炼已结束，不是资料充分结论。ResearchReport.content_review_deferred 明确提示该边界；source_count在此表示有提炼要点的网页数。
+
+网页流程发生workflow_error且尚无汇总时，ResearchReport.source_count为已有非空单页提炼的网页数，has_usable_content仅表示已有要点；上层中断结果的summary_inputs保留成功提炼的要点。HTTP重试及使用部分资料继续尚未接线。

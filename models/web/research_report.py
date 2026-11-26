@@ -14,8 +14,8 @@ class ResearchIssue(TypedDict):
 class ResearchReport(TypedDict):
     """一次网页收集的检查结果，由程序在图结束后创建。"""
 
-    has_usable_content: bool  # 是否有模型根据已读网页整理出的要点；不保证真实性。
-    source_count: int  # 整理要点引用的网页数；不是全部搜索候选数。
+    has_usable_content: bool  # 是否有已提炼或汇总的网页要点；不保证真实性或充分性。
+    source_count: int  # 通常为汇总要点引用的网页数；中断且未汇总时为成功提炼出要点的网页数。
     target_source_count: int  # 本次期望来源数。
     stop_reason: Literal["target_reached", "search_limit", "page_limit", "search_failed", "provided_pages_exhausted", "summary_deferred", "model_timeout", "summary_length_exceeded", "workflow_error"]  # summary_deferred表示交由上层汇总；不代表资料充分。
     issues: list[ResearchIssue]  # 检查发现的问题；没有时为空列表，不包含内部搜索feedback。
