@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Literal
 from langchain_core.language_models import BaseChatModel
 from langchain_core.exceptions import OutputParserException
 from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
@@ -39,6 +40,7 @@ class RequestAnalysisAgent:
         except Exception as error:
             # 安全日志只包含类型和位置；不输出消息、提示词或模型原文。
             logger.error("event=request_analysis_failed error_location=%s", safe_error_location(error))
+            code: Literal["model_timeout", "model_connection", "invalid_plan", "analysis_failed"]
             if isinstance(error, OpenAITimeoutError):
                 code, message = "model_timeout", "需求分析超时，请稍后重试。"
             elif isinstance(error, OpenAIConnectionError):

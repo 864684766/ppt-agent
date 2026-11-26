@@ -3,13 +3,14 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, Request
 
-from api.chat_template_processing import read_chat_template
-from api.chat_response_builder import build_chat_response
-from api.sse_encoder import encode_event
+from api.chat.chat_template_processing import read_chat_template
+from api.chat.chat_response_builder import build_chat_response
+from api.transport.sse_encoder import encode_event
 from diagnostics.operation_logging import operation_scope, safe_error_location
 from models.chat.chat_request import ChatSubmission
 from integrations.llm.reasoning_stream_handler import ReasoningStreamHandler
@@ -53,8 +54,9 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
                                            template=template)
             await queue.put(("result", response.model_dump(mode="json")))
         except HTTPException as error:
-            await queue.put(("error", {"task_id": task_id, "code": error.detail.get("code", "request_failed"),
-                                      "message": error.detail.get("message", "请求处理失败。")}))
+            detail: dict[str, Any] = error.detail if isinstance(error.detail, dict) else {}
+            await queue.put(("error", {"task_id": task_id, "code": detail.get("code", "request_failed"),
+                                      "message": detail.get("message", "请求处理失败。")}))
         except Exception as error:
             logger.error("event=chat_stream_failed error_location=%s", safe_error_location(error))
             await queue.put(("error", {"task_id": task_id, "code": "research_failed", "message": "资料研究执行失败，请检查服务日志。"}))

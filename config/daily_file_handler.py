@@ -31,6 +31,6 @@ class DailyFileHandler(logging.FileHandler):
                 # 先刷新并关闭前一天的句柄；FileHandler.emit会打开新路径。
                 self.stream.flush()
                 self.stream.close()
-                self.stream = None
+                self.stream = None  # type: ignore[assignment]  # FileHandler允许关闭后重新打开流。
             self.baseFilename = str(target)
         super().emit(record)

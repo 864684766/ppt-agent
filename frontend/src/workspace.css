@@ -1,0 +1,46 @@
+/* 大纲与对话共享主工作区，输入框始终留在同一位置。 */
+.app-shell{grid-template-columns:258px minmax(0,1fr)}
+.view-switch{display:flex;padding:3px;background:#f4f2f1;border-radius:8px;gap:2px}
+.view-switch button{border:0;background:transparent;color:#99938f;border-radius:6px;padding:6px 13px;font-size:11px}
+.view-switch button.active{background:white;color:#514858;box-shadow:0 1px 4px #0000000c;font-weight:600}
+.chat-scroll[hidden]{display:none}
+.outline-panel{flex:1;min-height:0;border:0;background:#fff;padding:42px max(32px,calc((100% - 760px)/2)) 28px}
+.outline-panel .panel-top h2{font-size:24px}
+.outline-panel .panel-description{font-size:13px;margin-bottom:25px}
+.outline-panel .outline-summary{padding:17px;background:#faf9f7}
+.outline-panel .outline-summary strong{font-size:14px}
+.outline-panel .outline-list{margin-top:28px}
+.outline-panel .outline-item{padding-bottom:26px;gap:16px}
+.outline-panel .outline-index{width:32px;height:32px;font-size:10px}
+.outline-panel .outline-item:not(:last-child):before{left:15px;top:33px}
+.outline-panel .outline-copy strong{font-size:13px}
+.outline-panel .outline-copy p{font-size:12px;margin-top:9px}
+.outline-panel .outline-note{padding:14px}
+.outline-panel .outline-bottom{margin-top:0;padding-top:20px}
+.outline-panel .outline-bottom .ui-button{width:auto}
+.outline-panel .outline-bottom>small{text-align:left}
+.chat-panel:has(.outline-panel) .scroll-hint{display:none}
+.outline-message-notice{max-width:720px;width:100%;margin:0 auto 8px;padding:0 32px;color:#94899b;font-size:10px;text-align:right}
+/* 用网格居中图标，避免浏览器默认按钮内边距造成箭头偏移。 */
+.answer-form button{display:grid;place-items:center;padding:0;flex:none}
+.new-session{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 20px;padding:10px;border:1px solid #e4dfe8;border-radius:9px;background:#fff;color:#61546c;font-size:12px;font-weight:600}
+.new-session:hover{background:#f5f1f8}
+.sidebar-content{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;overflow:hidden;opacity:1;visibility:visible;transition:opacity 180ms ease,visibility 0s linear}
+.is-collapsed .sidebar-content{opacity:0;visibility:hidden;transition:opacity 120ms ease,visibility 0s linear 120ms}
+.sidebar-toggle{display:grid;place-items:center;margin-left:auto;width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:#96908d}
+.sidebar-toggle:hover{background:#efedea;color:#514858}
+.app-shell{transition:grid-template-columns 260ms ease}
+.app-shell.sidebar-collapsed{grid-template-columns:64px minmax(0,1fr)}
+.templates-panel{min-width:0;overflow:hidden}
+.templates-panel .brand{position:relative;min-width:0;overflow:hidden;white-space:nowrap;transition:padding 260ms ease}
+.templates-panel .brand>span:nth-child(2){overflow:hidden;transition:opacity 160ms ease}
+.templates-panel.is-collapsed .brand-name{opacity:0}
+.templates-panel.is-collapsed .brand{height:78px;padding:0 17px}
+.templates-panel.is-collapsed .brand-mark{opacity:0}
+.templates-panel.is-collapsed .sidebar-toggle{position:absolute;left:17px;margin:0}
+.template-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d9d2dd transparent}
+@media(max-width:1100px){.app-shell{grid-template-columns:220px minmax(0,1fr)}}
+@media(max-width:850px){.app-shell{display:flex}.template-list{flex:none;max-height:200px;overflow-x:auto;overflow-y:hidden}.outline-panel{min-height:500px;padding:30px 20px}.outline-panel .outline-list{display:block}.outline-panel .outline-item:before{display:block}.chat-panel{min-height:760px}}
+@media(max-width:850px){.sidebar-content{flex:none;max-height:450px;transition:max-height 260ms ease,opacity 180ms ease,visibility 0s linear}.is-collapsed .sidebar-content{max-height:0;transition:max-height 260ms ease,opacity 120ms ease,visibility 0s linear 260ms}.templates-panel.is-collapsed .brand{height:58px;padding:0 20px}.templates-panel.is-collapsed .brand-mark,.templates-panel.is-collapsed .brand-name{opacity:1}.templates-panel.is-collapsed .sidebar-toggle{position:static;margin-left:auto}}
+@media(prefers-reduced-motion:reduce){.app-shell,.sidebar-content,.templates-panel .brand,.templates-panel .brand>span:nth-child(2){transition:none!important}}
+@media(max-width:480px){.header-right{gap:7px}.view-switch button{padding:6px 8px}.breadcrumb span:first-child,.breadcrumb span:nth-child(2){display:none}.outline-panel{padding:25px 18px}.outline-panel .outline-item:before{display:none}}

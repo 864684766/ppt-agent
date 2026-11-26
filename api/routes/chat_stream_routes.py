@@ -4,9 +4,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from api.chat_openapi import CHAT_REQUEST_BODY, CHAT_RESPONSES
-from api.chat_request_parser import get_chat_submission
-from api.chat_stream import stream_chat
+from api.chat.chat_openapi import CHAT_REQUEST_BODY, CHAT_RESPONSES
+from api.chat.chat_request_parser import get_chat_submission
+from api.chat.chat_stream import stream_chat
 from models.chat.chat_request import ChatSubmission
 
 router = APIRouter(tags=["对话"])

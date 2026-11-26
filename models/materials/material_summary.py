@@ -2,6 +2,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, Field
+from models.outlines.presentation_outline import PresentationOutline
 
 
 class MaterialReference(BaseModel):
@@ -35,8 +36,8 @@ class MaterialSummaryIssue(BaseModel):
     point_ids: list[str] = Field(description="涉及的输入要点编号；整体缺口可为空。")
 
 
-class MaterialSummary(BaseModel):
-    """模型汇总；要通过输入要点编号查询实际来源，不代表事实核验。"""
+class MaterialSummaryContent(BaseModel):
+    """资料汇总的公共内容；编号可关联本次输入，不代表事实核验。"""
 
     points: list[MaterialMergedPoint] = Field(description="合并后的要点；无相关内容为空。")
     issues: list[MaterialSummaryIssue] = Field(description="基于输入要点发现的问题；无问题为空。")
@@ -55,3 +56,9 @@ class MaterialSummary(BaseModel):
                     seen.add(key)
                     references.append(ref)
         return references
+
+
+class MaterialSummary(MaterialSummaryContent):
+    """模型返回的汇总及可选大纲；中间汇总不生成大纲。"""
+
+    outline: PresentationOutline | None = Field(default=None, description="最终汇总时生成的分页大纲；中间汇总或资料不足时为null。")

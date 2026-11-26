@@ -12,11 +12,10 @@ _DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 if _DB not in sys.path:
     sys.path.insert(0, _DB)
 
-import pytest
 
-from db_adapter import (
-    ADAPTER_REGISTRY, load_config, get_adapters, available_adapters,
-    PkulawAdapter, WoltersAdapter, multi_search,
+from db_adapter import (  # noqa: E402
+    ADAPTER_REGISTRY, load_config, available_adapters,
+    PkulawAdapter, multi_search,
 )
 
 

@@ -41,7 +41,7 @@ async def test_tool_result_with_real_template() -> None:
     tool = create_complete_template_tool(completer=LocalTemplateCompleter(
         templates={"demo-template": path}, output_directory=OUTPUT_DIRECTORY,
     ))
-    original_count = len(Presentation(path).slides)
+    original_count = len(Presentation(str(path)).slides)
     arguments = {"template_id": "demo-template", "target_slide_count": TARGET_SLIDE_COUNT,
                  "pages": [{"role": "内容页示例", "source_slide_number": SOURCE_SLIDE_NUMBER}
                            for _ in range(TARGET_SLIDE_COUNT - original_count)]}

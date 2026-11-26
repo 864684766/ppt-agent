@@ -39,6 +39,6 @@ class WebpageExtractionAgent:
             raise ValueError("单页要点引用了其他网页编号。")
         links = {link["url"] for link in page["links"]}
         result.follow_links = [item for item in result.follow_links
-                               if item.candidate_id == page_id and item.url in links][:3]
+                               if item.candidate_id == page_id and item.url in links][:10]
         return result
 

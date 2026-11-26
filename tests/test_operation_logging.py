@@ -10,7 +10,7 @@ from contextlib import aclosing
 import httpx
 import pytest
 
-from api.request_logging_middleware import RequestLoggingMiddleware
+from api.transport.request_logging_middleware import RequestLoggingMiddleware
 from diagnostics.log_context import operation_id, request_id
 from diagnostics.operation_logging import log_operation
 

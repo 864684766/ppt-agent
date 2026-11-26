@@ -7,10 +7,10 @@ _SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-import pytest
+import pytest  # noqa: E402
 
 # 统一执行入口（MCP 契约）
-from legal_validator import (
+from legal_validator import (  # noqa: E402
     validate_citation, check_timeliness, validate_report,
     normalize_law_name, validate_source_level,
 )

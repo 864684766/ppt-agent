@@ -5,6 +5,7 @@ test_read_scanned_pdf是真实本地OCR验证，生成无文字层PDF，不伪�
 """
 
 from io import BytesIO
+from collections.abc import Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 import pytest
@@ -90,7 +91,8 @@ def test_native_pdf_does_not_call_ocr() -> None:
 def test_ocr_obeys_content_limit_and_propagates_failure() -> None:
     """仅验证本项目组合逻辑：OCR文字超限、识别失败均不能伪装部分成功。"""
     class Renderer:
-        def render(self, *, pdf_bytes, pages, dpi):
+        def render(self, *, pdf_bytes: bytes, pages: Sequence[int] | None = None, dpi: int = 144) -> PdfRenderResult:
+            assert pages is not None
             return PdfRenderResult(
                 pdf_sha256="test", total_pages=2, dpi=dpi,
                 images=(PdfPageImage(page_number=pages[0], width_px=10, height_px=10, png_bytes=b"test"),),

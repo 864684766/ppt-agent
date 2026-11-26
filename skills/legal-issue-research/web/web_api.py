@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 import os
 from pathlib import Path
@@ -28,7 +27,7 @@ from legal_validator import (  # noqa: E402
 )
 from legal_reasoning import (  # noqa: E402
     deductive_analysis, inductive_analysis,
-    analogical_analysis, abductive_analysis, recommend_method,
+    analogical_analysis, abductive_analysis,
 )
 from case_retriever import extract_case_keywords, build_case_query  # noqa: E402
 

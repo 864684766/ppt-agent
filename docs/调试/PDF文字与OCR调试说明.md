@@ -43,7 +43,7 @@ template_key可以不传。保持现有参数和JSON响应，不调用云端大�
 - PDF损坏/密码无法打开：400，document_unreadable。
 - 原有上传格式/大小校验继续有效。
 
-断点顺序：api/chat_attachment_processing.py的validate_and_read → PdfDocumentReader.read → renderer.render → recognizer.recognize → builder.add。
+断点顺序：api/chat/chat_attachment_processing.py的validate_and_read → PdfDocumentReader.read → renderer.render → recognizer.recognize → builder.add。
 有文字的PDF不会走render/recognize断点，这是预期行为。
 HTTP由用户通过Postman和PyCharm验收，不创建tests/test_chat_attachments.py或Postman文件。
 

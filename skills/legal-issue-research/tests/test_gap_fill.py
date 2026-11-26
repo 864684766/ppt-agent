@@ -7,12 +7,11 @@ _SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-import pytest
 
-from case_retriever import (
+from case_retriever import (  # noqa: E402
     extract_case_keywords, build_case_query, CASE_CAUSES,
 )
-from legal_reasoning import (
+from legal_reasoning import (  # noqa: E402
     REASONING_METHODS, deductive_analysis, inductive_analysis,
     analogical_analysis, abductive_analysis, recommend_method,
 )

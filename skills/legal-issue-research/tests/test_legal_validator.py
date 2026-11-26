@@ -7,9 +7,8 @@ _SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-import pytest
 
-from legal_validator import (
+from legal_validator import (  # noqa: E402
     SOURCE_LEVELS, validate_source_level, check_timeliness,
     validate_citation, normalize_law_name, validate_report,
 )

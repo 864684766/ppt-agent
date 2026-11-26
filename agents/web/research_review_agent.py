@@ -76,7 +76,10 @@ class ResearchReviewAgent:
         """
         for retry in range(3):
             try:
-                return await self._reviewer.ainvoke(prompt)
+                result = await self._reviewer.ainvoke(prompt)
+                if not isinstance(result, SearchReview):
+                    raise ValueError("检查模型未返回有效的筛选结果。")
+                return result
             except OpenAIConnectionError:
                 if retry == 2:
                     logger.warning("event=research_review_connection_retries_exhausted retry_count=%d", retry)

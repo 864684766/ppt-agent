@@ -76,7 +76,8 @@ async def test_tool_return_result() -> None:
     """真实查询健康食谱资料；依赖.env配置、网络和SearXNG，不生成食谱。"""
     # 用户想要一份不忌口的健康食谱；这里直接填写用于寻找依据的搜索词。
     # 模型生成搜索词、读取网页和制作食谱的流程尚未接入此工具测试。
-    arguments = {"query": "健康饮食 均衡膳食 每日食谱", "max_results": 10}
+    query, max_results = "健康饮食 均衡膳食 每日食谱", 10
+    arguments = {"query": query, "max_results": max_results}
     settings = Settings()
     async with httpx.AsyncClient() as http_client:
         selected_engines = settings.searxng_default_engines if TEST_ENGINES is None else TEST_ENGINES
@@ -95,6 +96,6 @@ async def test_tool_return_result() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     # 真实搜索结果随时间变化，不固定断言某个标题或网址。
     # 正常零命中也是合法结果；断点或打印用于观察实际内容是否符合你的需要。
-    assert result["query"] == arguments["query"].strip()
+    assert result["query"] == query.strip()
     assert result["returned_count"] == len(result["items"])
-    assert 0 <= result["returned_count"] <= arguments["max_results"]
+    assert 0 <= result["returned_count"] <= max_results

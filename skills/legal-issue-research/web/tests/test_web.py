@@ -8,9 +8,9 @@ _WEB = os.path.dirname(_HERE)  # legal-research 目录
 if _WEB not in sys.path:
     sys.path.insert(0, _WEB)
 
-import pytest
+import pytest  # noqa: E402
 
-from web_api import create_app
+from web_api import create_app  # noqa: E402
 
 
 @pytest.fixture

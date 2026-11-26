@@ -1,5 +1,8 @@
 """将网页和文件提炼结果转换为通用汇总输入；不调用模型或登记资料。"""
 
+from collections.abc import Mapping, Sequence
+from typing import Any
+
 from models.materials.file_extraction import FileExtraction
 from models.materials.material_summary import MaterialInputPoint, MaterialReference
 
@@ -15,7 +18,7 @@ def file_summary_points(*, extraction: FileExtraction, source_id: str) -> list[M
             for index, point in enumerate(extraction.points, 1)]
 
 
-def web_summary_points(*, extractions: list[dict]) -> list[MaterialInputPoint]:
+def web_summary_points(*, extractions: Sequence[Mapping[str, Any]]) -> list[MaterialInputPoint]:
     """转换网页单页要点；检查每条要点只引用对应的实际网页候选编号。"""
     result = []
     seen = set()

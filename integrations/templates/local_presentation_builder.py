@@ -75,13 +75,16 @@ class LocalPresentationBuilder:
                      pages: list[PresentationPagePlan]) -> list[BuiltPresentationPage]:
         """按计划复制原参考页、替换文字和绘制元素，并记录各页结果。"""
         built: list[BuiltPresentationPage] = []
+        slide_width, slide_height = presentation.slide_width, presentation.slide_height
+        if slide_width is None or slide_height is None:
+            raise PresentationBuildError("模板缺少页面尺寸。")
         for number, plan in enumerate(pages, start=1):
             if plan.source_slide_number > len(originals):
                 raise PresentationBuildError("参考页码超出原模板范围。")
             slide = copy_template_slide(presentation, originals[plan.source_slide_number - 1])
             replace_slide_text(slide, plan.replacements)
             draw_page_elements(slide, plan.elements, images=self._images, videos=self._videos, audios=self._audios,
-                               slide_width=presentation.slide_width, slide_height=presentation.slide_height)
+                               slide_width=slide_width, slide_height=slide_height)
             built.append({"slide_number": number, "source_slide_number": plan.source_slide_number,
                           "role": plan.role, "replacement_count": len(plan.replacements),
                           "element_count": len(plan.elements)})

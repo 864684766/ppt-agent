@@ -20,7 +20,7 @@ try:
 except ImportError:
     FastMCP = None
 
-from legal_validator import (
+from legal_validator import (  # noqa: E402
     validate_report, validate_citation, check_timeliness,
     normalize_law_name, validate_source_level,
 )

@@ -5,8 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from models.documents.document_content import DocumentContent
-from models.materials.material_summary import MaterialSummary, MaterialInputPoint
+from models.materials.material_summary import MaterialSummaryContent, MaterialInputPoint
 from models.materials.request_analysis import RequestAnalysisResult
+from models.outlines.presentation_outline import PresentationOutline
 
 
 class ChatAttachmentResponse(BaseModel):
@@ -44,15 +45,17 @@ class ChatQuestion(BaseModel):
 
 
 class ChatReadResponse(BaseModel):
-    """资料工作流的首轮结果；不表示已经生成PPT大纲。"""
+    """首轮资料收集及可能生成的大纲；不表示已生成PPT文件。"""
 
     task_id: str = Field(description="本次资料任务编号；暂停状态仅存在当前服务进程内。")
     message: str = Field(description="用户提交的原始问题。")
     template_key: str | None = Field(default=None, description="本次选择的OSS模板对象标识；未选择时为null。")
-    status: Literal["completed", "awaiting_user", "interrupted"] = Field(description="completed资料达到当前收集条件；awaiting_user等待选择；interrupted模型检查未完成。")
+    status: Literal["completed", "awaiting_user", "interrupted"] = Field(description="completed已生成大纲；awaiting_user等待用户；interrupted处理未完成。")
     notice: str = Field(description="资料工作流状态说明。")
     analysis: RequestAnalysisResult | None = Field(description="需求分析结果；图故障前未产生时为null。")
-    summary: MaterialSummary | None = Field(description="跨来源汇总要点和内容问题；未完成时为null。")
+    summary: MaterialSummaryContent | None = Field(description="跨来源汇总要点和内容问题；未完成时为null。")
+    outline: PresentationOutline | None = Field(description="分页PPT大纲；尚未生成或失败时为null。")
+    outline_error: Literal["model_timeout", "model_connection", "output_too_long", "generation_failed"] | None = Field(description="最终汇总及大纲生成失败分类；未失败时为null。")
     summary_inputs: list[MaterialInputPoint] = Field(description="汇总输入要点及网页或文件块来源，供point_ids反查。")
     sources: list[ChatResearchSource] = Field(description="已读取网页的标题、地址与截断状态；没有网页时为空。")
     report: dict | None = Field(description="网页、文件阶段报告及有效来源数量和内容问题；需求分析阶段结束时可能为null。")

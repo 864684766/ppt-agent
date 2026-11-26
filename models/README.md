@@ -85,7 +85,7 @@ list_project_materials 执行查询 → MaterialPage
 6. __init__.py不批量加载所有类型，使用时显式导入具体模块，避免依赖扩散。
 
 对话流的result返回ChatReadResponse：需求分析、资料汇总、来源映射、报告和询问；选中文件时会解析并提炼，模板仍单独解析。
-当前未开发大纲、模板识别等结构化Agent结果，它们尚无可供导航的类型定义。
+分页大纲的结构定义在 outlines/presentation_outline.py；模板识别等功能按各自模型说明。
 
 ## 当前附件数据来源（2026-11-05）
 
@@ -212,7 +212,7 @@ ResearchState.stop_reason运行中为空字符串，结束后按目标达到、�
 
 ChatReadResponse、ChatResearchSource和ChatQuestion定义在chat/chat_response.py，由API根据资料图构造：analysis为需求分析，summary及summary_inputs保留要点和来源映射，sources为网页来源，report为阶段报告，waiting_question为待回答问题；attachment_analyzed表示文件提炼成功，attachment_file_name为上传文件名。模板仍单独解析；不返回附件字节或正文。
 
-/chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse，不表示已有大纲；thinking事件仅在配置开启且LangChain返回标准推理块时出现。
+/chat/stream 的SSE start/progress/result/error公开字段见 docs/Store清单.html 和接口调试说明；result复用ChatReadResponse；资料充分且生成成功时包含outline；thinking事件仅在配置开启且LangChain返回标准推理块时出现。
 
 网页工作流使用MaterialSummaryAgent进行通用汇总，并映射回网页契约；MaterialSummaryAgent使用materials/material_summary.py的通用要点、来源引用、汇总要点及问题契约，可汇总网页与文件提炼结果；网页工作流已接入，文件尚未通过HTTP接入。FileExtractionAgent 通过注入的 DocumentFileReader 校验并按格式解析文件，也可接收已解析的 DocumentContent；输出 materials/file_extraction.py 中的 FileExtraction（文件名、要点、读取警告和无文字页）；FileExtractionPoint 的 block_ids 在本次解析结果中定位原文。FileExtractionBatch 仅用于模型分批输出。这些是内部模型，文件尚未登记为资料，也未接入HTTP。
 
@@ -237,3 +237,13 @@ MaterialCollectionState、MaterialCollectionReport 定义在 materials/material_
 RequestAnalysisResult为需求分析调用的内部结果：status、plan、error_code和安全message；失败时plan为None，不允许继续按计划执行。尚未接入HTTP。
 
 当前 `/chat/stream` 的 ChatReadResponse 是资料收集首轮SSE result：status、notice、analysis、summary、summary_inputs、sources、report、waiting_question、attachment_analyzed、attachment_file_name、template；尚未提供HTTP回答和上传补充资料后的恢复。旧版附件仅解析/网页专用结果描述属于历史。
+
+PresentationOutline、OutlineSlide、OutlineBullet 定义在 outlines/presentation_outline.py，由 MaterialSummaryAgent 在最终汇总时生成，资料工作流及 ChatReadResponse 使用。slides顺序即页序，role为cover/content/closing，bullet.point_ids通过summary_inputs关联真实网页或文件块；校验编号存在不等于核实事实。未生成时outline为null。
+
+网页研究内部状态 ResearchState.provided_urls_only 表示本轮直接使用用户提供的网址及其同站相关链接；ResearchReport.stop_reason 的 provided_pages_exhausted 表示这些候选已处理完但仍不足，followup_unread 问题列出达到读取上限时未处理的候选编号。该状态由网页工作流创建，HTTP仅通过报告公开结果，不表示来源事实已核验。
+
+MaterialSummary.outline 在最终资料汇总中可包含 PresentationOutline，中间汇总为null；MaterialCollectionState.use_current记录用户是否选择使用现有资料。程序根据实际来源及问题确定是否对外返回大纲。
+
+MaterialSummaryContent 是资料汇总的公开内容（points、issues），供聊天响应使用；MaterialSummary 扩展可选 outline，供汇总模型及工作流使用，避免聊天响应在 summary 内重复包含 outline。
+
+ResearchState.summary_deferred 表示网页要点统一汇总留给上层；状态 collected 和停止原因 summary_deferred 仅表示单页提炼已结束，不是资料充分结论。ResearchReport.content_review_deferred 明确提示该边界；source_count在此表示有提炼要点的网页数。

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from typing import Literal
 from collections import deque
 from uuid import uuid4
 
@@ -81,7 +82,7 @@ class FileExtractionAgent:
             name, document = await asyncio.to_thread(self._file_reader.read, file_name=file_name, content=content)
         except (FileUploadError, DocumentReadError) as error:
             # 只捕获约定内的安全异常；文件未解析，不能当成空正文或模型判断无关。
-            stage = "validation" if isinstance(error, FileUploadError) else "reading"
+            stage: Literal["validation", "reading"] = "validation" if isinstance(error, FileUploadError) else "reading"
             logger.warning("event=file_extraction_read_failed stage=%s code=%s", stage, error.code)
             return FileExtraction(file_name=file_name or "未命名文件", points=[], warnings=[], pages_without_text=[],
                 status="failed", processed_characters=0, total_characters=0,
@@ -138,7 +139,7 @@ class FileExtractionAgent:
                        pending: deque, points: list, processed_chars: int) -> FileExtraction:
         """从待处理队列依次处理；中断时保存当前批次及其余队列。"""
         total_chars = sum(len(block.text) for block in content.blocks)
-        failure_reason = None
+        failure_reason: Literal["output_limit", "model_connection", "model_timeout", "model_output_invalid", "processing_failed"] | None = None
         while pending:
             batch, depth, invalid_retries = pending.popleft()
             # 文件正文是外部数据；不执行其中的命令。
@@ -166,7 +167,7 @@ class FileExtractionAgent:
                 break
             except OutputParserException:
                 result = None
-                invalid_kind = "schema"
+                invalid_kind: str | None = "schema"
             except Exception as error:
                 logger.error("event=file_extraction_processing_failed error_location=%s", safe_error_location(error))
                 failure_reason = "processing_failed"

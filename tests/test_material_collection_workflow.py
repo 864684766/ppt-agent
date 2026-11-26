@@ -45,12 +45,14 @@ async def test_real_material_collection() -> None:
         web = _create_workflow(settings=settings, model=model, search_http=search_http, webpage_http=webpage_http)
         file_agent = FileExtractionAgent(model=model, file_reader=reader,
             prompt=(PROJECT_ROOT / "prompts/materials/file_extraction.md").read_text(encoding="utf-8"))
-        summary_agent = MaterialSummaryAgent(model=model, output_tokens=settings.llm_max_tokens,
+        summary_agent = MaterialSummaryAgent(model=model, output_tokens=settings.llm_max_tokens, timeout_seconds=settings.llm_timeout_seconds,
+            retry_prompt=(PROJECT_ROOT / "prompts/materials/material_summary_retry.md").read_text(encoding="utf-8"),
             prompt=(PROJECT_ROOT / "prompts/materials/material_summary.md").read_text(encoding="utf-8"))
         request_agent = RequestAnalysisAgent(model=model,
             prompt=(PROJECT_ROOT / "prompts/materials/request_analysis.md").read_text(encoding="utf-8"))
         flow = MaterialCollectionWorkflow(request_agent=request_agent, web_workflow=web, file_agent=file_agent,
-                                          summary_agent=summary_agent, target_count=settings.research_target_source_count)
+                                          summary_agent=summary_agent,
+                                          target_count=settings.research_target_source_count)
         thread_id = uuid4().hex
         result = await flow.run(thread_id=thread_id, question=question, file_name=path.name, file_content=path.read_bytes())
         print("【状态】", result["status"], result["message"])
@@ -59,13 +61,22 @@ async def test_real_material_collection() -> None:
         print("【文件报告】", (result["report"] or {}).get("file"))
         print("【统一报告】", result["report"])
         print("【汇总】", result["summary"])
+        print("【大纲】", result["outline"], "【大纲错误】", result["outline_error"])
         print("【等待问题】", result["waiting_question"])
         assert result["status"] != "interrupted", result["message"]
-        assert result["analysis"]["plan"]["source_mode"] == "file"
+        analysis = result["analysis"]
+        assert analysis and analysis.get("plan")
+        assert analysis["plan"]["source_mode"] == "file"
         assert result["web"] is None, "仅文件分析不应启动网页搜索。"
-        assert result["file"] and result["file"]["status"] == "completed"
+        file_result = result["file"]
+        assert file_result and file_result["status"] == "completed"
+        if result["status"] == "completed":
+            outline = result["outline"]
+            assert outline and outline["slides"]
         if result["status"] == "awaiting_user":
-            assert result["waiting_question"]
-            answered = await flow.answer(thread_id=thread_id, question_id=result["waiting_question"]["question_id"],
+            waiting_question = result["waiting_question"]
+            assert waiting_question
+            assert result["outline"] is None, "资料不足等待用户时不应提前生成大纲。"
+            answered = await flow.answer(thread_id=thread_id, question_id=waiting_question["question_id"],
                                          answer="end_conversation")
             assert answered["status"] == "cancelled"

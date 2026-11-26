@@ -12,7 +12,7 @@ def draw_presentation_media(slide, plan: VideoElement | AudioElement, *, videos:
                             audios: dict[str, bytes], images: dict[str, bytes]) -> None:
     """使用python-pptx实验性媒体接口；只验证文件基本标识，不验证编解码或实际播放。"""
     is_video = isinstance(plan, VideoElement)
-    content = videos.get(plan.video_id) if is_video else audios.get(plan.audio_id)
+    content = videos.get(plan.video_id) if isinstance(plan, VideoElement) else audios.get(plan.audio_id)
     if content is None:
         raise PresentationBuildError("视频或音频编号未登记。")
     if not content or len(content) > 50 * 1024 * 1024:
@@ -23,7 +23,7 @@ def draw_presentation_media(slide, plan: VideoElement | AudioElement, *, videos:
     if not is_video and not (content.startswith(b"ID3") or len(content) >= 2 and content[0] == 0xff and content[1] & 0xe0 == 0xe0):
         raise PresentationBuildError("音频不是可识别的MP3。")
     poster = None
-    if is_video and plan.poster_image_id is not None:
+    if isinstance(plan, VideoElement) and plan.poster_image_id is not None:
         poster = images.get(plan.poster_image_id)
         if poster is None or not poster or len(poster) > 10 * 1024 * 1024:
             raise PresentationBuildError("视频封面图片未登记、为空或超过10 MiB。")

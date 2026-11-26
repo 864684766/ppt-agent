@@ -1,6 +1,7 @@
 """验证图表样式的可观察行为，独立于网络、模型和Office运行时。"""
 
 import pytest
+from typing import Any
 from pydantic import TypeAdapter, ValidationError
 from pptx import Presentation
 from pptx.enum.chart import XL_LEGEND_POSITION, XL_TICK_LABEL_POSITION, XL_TICK_MARK
@@ -12,7 +13,8 @@ from models.presentations.presentation_page_element import PresentationPageEleme
 
 def test_line_chart_axis_and_display_style() -> None:
     """折线图的轴范围、轴线、刻度、网格线及图例应按输入生效。"""
-    plan = TypeAdapter(PresentationPageElement).validate_python({
+    adapter: TypeAdapter[PresentationPageElement] = TypeAdapter(PresentationPageElement)
+    plan = adapter.validate_python({
         "type": "chart", "chart_type": "line", "x": 1, "y": 1, "width": 5, "height": 3,
         "categories": ["一月", "二月"], "series": [{"name": "次数", "values": [2, 4]}],
         "style": {"title": "趋势", "legend_visible": True, "legend_position": "bottom", "data_labels": True},
@@ -24,6 +26,8 @@ def test_line_chart_axis_and_display_style() -> None:
     })
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    from models.presentations.presentation_page_element import ChartElement
+    assert isinstance(plan, ChartElement)
     draw_presentation_chart(slide, plan)
     chart = slide.shapes[-1].chart
     assert chart.chart_title.text_frame.text == "趋势"
@@ -42,15 +46,16 @@ def test_line_chart_axis_and_display_style() -> None:
 
 def test_invalid_axis_styles_rejected() -> None:
     """饼图没有坐标轴、范围颠倒和隐藏网格线却设置网格线颜色均应拒绝。"""
-    adapter = TypeAdapter(PresentationPageElement)
-    base = {"type": "chart", "chart_type": "column", "x": 1, "y": 1, "width": 5, "height": 3,
+    adapter: TypeAdapter[PresentationPageElement] = TypeAdapter(PresentationPageElement)
+    base: dict[str, Any] = {"type": "chart", "chart_type": "column", "x": 1, "y": 1, "width": 5, "height": 3,
             "categories": ["A"], "series": [{"name": "数量", "values": [1]}]}
-    for change in [
+    changes: list[dict[str, Any]] = [
         {"chart_type": "pie", "value_axis": {"minimum": 0}},
         {"value_axis": {"minimum": 10, "maximum": 1}},
         {"value_axis": {"major_gridlines": False, "gridline_color": "#AABBCC"}},
         {"category_axis": {"major_unit": 2}},
         {"value_axis": {"line_visible": False, "line_color": "#AABBCC"}},
-    ]:
+    ]
+    for change in changes:
         with pytest.raises(ValidationError):
             adapter.validate_python({**base, **change})

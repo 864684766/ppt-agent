@@ -20,4 +20,7 @@ def ask_user(question: UserQuestion) -> str:
     response = interrupt({"status": "waiting_for_user", **asdict(question)})
     if not isinstance(response, dict):
         raise ValueError("用户回答必须包含问题编号和回答文字。")
-    return validate_user_answer(question=question, question_id=response.get("question_id"), answer=response.get("answer"))
+    question_id, answer = response.get("question_id"), response.get("answer")
+    if not isinstance(question_id, str) or not isinstance(answer, str):
+        raise ValueError("用户回答必须包含问题编号和回答文字。")
+    return validate_user_answer(question=question, question_id=question_id, answer=answer)

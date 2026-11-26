@@ -5,7 +5,7 @@ import logging
 
 from pydantic import ValidationError
 
-from api.chat_error_mapping import chat_http_error
+from api.chat.chat_error_mapping import chat_http_error
 from config.settings import PROJECT_ROOT, Settings
 from diagnostics.operation_logging import log_operation
 from domain.documents.document_reader_contract import DocumentReadError

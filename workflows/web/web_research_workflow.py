@@ -20,7 +20,9 @@ from domain.web.research_candidate_merge import merge_research_candidates
 from domain.web.research_outcome import finalize_research
 from domain.web.research_decision import apply_research_decision
 from domain.web.research_follow_links import select_followup_candidates
+from domain.web.provided_web_addresses import provided_web_candidates
 from models.web.research_contract import ResearchState
+from models.web.web_research_summary import WebPageExtraction, WebResearchSummary, WebSummaryPoint
 from agents.web.webpage_extraction_agent import WebpageExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
 from domain.materials.material_summary_inputs import web_summary_points
@@ -71,7 +73,7 @@ class WebResearchWorkflow:
         graph.add_node("summarize", self._summarize)
         graph.add_node("finalize", self._finalize)
         graph.add_node("ask", self._ask)
-        graph.add_edge(START, "query")
+        graph.add_conditional_edges(START, lambda state: "fetch" if state["accepted"] else "query")
         graph.add_edge("query", "review")
         # 路由函数直接返回目标节点名或END；无需额外的路径映射。
         graph.add_conditional_edges("review", self._next)
@@ -180,7 +182,7 @@ class WebResearchWorkflow:
         notify_progress("read_webpage")
         candidate = state["accepted"][state["read_index"]]
         try:
-            page = await self._fetch_tool.ainvoke({"url": candidate["url"], "max_chars": 3000})
+            page = await self._fetch_tool.ainvoke({"url": candidate["url"], "max_chars": 50000})
         except ToolException as error:
             logger.warning("event=research_page_failed")
             failure = {"candidate_id": candidate["candidate_id"], "url": candidate["url"], "reason": str(error)}
@@ -195,8 +197,7 @@ class WebResearchWorkflow:
             return {"read_index": state["read_index"] + 1, "needs_summary": False}
         # 此模型调用只接收当前网页；成功后只保存提炼要点和必要的网页元数据。
         notify_progress("extract")
-        extraction = await self._webpage_extraction_agent.extract_page(
-            question=state["question"], page={"candidate_id": candidate["candidate_id"], **page})
+        extraction = await self._extract_page_chunks(question=state["question"], candidate_id=candidate["candidate_id"], page=page)
         metadata = {key: page[key] for key in ("requested_url", "final_url", "title", "truncated",
                     "returned_chars", "extracted_chars", "fetched_at")}
         metadata.update(candidate_id=candidate["candidate_id"], text_hash=digest)
@@ -214,9 +215,36 @@ class WebResearchWorkflow:
                     "url": page["final_url"], "truncated": page["truncated"],
                     "points": [point.model_dump() for point in extraction.points]}]}
 
+    async def _extract_page_chunks(self, *, question: str, candidate_id: str, page: dict) -> WebPageExtraction:
+        """每3000字符单独提炼，汇总全部段落要点；只在首段选择链接。
+
+        每段保留同一网页编号，单段调用失败则该网页处理未完成，不将部分结果冒充全文。
+        读取上限仍为50000字符，超出时由网页报告注明截断。
+        """
+        points, links = [], []
+        text = page["text"]
+        total_chunks = (len(text) + 2999) // 3000
+        for offset in range(0, len(text), 3000):
+            part_text = text[offset:offset + 3000]
+            chunk = {**page, "candidate_id": candidate_id, "text": part_text, "returned_chars": len(part_text),
+                     "segment_index": offset // 3000 + 1, "segment_count": total_chunks,
+                     "links": page["links"] if offset == 0 else []}
+            part = await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+            points.extend(part.points)
+            links.extend(part.follow_links)
+        return WebPageExtraction(points=points, follow_links=links)
+
     @staticmethod
     def _after_fetch(state: ResearchState) -> Literal["query", "fetch", "summarize", "finalize"]:
         """仅有新要点时汇总；空要点、读取失败后继续处理其他候选。"""
+        if state["provided_urls_only"]:
+            # 用户指定的栏目先读取已选文章，避免每读一篇都重复汇总；上限内按队列顺序处理。
+            if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
+                return "fetch"
+            # 最后一页即使失败或没有要点，前面已经提炼的内容仍需汇总。
+            if any(item["points"] for item in state["page_extractions"]):
+                return "summarize"
+            return "finalize"
         # 当前网页产生了新要点：先进入summarize，避免还未汇总就判断资料是否充足。
         if state["needs_summary"]:
             return "summarize"
@@ -224,10 +252,18 @@ class WebResearchWorkflow:
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
         # 无待读候选：仍可搜索且仍可读取时回query，否则进入finalize。
-        return "query" if state["attempt"] < state["max_attempts"] and state["read_index"] < state["max_pages"] else "finalize"
+        return "query" if not state["provided_urls_only"] and state["attempt"] < state["max_attempts"] and state["read_index"] < state["max_pages"] else "finalize"
 
     async def _summarize(self, state: ResearchState) -> dict[str, Any]:
         """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
+        if state["provided_urls_only"] and state["defer_user_question"]:
+            # 上层将汇总相同的单页要点；这里仅汇集原始提炼结果，不重复调用模型。
+            extracted = [WebSummaryPoint.model_validate(point) for page in state["page_extractions"] for point in page["points"]]
+            summary = WebResearchSummary(points=extracted, gaps=[], issues=[], follow_links=[])
+            used = {source for point in extracted for source in point.candidate_ids}
+            logger.info("event=research_summary_deferred pages=%d points=%d", len(state["page_extractions"]), len(extracted))
+            return {"summary": summary.model_dump(), "effective_count": len(used),
+                    "needs_summary": False, "summary_deferred": True}
         notify_progress("summarize")
         try:
             points = web_summary_points(extractions=state["page_extractions"])
@@ -250,7 +286,9 @@ class WebResearchWorkflow:
         if state["summary_length_exceeded"]:
             return "finalize"
         # 有效来源达到目标，且汇总没有缺口和问题：进入finalize。
-        if state["effective_count"] >= state["target_count"] and not state["summary"]["gaps"] and not state["summary"]["issues"]:
+        summary = state["summary"]
+        if (summary is not None and state["effective_count"] >= state["target_count"] and not summary["gaps"] and not summary["issues"]
+                and (not state["provided_urls_only"] or state["read_index"] >= len(state["accepted"]))):
             return "finalize"
         # 资料尚不足，但网页读取次数已经用完：进入finalize。
         if state["read_index"] >= state["max_pages"]:
@@ -259,7 +297,7 @@ class WebResearchWorkflow:
         if state["read_index"] < len(state["accepted"]):
             return "fetch"
         # 没有待读候选：搜索轮数未用完就回query，否则进入finalize。
-        return "query" if state["attempt"] < state["max_attempts"] else "finalize"
+        return "query" if not state["provided_urls_only"] and state["attempt"] < state["max_attempts"] else "finalize"
 
     @log_operation("workflow.web_research")
     async def run(self, *, thread_id: str, question: str, target_count: int | None = None, max_attempts: int | None = None,
@@ -305,9 +343,10 @@ class WebResearchWorkflow:
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在，请使用新编号或恢复原任务。")
         # 初始化一次任务所需的状态；这些字段不是持久化数据库或长期会话。
-        state: ResearchState = {"question": question.strip(), "defer_user_question": defer_user_question, "workflow_error_stage": None, "workflow_error_kind": None, "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
-            "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "review_timeout_candidates": [], "accepted": [], "alternatives": [], "selected_alternatives": [],
-            "failed_attempts": 0, "read_index": 0, "pages": [], "page_extractions": [], "needs_summary": False, "summary_length_exceeded": False, "read_failures": [], "summary": None, "effective_count": 0,
+        supplied = provided_web_candidates(question)
+        state: ResearchState = {"question": question.strip(), "provided_urls_only": bool(supplied), "defer_user_question": defer_user_question, "workflow_error_stage": None, "workflow_error_kind": None, "target_count": target_count, "max_attempts": max_attempts, "max_pages": max_pages,
+            "attempt": 0, "query": "", "feedback": "", "candidates": [], "review_batches": [], "unreviewed": [], "review_timeout_candidates": [], "accepted": supplied, "alternatives": [], "selected_alternatives": [],
+            "failed_attempts": 0, "read_index": 0, "pages": [], "page_extractions": [], "needs_summary": False, "summary_deferred": False, "summary_length_exceeded": False, "read_failures": [], "summary": None, "effective_count": 0,
             "status": "running", "message": "", "user_options": [], "stop_reason": "", "report": None,
             "waiting_question": None}
         # 每轮包含query和review两个节点；recursion_limit限制图的步数，
@@ -315,7 +354,7 @@ class WebResearchWorkflow:
         # LangGraph的通用接口返回类型较宽；该图以ResearchState构建，
         # cast只向类型检查器说明约定，不会在运行时执行字段校验。
         try:
-            result = cast(ResearchState, await self._graph.ainvoke(state, config=config))
+            result = cast(ResearchState, await self._graph.ainvoke(cast(Any, state), config=config))
         except Exception as error:
             # 捕获图运行故障，不捕获取消；保留最近成功检查点供调用方恢复。
             result = await self._execution_error(config=config, fallback=state, error=error)
@@ -353,12 +392,12 @@ class WebResearchWorkflow:
         snapshot = await self._graph.aget_state(config)
         result = cast(ResearchState, dict(snapshot.values or fallback))
         result["workflow_error_stage"] = snapshot.next[0] if snapshot.next else None
-        result["workflow_error_kind"] = ("model_timeout" if isinstance(error, OpenAITimeoutError) else
+        result["workflow_error_kind"] = ("model_timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else
                                           "model_connection" if isinstance(error, OpenAIConnectionError) else "execution_failed")
         return finalize_research(result, question_id=uuid4().hex)
 
     @staticmethod
-    def _after_finalize(state: ResearchState) -> Literal["ask", "__end__"]:
+    def _after_finalize(state: ResearchState) -> str:
         """仅资料不足时暂停；模型故障与正常完成均直接结束。"""
         return "ask" if state["waiting_question"] is not None else END
 

@@ -20,7 +20,9 @@ async def test_real_material_summary() -> None:
         model = create_langchain_model(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,
             max_tokens=settings.llm_max_tokens, http_client=client)
-        agent = MaterialSummaryAgent(model=model, prompt=(PROJECT_ROOT / "prompts/materials/material_summary.md").read_text(encoding="utf-8"))
+        agent = MaterialSummaryAgent(model=model, prompt=(PROJECT_ROOT / "prompts/materials/material_summary.md").read_text(encoding="utf-8"),
+                                     retry_prompt=(PROJECT_ROOT / "prompts/materials/material_summary_retry.md").read_text(encoding="utf-8"),
+                                     output_tokens=settings.llm_max_tokens, timeout_seconds=settings.llm_timeout_seconds)
         points = web_summary_points(extractions=web) + file_summary_points(extraction=file, source_id="file_demo")
         summary = await agent.summarize(question="介绍成年人每日蔬菜建议。", points=points)
     print("【输入】", [p.model_dump() for p in points])

@@ -32,7 +32,7 @@ async def test_tool_result_with_real_template() -> None:
     path = TEMPLATE_PATH if TEMPLATE_PATH is not None else (candidates[0] if candidates else None)
     assert path is not None, "请在ppt-demo放入PPTX，或设置TEMPLATE_PATH。"
     original = path.read_bytes()
-    original_count = len(Presentation(path).slides)
+    original_count = len(Presentation(str(path)).slides)
     creator = LocalTemplatePageCreator(templates={"demo": path}, output_directory=OUTPUT_DIRECTORY)
     tool = create_template_page_tool(creator=creator)
     # 根据参考截图手工填写方案：坐标单位英寸，字号单位pt。

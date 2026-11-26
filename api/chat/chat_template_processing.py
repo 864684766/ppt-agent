@@ -4,8 +4,8 @@ import asyncio
 from pydantic import ValidationError
 from fastapi import HTTPException
 
-from api.chat_attachment_processing import read_chat_attachment
-from api.template_resource_dependencies import open_template_storage_client
+from api.chat.chat_attachment_processing import read_chat_attachment
+from api.templates.template_resource_dependencies import open_template_storage_client
 from config.settings import Settings
 from diagnostics.operation_logging import log_operation
 from domain.templates.template_file_reader_contract import TemplateFileReader

@@ -79,7 +79,8 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
             retry_prompt=(PROJECT_ROOT / "prompts" / "web" / "web_research_page_retry.md").read_text(encoding="utf-8")),
         material_summary_agent=MaterialSummaryAgent(model=model,
             prompt=(PROJECT_ROOT / "prompts" / "materials" / "material_summary.md").read_text(encoding="utf-8"),
-            output_tokens=settings.llm_max_tokens),
+            retry_prompt=(PROJECT_ROOT / "prompts" / "materials" / "material_summary_retry.md").read_text(encoding="utf-8"),
+            output_tokens=settings.llm_max_tokens, timeout_seconds=settings.llm_timeout_seconds),
     )
     return workflow
 
@@ -88,6 +89,7 @@ def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: h
 # 用户可在PyCharm中修改这些问题，或在测试树中只运行其中一个参数案例。
 QUESTIONS = [
     "介绍一下黄芪。",
+    # "根据这份网页资料，读取其中的内容，帮我做一个PPT。http://dg.cnsoc.org/newslist_0402_1.htm",
     # "查找中国居民膳食指南2022关于平衡饮食的资料。",
     # "查找《本草纲目》中关于黄芪的记载。",
     # "查找中国劳动合同解除的法律规定。",
@@ -148,7 +150,7 @@ async def test_real_research(question: str, defer_user_question: bool) -> None:
     print("【网页元数据与读取失败】", json.dumps({"pages": result["pages"], "failures": result["read_failures"]}, ensure_ascii=False, indent=2))
     print("【逐页提炼结果】", json.dumps(result["page_extractions"], ensure_ascii=False, indent=2))
     print("【正文整理结果】", json.dumps(result["summary"], ensure_ascii=False, indent=2))
-    assert result["status"] in {"completed", "awaiting_user", "interrupted", "insufficient"}, result["message"]
+    assert result["status"] in {"completed", "awaiting_user", "interrupted", "insufficient", "collected"}, result["message"]
     assert result["defer_user_question"] is defer_user_question
     if defer_user_question:
         assert result["status"] != "awaiting_user"
@@ -156,7 +158,7 @@ async def test_real_research(question: str, defer_user_question: bool) -> None:
         assert await workflow.get_pending_question(thread_id=thread_id) is None
     if result["status"] == "insufficient":
         assert defer_user_question and not result["user_options"]
-        assert result["stop_reason"] in {"search_limit", "page_limit", "search_failed"}
+        assert result["stop_reason"] in {"search_limit", "page_limit", "search_failed", "provided_pages_exhausted"}
     assert result["report"] is not None and result["report"]["stop_reason"] == result["stop_reason"]
     assert result["report"]["source_count"] == result["effective_count"]
     assert result["report"]["target_source_count"] == result["target_count"]
@@ -186,7 +188,9 @@ async def test_real_research(question: str, defer_user_question: bool) -> None:
     print("【整体返回内容】",json.dumps(result, ensure_ascii=False, indent=2))
     if result["status"] == "awaiting_user":
         # 仅验证工作流恢复；HTTP回答接口和文件补充仍未接入。
-        question_id = result["waiting_question"]["question_id"]
+        waiting_question = result["waiting_question"]
+        assert waiting_question is not None
+        question_id = waiting_question["question_id"]
         resumed = await workflow.answer(thread_id=thread_id, question_id=question_id, answer="end_conversation")
         print("【选择结束后的状态】", resumed["status"], resumed["message"])
         assert resumed["status"] == "cancelled" and resumed["waiting_question"] is None

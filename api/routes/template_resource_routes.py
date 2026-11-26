@@ -4,7 +4,7 @@ import asyncio
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
-from api.template_resource_dependencies import open_template_catalog
+from api.templates.template_resource_dependencies import open_template_catalog
 from diagnostics.operation_logging import log_operation
 from domain.templates.template_resource_catalog_contract import TemplateResourceError
 from models.templates.template_resource_response import TemplateResourceListResponse, TemplateResourceErrorResponse

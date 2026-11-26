@@ -2,6 +2,7 @@
 
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urldefrag
+from models.web.webpage_content import WebpageLink
 
 
 class HtmlLinkExtractor(HTMLParser):
@@ -12,7 +13,7 @@ class HtmlLinkExtractor(HTMLParser):
         self.base_url = base_url
         self.href: str | None = None
         self.fragments: list[str] = []
-        self.links: list[dict[str, str]] = []
+        self.links: list[WebpageLink] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == 'a':

@@ -39,6 +39,11 @@ def _set_result_status(result: ResearchState) -> None:
         result["stop_reason"] = "model_timeout"
         result["user_options"] = []
         result["message"] = "模型检查超时，当前批次及后续候选未完成检查；已保留本次已完成的结果。"
+    elif result["summary_deferred"]:
+        result["status"] = "collected"
+        result["stop_reason"] = "summary_deferred"
+        result["user_options"] = []
+        result["message"] = "网页提炼已结束，内容汇总和充分性判断交由上层处理。"
     elif _target_reached(result):
         result["status"] = "completed"
         result["stop_reason"] = "target_reached"
@@ -50,17 +55,20 @@ def _set_result_status(result: ResearchState) -> None:
 def _target_reached(state: ResearchState) -> bool:
     """数量达标且没有模型报告的问题，才可视为已达到本轮收集目标。"""
     summary = state["summary"]
-    return bool(state["effective_count"] >= state["target_count"] and summary
+    return bool((not state["provided_urls_only"] or state["read_index"] >= len(state["accepted"]))
+                and state["effective_count"] >= state["target_count"] and summary
                 and summary["points"] and not summary["gaps"] and not summary["issues"])
 
 
 def _set_insufficient_result(result: ResearchState) -> None:
     """根据已有正文、搜索和读取情况，生成需要用户决定的结果。"""
     result["status"] = "awaiting_user"
-    if result["failed_attempts"] == result["attempt"]:
+    if result["attempt"] > 0 and result["failed_attempts"] == result["attempt"]:
         result["stop_reason"] = "search_failed"
     elif result["read_index"] >= result["max_pages"]:
         result["stop_reason"] = "page_limit"
+    elif result["provided_urls_only"]:
+        result["stop_reason"] = "provided_pages_exhausted"
     else:
         result["stop_reason"] = "search_limit"
     options = ["provide_materials"]
@@ -78,7 +86,7 @@ def _set_insufficient_result(result: ResearchState) -> None:
 
 def _no_content_message(state: ResearchState) -> str:
     """没有已整理要点时，优先说明搜索失败和尚未完成的检查。"""
-    if state["failed_attempts"] == state["attempt"]:
+    if state["attempt"] > 0 and state["failed_attempts"] == state["attempt"]:
         return "本次搜索全部失败，未能取得候选。是否自行提供资料？如果不提供，本次对话将结束。"
     if state["unreviewed"]:
         return "部分候选尚未完成检查，目前无法确定是否有可用资料；可提供资料或结束。"

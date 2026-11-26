@@ -72,10 +72,13 @@ def _validate_elements(presentation: PresentationDocument, elements: list[PageEl
     if not 1 <= len(elements) <= 30:
         logger.warning("event=template_page_rejected reason=element_count")
         raise TemplatePageCreationError("绘制方案需要1至30个对象。")
+    slide_width, slide_height = presentation.slide_width, presentation.slide_height
+    if slide_width is None or slide_height is None:
+        raise TemplatePageCreationError("模板缺少页面尺寸。")
     # Inches把人易读的英寸转换为PPT内部EMU；检查整个对象是否在画布内。
     for index, element in enumerate(elements, start=1):
-        if (Inches(element.x + element.width) > presentation.slide_width or
-                Inches(element.y + element.height) > presentation.slide_height):
+        if (Inches(element.x + element.width) > slide_width or
+                Inches(element.y + element.height) > slide_height):
             logger.warning("event=template_page_rejected reason=element_out_of_bounds element_index=%d", index)
             raise TemplatePageCreationError("绘制对象超出幻灯片边界，请调整坐标和尺寸。")
         if element.kind == "rectangle" and element.text:

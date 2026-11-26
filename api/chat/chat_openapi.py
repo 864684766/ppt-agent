@@ -6,9 +6,10 @@
 
 from models.chat.chat_request import ChatRequest
 from models.chat.chat_response import ChatErrorResponse
+from typing import Any
 
 
-CHAT_RESPONSES = {
+CHAT_RESPONSES: dict[int | str, dict[str, Any]] = {
     code: {"model": ChatErrorResponse} for code in (400, 404, 413, 415, 422, 502, 503)
 }
 # JSON允许message/template_key；附件必须以multipart文件字段发送，不能塞入base64。

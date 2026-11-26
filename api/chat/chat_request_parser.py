@@ -7,8 +7,8 @@ from fastapi import Request
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from api.chat_error_mapping import chat_http_error
-from api.chat_form_parser import open_chat_form
+from api.chat.chat_error_mapping import chat_http_error
+from api.chat.chat_form_parser import open_chat_form
 from config.settings import Settings
 from diagnostics.operation_logging import log_operation
 from domain.uploads.file_upload_errors import FileUploadError
@@ -80,10 +80,7 @@ async def _parse_multipart(request: Request) -> ChatSubmission:
         # 后续解析不再依赖已关闭的UploadFile临时句柄。
         return ChatSubmission(
             **parameters.model_dump(),
-            attachment=ChatAttachmentInput(
-                file_name=name,
-                format=file_format, content=content,
-            ),
+            attachment=ChatAttachmentInput.model_validate({"file_name": name, "format": file_format, "content": content}),
         )
 
 

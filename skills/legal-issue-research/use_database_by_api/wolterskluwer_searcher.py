@@ -11,7 +11,6 @@
 """
 
 import json
-import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -592,17 +591,15 @@ class LegalSearchIntegration:
         # search_type = type_mapping.get(legal_type, "all")
         # ---------------------------
         
-        # 3. 日期范围
-        date_from = date_range.get("from") if date_range else None
-        date_to = date_range.get("to") if date_range else None
+        # 日期范围将在实际接入检索服务时传递；当前占位实现不会使用它。
         
         # 4. 执行检索
         # ---------- 需填充 ----------
         # results = self.searcher.comprehensive_search(
         #     keyword=keyword,
         #     region=region,
-        #     date_from=date_from,
-        #     date_to=date_to
+        #     date_from=date_range.get("from") if date_range else None,
+        #     date_to=date_range.get("to") if date_range else None
         # )
         # ---------------------------
         

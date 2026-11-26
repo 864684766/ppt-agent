@@ -62,6 +62,7 @@ class ResearchState(TypedDict):
     """一次研究流程的临时状态；调用者负责保管，不提供跨进程持久化。"""
 
     question: str  # 用户主题和要求。
+    provided_urls_only: bool  # 用户明确提供网址时优先读取其同站链接，不自动扩展互联网搜索。
     defer_user_question: bool  # True时资料不足由上层判断，网页图不生成问题、不暂停；默认False。
     workflow_error_stage: str | None  # 图执行失败的节点名；无故障为None，不包含异常原文。
     workflow_error_kind: str | None  # 固定分类model_connection/model_timeout/execution_failed；无故障为None。
@@ -82,12 +83,13 @@ class ResearchState(TypedDict):
     pages: list[WebResearchPage]  # 已提炼网页的元数据，不含正文。
     page_extractions: list[WebPageExtractionRecord]  # 单页提炼要点与来源，供后续汇总；不含网页正文。
     needs_summary: bool  # 本页有新要点，需要重新检查累计要点。
+    summary_deferred: bool  # True表示网页只交出单页提炼，由上层进行内容汇总和充分性判断。
     summary_length_exceeded: bool  # 累计汇总输出超限且未完成；之前的汇总和单页要点保留。
     read_failures: list[WebResearchReadFailure]  # 读取失败的网页和原因。
     summary: dict | None  # 上次成功汇总的JSON；尚无成功汇总时为None。
     effective_count: int  # 上次成功汇总实际引用的网页数；汇总失败时可能未包含最新单页。
     failed_attempts: int  # 整次搜索工具调用失败次数，不代表某个具体引擎失败。
-    status: str  # running、completed、insufficient、awaiting_user、interrupted、needs_materials或cancelled。
+    status: str  # running、completed、collected（上层汇总）、insufficient、awaiting_user、interrupted等。
     message: str  # 状态解释，不包含敏感上游错误原文。
     user_options: list[str]  # 等待用户决定时的可选动作；其余情况为空列表。
     waiting_question: dict | None  # 提问节点的稳定问题字段；等待时非空，回答后清空。
@@ -100,5 +102,5 @@ class ResearchState(TypedDict):
     # summary_length_exceeded：累计汇总输出超限，最新单页要点尚未纳入汇总检查。
     # 同时满足多个原因时，优先报告模型超时，再判断目标、搜索失败和各项上限。
     # 这是内部状态，不自动传给模型；Literal只提供静态类型提示，不做运行时校验。
-    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed", "model_timeout", "summary_length_exceeded", "workflow_error"]
+    stop_reason: Literal["", "target_reached", "search_limit", "page_limit", "search_failed", "provided_pages_exhausted", "summary_deferred", "model_timeout", "summary_length_exceeded", "workflow_error"]
     report: ResearchReport | None  # 程序生成的网页检查报告；图运行中为None，不含搜索feedback。

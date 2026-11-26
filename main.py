@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from api.api_router import api_router
-from api.request_logging_middleware import RequestLoggingMiddleware
-from api.web_research_runtime import WebResearchRuntime
+from api.transport.request_logging_middleware import RequestLoggingMiddleware
+from api.chat.web_research_runtime import WebResearchRuntime
 from config.logging_config import configure_logging
 from config.settings import PROJECT_ROOT, Settings
 

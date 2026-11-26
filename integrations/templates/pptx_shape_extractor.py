@@ -1,9 +1,13 @@
 """提取单个容器的形状事实；不把对象名称或文字解释成页面角色。"""
 
 from collections.abc import Iterable
+from typing import cast
 
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.shapes.base import BaseShape
+from pptx.shapes.group import GroupShape
+from pptx.shapes.graphfrm import GraphicFrame
+from pptx.shapes.autoshape import Shape
 
 from models.templates.template_structure import TemplateShape
 
@@ -30,7 +34,7 @@ def _extract_shape(shape: BaseShape, *, order: int, part_id: str, warnings: list
     children: list[TemplateShape] = []
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         children = extract_shapes(
-            shape.shapes, part_id=part_id, warnings=warnings, in_group=True,
+            cast(GroupShape, shape).shapes, part_id=part_id, warnings=warnings, in_group=True,
         )
     if shape.has_chart or shape.shape_type in {
         MSO_SHAPE_TYPE.IGX_GRAPHIC, MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT,
@@ -38,7 +42,7 @@ def _extract_shape(shape: BaseShape, *, order: int, part_id: str, warnings: list
     }:
         warnings.append(f"{object_id}：仅提取对象外框，未展开图表、SmartArt或嵌入内容。")
     table_rows = (
-        [[cell.text for cell in row.cells] for row in shape.table.rows]
+        [[cell.text for cell in row.cells] for row in cast(GraphicFrame, shape).table.rows]
         if shape.has_table else []
     )
     return {
@@ -56,7 +60,7 @@ def _extract_shape(shape: BaseShape, *, order: int, part_id: str, warnings: list
         "is_placeholder": shape.is_placeholder,
         "placeholder_idx": placeholder.idx if placeholder is not None else None,
         "placeholder_type": placeholder.type.name if placeholder is not None else None,
-        "text": shape.text_frame.text if shape.has_text_frame else None,
+        "text": cast(Shape, shape).text_frame.text if shape.has_text_frame else None,
         "table_rows": table_rows,
         "children": children,
     }

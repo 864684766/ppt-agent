@@ -13,9 +13,13 @@ def build_chat_response(*, submission: ChatSubmission, task_id: str, result: Mat
                                  url=page["final_url"], truncated=page["truncated"])
                for page in web.get("pages", [])]
     file = result.get("file") or {}
-    return ChatReadResponse(task_id=task_id, message=submission.message, template_key=submission.template_key,
-        status=result["status"], notice=result["message"], analysis=result.get("analysis"),
-        summary=result.get("summary"), summary_inputs=result.get("summary_inputs", []), sources=sources,
-        report=result.get("report"), waiting_question=result.get("waiting_question"),
-        attachment_analyzed=file.get("status") == "completed",
-        attachment_file_name=submission.attachment.file_name if submission.attachment else None, template=template)
+    # 图状态使用可序列化字典；在HTTP边界统一校验嵌套对象、状态及枚举。
+    return ChatReadResponse.model_validate({
+        "task_id": task_id, "message": submission.message, "template_key": submission.template_key,
+        "status": result["status"], "notice": result["message"], "analysis": result.get("analysis"),
+        "summary": result.get("summary"), "outline": result.get("outline"), "outline_error": result.get("outline_error"),
+        "summary_inputs": result.get("summary_inputs", []), "sources": sources,
+        "report": result.get("report"), "waiting_question": result.get("waiting_question"),
+        "attachment_analyzed": file.get("status") == "completed",
+        "attachment_file_name": submission.attachment.file_name if submission.attachment else None, "template": template,
+    })

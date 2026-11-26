@@ -52,7 +52,7 @@ def create_langchain_model(
     model_class = ReasoningCompatibleChatOpenAI if streaming else ChatOpenAI
     return model_class(
         base_url=base_url, api_key=api_key, model=model_name,
-        timeout=timeout_seconds, max_tokens=max_tokens, max_retries=0,
+        timeout=timeout_seconds, max_completion_tokens=max_tokens, max_retries=0,
         http_async_client=http_client, use_responses_api=False,
         streaming=streaming,
         # 异步请求使用外层传入的客户端；空元组让SDK自行创建的客户端不额外注入socket选项。

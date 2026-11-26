@@ -1,6 +1,6 @@
 """限制multipart读取规模，并负责已解析上传资源的生命周期。"""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 
 from anyio import CancelScope
@@ -38,7 +38,7 @@ async def open_chat_form(request: Request, *, max_file_bytes: int) -> AsyncItera
         if size > request_limit:
             raise FileUploadError("file_too_large", "上传请求超过文件大小加64 KiB表单开销的上限。")
 
-    async def bounded_stream() -> AsyncIterator[bytes]:
+    async def bounded_stream() -> AsyncGenerator[bytes, None]:
         # 即使没有或伪造Content-Length，也按实际收到的字节累计检查。
         received = 0
         async for chunk in request.stream():

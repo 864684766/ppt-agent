@@ -46,6 +46,8 @@ class LocalTemplateInspector:
             # 内存字节与hash保持一致；不下载外部链接，不执行嵌入内容。
             payload = path.read_bytes()
             presentation = Presentation(BytesIO(payload))
+            if presentation.slide_width is None or presentation.slide_height is None:
+                raise ValueError("模板缺少页面尺寸。")
             warnings = [
                 "仅提取结构与可读取文字，未渲染或OCR；图片文字、图表数据、SmartArt与嵌入内容未展开。",
                 "母版/版式/页面对象分别返回，背景、主题字体、完整样式继承及视觉效果未解析。",

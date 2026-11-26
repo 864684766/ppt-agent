@@ -64,7 +64,7 @@ boto3==1.43.125及关联约束已锁定实装。凭据仅本机.env配置，SDK 
 ## OSS模板字节读取（2026-11-06）
 
 S3TemplateFileReader实现TemplateFileReader协议，接收宿主client/bucket及object_key/max_bytes，返回真实bytes。
-对get_object.Body使用closing；ContentLength预检查与流式实际下载上限同时执行，失败/超限也关闭流。SDK客户端仍由api/template_resource_dependencies.py的open_template_storage_client管理，目录与下载复用连接组装。
+对get_object.Body使用closing；ContentLength预检查与流式实际下载上限同时执行，失败/超限也关闭流。SDK客户端仍由api/templates/template_resource_dependencies.py的open_template_storage_client管理，目录与下载复用连接组装。
 不解析文件或返回HTTP，不写磁盘/Store；API模板处理取得字节后复用已有PPTX校验和读取器。未增加外部依赖。
 独立模块测试tests/test_s3_template_file_reader.py（SDK Stubber，非HTTP测试）覆盖读取、关闭、实际超限和不存在；真实chat已从OSS读取公司/暑期两份模板。
 

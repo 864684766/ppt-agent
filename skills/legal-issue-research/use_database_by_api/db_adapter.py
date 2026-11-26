@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "db_config.json"
 
