@@ -6,9 +6,11 @@ import asyncio
 from time import perf_counter
 
 from langchain_core.language_models import BaseChatModel
+from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
 from openai import LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
+from domain.materials.material_model_identifiers import MaterialModelIdentifiers
 from models.materials.material_summary import MaterialInputPoint, MaterialSummary
 
 logger = logging.getLogger(__name__)
@@ -36,19 +38,21 @@ class MaterialSummaryAgent:
         """最终汇总同时生成可选大纲；大量要点仍需先分批处理。"""
         if not question.strip() or not points:
             raise ValueError("用户问题和资料要点不能为空。")
-        ids = {point.point_id for point in points}
-        if len(ids) != len(points):
-            raise ValueError("资料要点编号必须在本次汇总中唯一。")
-        data = [{"point_ids": [point.point_id], "content": point.content} for point in points]
+        # 内部使用短编号减少模型输入和输出；返回前恢复原编号，来源追溯不变。
+        identifiers = MaterialModelIdentifiers(points)
+        data = identifiers.model_data()
+        ids = set(identifiers.source_map())
         if final and not self._final_prompt.strip():
             raise ValueError("缺少最终汇总提示词。")
         # 总预算覆盖所有批次、拆分和重试，防止流持续输出导致单次任务长时间不结束。
         async with asyncio.timeout(self._timeout_seconds * 4):
             if len(data) > self._batch_size:
                 data = await self._summarize_batches(question, data, ids)
-            source_map = {point.point_id: [f"{ref.kind}:{ref.source_id}" for ref in point.references] for point in points}
-            return await self._call(question, data, ids, final=final, source_map=source_map,
-                                    target_count=target_count, use_current=use_current, include_outline=include_outline)
+            referenced = dict.fromkeys(point_id for item in data for point_id in item["point_ids"])
+            source_map = identifiers.source_map(referenced)
+            result = await self._call(question, data, ids, final=final, source_map=source_map,
+                                      target_count=target_count, use_current=use_current, include_outline=include_outline)
+            return identifiers.restore_summary(result)
 
     async def _summarize_batches(self, question: str, data: list[dict], ids: set[str]) -> list[dict]:
         """限制并发并保持批次顺序；失败时取消并等待其他批次，避免后台继续消耗。"""
@@ -99,16 +103,12 @@ class MaterialSummaryAgent:
                  "include_outline": include_outline}, ensure_ascii=False)
         message = instruction + "\n用户要求：" + question + "\n资料要点：" + json.dumps(data, ensure_ascii=False)
         try:
-            async with asyncio.timeout(self._timeout_seconds):
-                result = await self._model.ainvoke(message)
+            result = await self._invoke_with_retry(message)
         except LengthFinishReasonError:
             if not final or not self._final_retry_prompt.strip():
                 raise
             logger.warning("event=material_final_length_retry")
-            async with asyncio.timeout(self._timeout_seconds):
-                result = await self._model.ainvoke(message + "\n" + self._final_retry_prompt)
-        if not isinstance(result, MaterialSummary):
-            raise ValueError("模型未返回有效的资料汇总。")
+            result = await self._invoke_with_retry(message + "\n" + self._final_retry_prompt)
         if (any(not set(item.point_ids).issubset(allowed & ids) for item in result.points)
                 or any(not set(item.point_ids).issubset(allowed & ids) for item in result.issues)):
             raise ValueError("汇总引用了不存在的要点编号。")
@@ -119,3 +119,20 @@ class MaterialSummaryAgent:
         if not final:
             result.outline = None
         return result
+
+    async def _invoke_with_retry(self, message: str) -> MaterialSummary:
+        """单次超时或连接失败后仅重试当前请求一次；外层总时限仍约束所有批次。"""
+        for attempt in range(2):
+            try:
+                async with asyncio.timeout(self._timeout_seconds):
+                    result = await self._model.ainvoke(message)
+                if not isinstance(result, MaterialSummary):
+                    raise ValueError("模型未返回有效的资料汇总。")
+                return result
+            except (TimeoutError, OpenAITimeoutError, OpenAIConnectionError) as error:
+                if attempt:
+                    raise
+                # 只重试当前批次；已完成的批次仍保存在本轮任务中。
+                kind = "connection" if isinstance(error, OpenAIConnectionError) else "timeout"
+                logger.warning("event=material_model_retry reason=%s max_retries=1", kind)
+        raise RuntimeError("模型调用未返回结果。")

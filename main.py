@@ -73,5 +73,5 @@ if __name__ == "__main__":
     # 本地调试使用单进程，不启用自动重载，便于 PyCharm 在当前进程命中断点。
     import uvicorn
 
-    settings = Settings()
-    uvicorn.run(app, host=settings.app_host, port=settings.app_port)
+    server_settings = Settings()
+    uvicorn.run(app, host=server_settings.app_host, port=server_settings.app_port)
