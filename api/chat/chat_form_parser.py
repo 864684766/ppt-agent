@@ -17,7 +17,7 @@ _MULTIPART_OVERHEAD_BYTES = 64 * 1024
 
 @asynccontextmanager
 async def open_chat_form(request: Request, *, max_file_bytes: int) -> AsyncIterator[FormData]:
-    """接收最多一个附件、message/template_key两个普通字段；退出时释放上传资源。
+    """接收最多一个附件和三个普通字段；退出时释放上传资源。
 
     使用当前锁定Starlette的公开MultiPartParser接口，其parse会在BaseException
     （包含断连和取消）时关闭解析中创建的临时文件；成功后由本上下文关闭FormData。
@@ -49,12 +49,12 @@ async def open_chat_form(request: Request, *, max_file_bytes: int) -> AsyncItera
 
     parser = MultiPartParser(
         headers=request.headers, stream=bounded_stream(),
-        max_files=1, max_fields=2, max_part_size=40000,
+        max_files=1, max_fields=3, max_part_size=40000,
     )
     try:
         form = await parser.parse()
     except MultiPartException:
-        raise FileUploadError("invalid_multipart", "表单不可读取或超出字段/文件限制；仅接受message、单个file和template_key。") from None
+        raise FileUploadError("invalid_multipart", "表单不可读取或超出字段/文件限制。") from None
     try:
         yield form
     finally:

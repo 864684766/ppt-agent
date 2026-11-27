@@ -26,7 +26,8 @@ def _set_result_status(result: ResearchState) -> None:
         result["status"] = "interrupted"
         result["stop_reason"] = "workflow_error"
         result["user_options"] = []
-        descriptions = {"model_connection": "模型连接失败", "model_timeout": "模型请求超时", "execution_failed": "网页处理发生错误"}
+        descriptions = {"model_connection": "模型连接失败", "model_timeout": "模型请求超时",
+                        "model_service_error": "模型服务返回错误", "execution_failed": "网页处理发生错误"}
         reason = descriptions.get(result["workflow_error_kind"], "网页处理发生错误")
         stage = {"fetch": "网页读取或内容提炼阶段", "query": "搜索阶段", "review": "候选检查阶段",
                  "summarize": "网页汇总阶段"}.get(result["workflow_error_stage"] or "", "网页处理阶段")

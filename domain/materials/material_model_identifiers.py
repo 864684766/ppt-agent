@@ -38,9 +38,11 @@ class MaterialModelIdentifiers:
             self._sources_by_alias[alias] = sources
 
     def model_data(self) -> list[dict]:
-        """返回发给模型的要点文本及短编号，不附带文件正文或完整来源编号。"""
-        return [{"point_ids": [self._aliases_by_original[point.point_id]], "content": point.content}
-                for point in self._points]
+        """合并完全相同的要点文字，保留支持它的全部短编号。"""
+        aliases_by_content: dict[str, list[str]] = {}
+        for point in self._points:
+            aliases_by_content.setdefault(point.content, []).append(self._aliases_by_original[point.point_id])
+        return [{"point_ids": aliases, "content": content} for content, aliases in aliases_by_content.items()]
 
     def source_map(self, aliases: Iterable[str] | None = None) -> dict[str, list[str]]:
         """返回短要点编号到短来源编号的映射；未知要点编号会明确报错。

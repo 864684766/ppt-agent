@@ -7,13 +7,24 @@ import asyncio
 from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
 from langchain_openai.chat_models.base import OpenAIConnectionError
+from pydantic import ValidationError
 
-from diagnostics.operation_logging import log_operation
+from diagnostics.operation_logging import log_operation, operation_scope
 from models.web.research_contract import SearchReview
 from models.web.search_web_contract import WebSearchItem
 
 
 logger = logging.getLogger(__name__)
+
+
+def _log_review_parse_failure(error: OutputParserException) -> None:
+    """只记录已知结构字段和错误种类，模型填入的原值可能包含资料正文。"""
+    cause = error.__cause__
+    if isinstance(cause, ValidationError):
+        fields = {*SearchReview.model_fields, "candidate_id", "unmet_requirement"}
+        for issue in cause.errors(include_input=False, include_context=False, include_url=False)[:5]:
+            path = ".".join(str(key) for key in issue["loc"] if isinstance(key, int) or key in fields)
+            logger.warning("event=review_schema_error field=%s kind=%s", path or "root", issue["type"])
 
 
 class ResearchReviewAgent:
@@ -46,12 +57,14 @@ class ResearchReviewAgent:
         # ensure_ascii=False让中文保持可读；候选是待分析数据，不是指令。
         prompt = self._prompt + "\n用户要求：" + question + "\n候选数据：" + json.dumps(candidates, ensure_ascii=False)
         try:
-            result = await self._invoke_with_connection_retry(prompt)
+            logger.info("event=research_review_batch candidate_count=%d", len(candidates))
+            result = await self._invoke_with_connection_retry(prompt, format_attempt=1)
         except OutputParserException:
             # 只重试输出格式，不记录模型原文；两次失败仍抛错，不能伪装为零结果。
             logger.warning("event=research_review_format_retry")
             result = await self._invoke_with_connection_retry(
-                prompt + '\n上次格式不正确。必须输出JSON对象：relevant_ids数组、alternatives对象数组（每项含candidate_id和unmet_requirement）、unmet_requirements数组和feedback字符串。'
+                prompt + '\n上次格式不正确。必须输出JSON对象：relevant_ids数组、alternatives对象数组（每项含candidate_id和unmet_requirement）、unmet_requirements数组和feedback字符串。',
+                format_attempt=2,
             )
         if not isinstance(result, SearchReview):
             raise ValueError("检查模型未返回有效的筛选结果。")
@@ -67,7 +80,7 @@ class ResearchReviewAgent:
         return SearchReview(relevant_ids=relevant_ids, alternatives=alternatives,
                             unmet_requirements=result.unmet_requirements, feedback=result.feedback)
 
-    async def _invoke_with_connection_retry(self, prompt: str) -> SearchReview:
+    async def _invoke_with_connection_retry(self, prompt: str, *, format_attempt: int) -> SearchReview:
         """调用检查模型；连接中断时最多重试两次，最终失败保留原异常。
 
         只处理LangChain包装的OpenAIConnectionError；超时、认证失败、输出长度
@@ -76,10 +89,17 @@ class ResearchReviewAgent:
         """
         for retry in range(3):
             try:
-                result = await self._reviewer.ainvoke(prompt)
-                if not isinstance(result, SearchReview):
-                    raise ValueError("检查模型未返回有效的筛选结果。")
-                return result
+                with operation_scope(logger, "agent.research_review_attempt"):
+                    logger.info("event=research_review_attempt format_attempt=%d connection_attempt=%d input_chars=%d",
+                                format_attempt, retry + 1, len(prompt))
+                    try:
+                        result = await self._reviewer.ainvoke(prompt)
+                    except OutputParserException as error:
+                        _log_review_parse_failure(error)
+                        raise
+                    if not isinstance(result, SearchReview):
+                        raise ValueError("检查模型未返回有效的筛选结果。")
+                    return result
             except OpenAIConnectionError:
                 if retry == 2:
                     logger.warning("event=research_review_connection_retries_exhausted retry_count=%d", retry)

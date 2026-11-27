@@ -13,6 +13,7 @@ from api.chat.chat_response_builder import build_chat_response
 from api.transport.sse_encoder import encode_event
 from diagnostics.operation_logging import operation_scope, safe_error_location
 from models.chat.chat_request import ChatSubmission
+from workflows.materials.material_collection_workflow import PreviousMaterialTaskNotFound
 from integrations.llm.reasoning_stream_handler import ReasoningStreamHandler
 from workflows.web.research_progress import research_progress
 
@@ -49,10 +50,14 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
             attachment = submission.attachment
             result = await workflow.run(thread_id=task_id, question=submission.message,
                 file_name=attachment.file_name if attachment else None,
-                file_content=attachment.content if attachment else None, callbacks=callbacks)
+                file_content=attachment.content if attachment else None, callbacks=callbacks,
+                previous_task_id=submission.previous_task_id)
             response = build_chat_response(submission=submission, task_id=task_id, result=result,
                                            template=template)
             await queue.put(("result", response.model_dump(mode="json")))
+        except PreviousMaterialTaskNotFound:
+            await queue.put(("error", {"task_id": task_id, "code": "previous_task_not_found",
+                                       "message": "找不到可继续的上一轮任务，请确认编号或重新发起对话。"}))
         except HTTPException as error:
             detail: dict[str, Any] = error.detail if isinstance(error.detail, dict) else {}
             await queue.put(("error", {"task_id": task_id, "code": detail.get("code", "request_failed"),
@@ -64,6 +69,7 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
             research_progress.reset(token)
 
     with operation_scope(logger, "chat.stream"):
+        logger.info("event=chat_task_started task_id=%s", task_id)
         task = asyncio.create_task(execute())
         try:
             yield encode_event("start", {"task_id": task_id})

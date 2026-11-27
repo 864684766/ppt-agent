@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 async def get_chat_submission(request: Request) -> ChatSubmission:
     """将两种HTTP请求转换成内部输入，上传句柄在退出表单时关闭。
 
-    JSON接受message和可选template_key；multipart再允许可选file。文件字节
+    JSON接受message和可选template_key、previous_task_id；multipart再允许可选file。文件字节
     拷贝到本请求后关闭表单句柄，不在API层缓存供以后查询。
     """
     try:
@@ -48,7 +48,7 @@ async def _parse_json(request: Request) -> ChatSubmission:
     try:
         parameters = ChatRequest.model_validate(json.loads(body))
     except (ValueError, UnicodeError, ValidationError):
-        raise FileUploadError("invalid_message", "JSON需要1–10000字符的非空message，可选template_key（最多1024字符）。") from None
+        raise FileUploadError("invalid_message", "JSON需要非空message；可选template_key和上一轮的previous_task_id。") from None
     return ChatSubmission(**parameters.model_dump())
 
 
@@ -61,14 +61,15 @@ async def _parse_multipart(request: Request) -> ChatSubmission:
     async with open_chat_form(request, max_file_bytes=settings.upload_max_file_bytes) as form:
         items = form.multi_items()
         names = [name for name, _ in items]
-        if len(names) != len(set(names)) or "message" not in names or not set(names) <= {"message", "file", "template_key"}:
-            raise FileUploadError("invalid_fields", "仅接受message、可选file和可选template_key，不能有重复或其他字段。")
+        if len(names) != len(set(names)) or "message" not in names or not set(names) <= {"message", "file", "template_key", "previous_task_id"}:
+            raise FileUploadError("invalid_fields", "仅接受message、file、template_key和previous_task_id，每个字段最多出现一次。")
         try:
             parameters = ChatRequest.model_validate({
                 "message": form["message"], "template_key": form.get("template_key"),
+                "previous_task_id": form.get("previous_task_id"),
             })
         except ValidationError:
-            raise FileUploadError("invalid_message", "message必须为1–10000字符的非空文本；template_key须为最多1024字符的文本。") from None
+            raise FileUploadError("invalid_message", "请检查message、template_key和上一轮的previous_task_id。") from None
         if "file" not in form:
             return ChatSubmission(**parameters.model_dump())
         upload = form["file"]

@@ -32,7 +32,7 @@ class SearchReview(BaseModel):
     """检查模型的结果；相关仅指摘要初筛，不表示事实或来源已核实。"""
 
     # 必填；无合适候选时为[]。工作流会再次检查ID是否属于本轮候选。
-    relevant_ids: list[str] = Field(description="与用户要求直接相关的候选编号列表，不确定时排除。")
+    relevant_ids: list[str] = Field(description="标题或摘要能提供相关主题或背景、且符合明确来源限制的候选编号。")
     # 备用候选仅供后续用户决定；不能自动当作符合原始要求的资料。
     alternatives: list[AlternativeCandidate] = Field(description="主题相关但不满足明确限定的候选及原因；没有时为空数组。")
     # 记录当前批次尚未满足的要求；不是对整个互联网的结论。
@@ -65,7 +65,7 @@ class ResearchState(TypedDict):
     provided_urls_only: bool  # 用户明确提供网址时优先读取其同站链接，不自动扩展互联网搜索。
     defer_user_question: bool  # True时资料不足由上层判断，网页图不生成问题、不暂停；默认False。
     workflow_error_stage: str | None  # 图执行失败的节点名；无故障为None，不包含异常原文。
-    workflow_error_kind: str | None  # 固定分类model_connection/model_timeout/execution_failed；无故障为None。
+    workflow_error_kind: str | None  # model_connection、model_timeout、model_service_error或execution_failed；无故障为None。
     target_count: int  # 期望有效网页来源数；不是保证找到的数量。
     max_attempts: int  # 搜索总次数上限，每轮由服务器选择引擎。
     max_pages: int  # 网页读取次数上限，包含失败。

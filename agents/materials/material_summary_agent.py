@@ -1,14 +1,16 @@
 """汇总已提炼资料；只处理要点，不读取文件或网页正文。"""
 
+import asyncio
 import json
 import logging
-import asyncio
 from time import perf_counter
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
 from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
 from openai import LengthFinishReasonError
+from pydantic import ValidationError
 
 from diagnostics.operation_logging import log_operation
 from domain.materials.material_model_identifiers import MaterialModelIdentifiers
@@ -16,6 +18,11 @@ from models.materials.material_summary import MaterialInputPoint, MaterialMerged
 from models.outlines.presentation_outline import OutlineBullet, OutlineSlide, PresentationOutline
 
 logger = logging.getLogger(__name__)
+
+
+class MaterialSummaryOutputError(ValueError):
+    """模型返回的结构或引用无效，调用方可根据已提炼资料编排草稿。"""
+
 
 class MaterialSummaryAgent:
     """汇总资料并按需形成大纲；模型资源由调用方管理。"""
@@ -33,6 +40,7 @@ class MaterialSummaryAgent:
         # 以紧凑 JSON 的字符数估算输入规模，避免少量短内容被拆成很多批。
         self._batch_char_budget = min(12_000, output_tokens)
         self._timeout_seconds = timeout_seconds
+        self._final_call_timeout = min(60, timeout_seconds)
         self._batch_concurrency = batch_concurrency
 
     @log_operation("agent.material_summary")
@@ -48,8 +56,9 @@ class MaterialSummaryAgent:
         ids = set(identifiers.source_map())
         if final and not self._final_prompt.strip():
             raise ValueError("缺少最终汇总提示词。")
-        # 总预算覆盖所有批次、拆分和重试，防止流持续输出导致单次任务长时间不结束。
-        async with asyncio.timeout(self._timeout_seconds * 4):
+        # 聊天汇总的总时限覆盖分批、拆分和重试，避免逐批等待数分钟后才交付。
+        summary_timeout = self._final_call_timeout * 2 if final else self._timeout_seconds * 4
+        async with asyncio.timeout(summary_timeout):
             batches = self._split_batches(data)
             if len(batches) > 1:
                 data = await self._summarize_batches(question, batches, ids)
@@ -59,6 +68,11 @@ class MaterialSummaryAgent:
             source_map = identifiers.source_map(referenced)
             result = await self._call(question, data, ids, final=final, source_map=source_map,
                                       target_count=target_count, use_current=use_current, include_outline=include_outline)
+            if final and include_outline and not result.outline and (use_current or not result.issues):
+                raise MaterialSummaryOutputError("模型未返回大纲或资料缺口。")
+            if final:
+                logger.info("event=material_final_result points=%d slides=%d issues=%d", len(result.points),
+                            len(result.outline.slides) if result.outline else 0, len(result.issues))
             return identifiers.restore_summary(result)
 
     def _split_batches(self, data: list[dict]) -> list[list[dict]]:
@@ -144,10 +158,13 @@ class MaterialSummaryAgent:
                 raise
             logger.warning("event=material_final_length_retry")
             response = await self._invoke_with_retry(model, message + "\n" + self._final_retry_prompt, retry_connection=False)
-        result = self._to_summary(response, data)
+        try:
+            result = self._to_summary(response, data)
+        except ValidationError as error:
+            raise MaterialSummaryOutputError("模型返回的大纲结构无效。") from error
         if (any(not set(point.point_ids).issubset(allowed) for point in result.points)
                 or any(not set(issue.point_ids).issubset(allowed) for issue in result.issues)):
-            raise ValueError("汇总或大纲引用了不存在的要点编号。")
+            raise MaterialSummaryOutputError("汇总或大纲引用了不存在的要点编号。")
         return result
 
     @staticmethod
@@ -159,24 +176,26 @@ class MaterialSummaryAgent:
             slides = []
             for section in response.sections:
                 if any(key not in bullets for key in section.keys):
-                    raise ValueError("大纲引用了不存在的要点编号。")
+                    raise MaterialSummaryOutputError("大纲引用了不存在的要点编号。")
                 slides.append(OutlineSlide(role="content", title=section.title,
-                    bullets=[bullets[key] for key in dict.fromkeys(section.keys)]))
+                    bullets=[bullets[key].model_copy(deep=True) for key in dict.fromkeys(section.keys)]))
             outline = PresentationOutline(title=response.title, slides=slides)
             points = [MaterialMergedPoint(content=bullet.content, point_ids=bullet.point_ids.copy())
                       for slide in slides for bullet in slide.bullets]
             return MaterialSummary(points=points, issues=response.issues, outline=outline)
         if isinstance(response, (MaterialSummary, MaterialOutlineDraft)):
             return MaterialSummary(points=response.points, issues=response.issues)
-        raise ValueError("模型未返回有效的资料汇总。")
+        raise MaterialSummaryOutputError("模型未返回有效的资料汇总。")
 
     async def _invoke_with_retry(self, model: Runnable, message: str, *, retry_connection: bool) -> object:
         """中间批次遇到超时或连接失败可重试一次，最终生成由调用方决定如何交付。"""
         for attempt in range(1 + int(retry_connection)):
             try:
-                deadline = self._timeout_seconds if retry_connection else min(60, self._timeout_seconds)
+                deadline = self._timeout_seconds if retry_connection else self._final_call_timeout
                 async with asyncio.timeout(deadline):
                     return await model.ainvoke(message)
+            except (OutputParserException, ValidationError) as error:
+                raise MaterialSummaryOutputError("模型返回的汇总格式无效。") from error
             except (TimeoutError, OpenAITimeoutError, OpenAIConnectionError) as error:
                 if attempt or not retry_connection:
                     raise

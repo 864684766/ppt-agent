@@ -4,8 +4,8 @@ import json
 import logging
 
 from langchain_core.language_models import BaseChatModel
-from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
-from openai import LengthFinishReasonError
+from langchain_openai.chat_models.base import OpenAIAPIError, OpenAIConnectionError, OpenAITimeoutError
+from openai import InternalServerError, LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
 from models.web.web_research_summary import WebPageExtraction
@@ -50,5 +50,11 @@ class WebpageExtractionAgent:
         except (OpenAITimeoutError, OpenAIConnectionError, TimeoutError) as error:
             kind = "timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else "connection"
             logger.warning("event=webpage_extraction_retry reason=%s max_retries=1", kind)
+            return await self._page_model.ainvoke(prompt)
+        except OpenAIAPIError as error:
+            # LangChain 将供应商的 5xx 包装成 OpenAIAPIError；仅对该错误重试当前分段。
+            if not isinstance(error.__cause__, InternalServerError):
+                raise
+            logger.warning("event=webpage_extraction_retry reason=server_error max_retries=1")
             return await self._page_model.ainvoke(prompt)
 

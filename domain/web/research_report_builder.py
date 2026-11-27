@@ -42,7 +42,8 @@ def _content_issues(state: ResearchState, *, usable: bool) -> list[ResearchIssue
         issues.append({"type": "workflow_failed", "message": state["message"], "candidate_ids": []})
     if not usable and stop not in {"summary_length_exceeded", "workflow_error"}:
         issues.append({"type": "no_usable_content", "message": "当前没有整理出可用的网页正文内容。", "candidate_ids": []})
-    if state["effective_count"] < state["target_count"] and stop not in {"summary_length_exceeded", "workflow_error", "summary_deferred"}:
+    if (not state["defer_user_question"] and state["effective_count"] < state["target_count"]
+            and stop not in {"summary_length_exceeded", "workflow_error", "summary_deferred"}):
         issues.append({"type": "source_count_insufficient", "message": f"当前有{state['effective_count']}个有效网页来源，目标为{state['target_count']}个。", "candidate_ids": []})
     if state["provided_urls_only"] and state["read_index"] < len(state["accepted"]) and state["read_index"] >= state["max_pages"]:
         issues.append({"type": "followup_unread", "message": "网页读取次数达到上限，仍有选中的相关链接未读取。",

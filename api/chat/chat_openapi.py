@@ -20,6 +20,7 @@ CHAT_REQUEST_BODY = {"requestBody": {"required": True, "content": {
         "properties": {
             "message": ChatRequest.model_json_schema()["properties"]["message"],
             "template_key": ChatRequest.model_json_schema()["properties"]["template_key"],
+            "previous_task_id": ChatRequest.model_json_schema()["properties"]["previous_task_id"],
             "file": {"type": "string", "format": "binary", "description": "可选单个参考文件；需求分析选择文件时解析和提炼。"},
         },
     }},

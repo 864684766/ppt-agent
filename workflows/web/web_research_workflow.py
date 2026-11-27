@@ -9,7 +9,7 @@ from uuid import uuid4
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.runnables import RunnableConfig
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
+from langchain_openai.chat_models.base import OpenAIAPIError, OpenAIConnectionError, OpenAITimeoutError
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -119,8 +119,10 @@ class WebResearchWorkflow:
             return {"attempt": state["attempt"] + 1, "query": "", "candidates": [], "review_batches": [],
                     "failed_attempts": state["failed_attempts"] + 1,
                     "feedback": "上次搜索调用失败，请重新尝试。"}
-        # 每批最多两条：列表切片允许最后一批不足两条，不会遗漏候选。
-        batches = [candidates[index:index + 2] for index in range(0, len(candidates), 2)]
+        # 聊天搜索每轮最多五条候选，先整批检查，便于模型比较不同子主题。
+        # 输出超限时检查节点仍可二分。独立网页研究保留原有两条一批。
+        batch_size = 5 if state["defer_user_question"] else 2
+        batches = [candidates[index:index + batch_size] for index in range(0, len(candidates), batch_size)]
         return {"attempt": state["attempt"] + 1, "query": query, "candidates": candidates, "review_batches": batches}
 
     async def _review(self, state: ResearchState) -> dict[str, Any]:
@@ -137,7 +139,7 @@ class WebResearchWorkflow:
         batch, remaining = state["review_batches"][0], state["review_batches"][1:]
         try:
             review = await self._review_agent.review(question=state["question"], candidates=batch)
-        except OpenAITimeoutError:
+        except (OpenAITimeoutError, TimeoutError):
             # 当前批次及后续批次均尚未完成；按编号去重，不能误称不相关。
             pending = {item["candidate_id"]: item for group in state["review_batches"] for item in group}
             logger.warning("event=research_review_timeout unfinished_count=%d", len(pending))
@@ -256,9 +258,9 @@ class WebResearchWorkflow:
             # 分组启动请求。当前组失败后保留已完成分段，后续组不再启动。
             results = await asyncio.gather(*(extract(index * 3000) for index in range(start, stop)),
                                            return_exceptions=True)
-            failure: tuple[int, BaseException] | None = None
+            failure: tuple[int, Exception] | None = None
             for index, part in enumerate(results, start + 1):
-                if isinstance(part, (OpenAITimeoutError, OpenAIConnectionError, TimeoutError)):
+                if isinstance(part, Exception):
                     if failure is None:
                         failure = (index, part)
                 elif isinstance(part, BaseException):
@@ -268,8 +270,11 @@ class WebResearchWorkflow:
                     links.extend(part.follow_links)
             if failure:
                 index, error = failure
-                kind = "model_connection" if isinstance(error, OpenAIConnectionError) else "model_timeout"
-                logger.warning("event=webpage_segment_incomplete segment=%d total=%d reason=%s", index, total_chunks, kind)
+                kind = ("model_connection" if isinstance(error, OpenAIConnectionError) else
+                        "model_timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else
+                        "model_service_error" if isinstance(error, OpenAIAPIError) else "execution_failed")
+                logger.warning("event=webpage_segment_incomplete segment=%d total=%d reason=%s error_location=%s",
+                               index, total_chunks, kind, safe_error_location(error))
                 raise PartialPageExtractionError(
                     extraction=WebPageExtraction(points=points, follow_links=links), kind=kind,
                 ) from error

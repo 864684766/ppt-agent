@@ -10,4 +10,4 @@ API 层负责 HTTP 接入、传输及运行资源的组装；资料规则和模�
 | `templates/` | 模板资源接口的存储客户端和目录组装。 |
 | `transport/` | HTTP 请求日志中间件和通用 SSE 编码。 |
 
-`main.py` 负责应用生命周期并持有运行资源。SSE 接口为 `/ppt-agent/v1/chat/stream`；回答恢复等未接入功能不因目录整理而实现。具体请求方式见 [接口调试说明](../docs/调试/接口调试说明.md)。
+`main.py` 负责应用生命周期并持有运行资源。SSE 接口为 `/ppt-agent/v1/chat/stream`。续轮请求携带 `previous_task_id`，从当前进程的资料检查点读取已提炼要点，生成本轮结果。[接口调试说明](../docs/调试/接口调试说明.md)

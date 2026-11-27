@@ -3,6 +3,7 @@
 from uuid import uuid4
 import asyncio
 import logging
+from collections.abc import Set
 from typing import cast
 
 from langchain_core.runnables import RunnableConfig
@@ -12,22 +13,27 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from agents.materials.file_extraction_agent import FileExtractionAgent
-from agents.materials.material_summary_agent import MaterialSummaryAgent
+from agents.materials.material_summary_agent import MaterialSummaryAgent, MaterialSummaryOutputError
 from agents.materials.request_analysis_agent import RequestAnalysisAgent
 from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
 from openai import LengthFinishReasonError
 from diagnostics.operation_logging import log_operation, safe_error_location
-from domain.materials.material_summary_inputs import file_summary_points, web_summary_points
 from domain.materials.material_outline_draft import draft_from_material_points
+from domain.materials.material_summary_inputs import file_summary_points, web_summary_points
 from domain.web.provided_web_addresses import provided_web_candidates
 from models.interaction.user_question import UserQuestion
 from models.materials.file_extraction import FileExtraction
 from models.materials.material_collection_state import MaterialCollectionState
+from models.materials.material_summary import MaterialInputPoint
 from workflows.interaction.ask_user import ask_user
 from workflows.web.web_research_workflow import WebResearchWorkflow
 from workflows.web.research_progress import notify_progress
 
 logger = logging.getLogger(__name__)
+
+
+class PreviousMaterialTaskNotFound(ValueError):
+    """上一轮任务不存在，或尚未形成可供续接的结果。"""
 
 
 class MaterialCollectionWorkflow:
@@ -63,8 +69,9 @@ class MaterialCollectionWorkflow:
     @log_operation("workflow.material_collection")
     async def run(self, *, thread_id: str, question: str, file_name: str | None = None,
                   file_content: bytes | None = None, allow_web: bool | None = None,
-                  callbacks: list[BaseCallbackHandler] | None = None) -> MaterialCollectionState:
-        """按需求收集资料；回调只作用于本次调用，附件保存在内存检查点。"""
+                  callbacks: list[BaseCallbackHandler] | None = None,
+                  previous_task_id: str | None = None) -> MaterialCollectionState:
+        """收集一轮资料。指定上一轮时，沿用提炼要点和来源并创建新检查点。"""
         if not thread_id.strip() or not question.strip():
             raise ValueError("任务编号和用户问题不能为空。")
         if (file_name is None) != (file_content is None) or (file_name is not None and not file_name.strip()):
@@ -74,7 +81,16 @@ class MaterialCollectionWorkflow:
             config["callbacks"] = callbacks
         if (await self._graph.aget_state(config)).values:
             raise ValueError("任务编号已存在。")
+        previous = await self._previous_materials(previous_task_id) if previous_task_id else {}
+        file_sources = dict(previous.get("file_sources", {}))
+        source_id = None
+        if file_name is not None:
+            source_id = "uploaded_file" if not file_sources else f"uploaded_file_{thread_id}"
+            file_sources[source_id] = file_name
         state: MaterialCollectionState = {"question": question, "allow_web": allow_web, "analysis": None, "question_kind": None, "use_current": False,
+            "prior_topic": previous.get("prior_topic", ""), "prior_inputs": previous.get("prior_inputs", []),
+            "prior_pages": previous.get("prior_pages", []), "file_sources": file_sources,
+            "file_source_id": source_id,
             "file_name": file_name, "file_content": file_content,
             "target_count": self._target_count, "web": None, "file": None, "summary": None,
             "summary_inputs": [], "outline": None, "outline_error": None,
@@ -100,10 +116,30 @@ class MaterialCollectionWorkflow:
         result["file_content"] = None
         return cast(MaterialCollectionState, result)
 
+    async def _previous_materials(self, task_id: str) -> dict:
+        """从检查点复制资料。等待澄清或补充的轮次也可以接收新一轮消息。"""
+        snapshot = await self._graph.aget_state({"configurable": {"thread_id": task_id}})
+        previous = snapshot.values
+        if previous.get("status") not in {"completed", "interrupted", "awaiting_user"}:
+            raise PreviousMaterialTaskNotFound
+        pages = {page["candidate_id"]: page for page in previous.get("prior_pages", [])}
+        pages.update({page["candidate_id"]: page for page in (previous.get("web") or {}).get("pages", [])})
+        topic = previous.get("prior_topic") or previous["question"]
+        return {"prior_topic": topic, "prior_inputs": previous.get("summary_inputs") or previous.get("prior_inputs", []),
+                "prior_pages": list(pages.values()), "file_sources": previous.get("file_sources", {})}
+
+    @staticmethod
+    def _turn_question(state: MaterialCollectionState) -> str:
+        """保留前轮主题，续轮新增的要求排在最后。"""
+        previous = state["prior_topic"]
+        if not previous:
+            return state["question"]
+        return f"原始主题：{previous}\n本轮用户要求：{state['question']}"
+
     async def _analyze(self, state: MaterialCollectionState) -> dict:
         """先判断需求；分析失败直接中断，不进入资料收集。"""
         notify_progress("analyze")
-        outcome = await self._request.analyze(message=state["question"], has_file=state["file_name"] is not None,
+        outcome = await self._request.analyze(message=self._turn_question(state), has_file=state["file_name"] is not None,
                                               allow_web=state["allow_web"])
         data = outcome.model_dump()
         if outcome.status != "completed" or outcome.plan is None:
@@ -158,15 +194,21 @@ class MaterialCollectionWorkflow:
         """先收集网页，不让网页子图提前询问；子图编号独立于上层编号。"""
         task_id = config["configurable"]["thread_id"]
         try:
+            # 只有本轮明确提供的地址可以触发直接读取；前轮主题仅用于搜索上下文。
             question = state["question"]
+            if state["prior_topic"]:
+                topic = state["prior_topic"]
+                for item in provided_web_candidates(topic):
+                    topic = topic.replace(item["url"], "")
+                question = f"上一轮主题：{topic}\n本轮需要补充：{question}"
             file = state["file"]
             analysis = state["analysis"]
             if file and analysis and analysis.get("plan") and analysis["plan"]["execution_order"] == "file_then_web":
                 points = file.get("points", [])
                 if not points:
                     return {"status": "interrupted", "message": "文件未提炼出可用于搜索的内容。"}
-                context = "\n".join(item["content"] for item in points)[:4000]
-                question += "\n请根据以下文件要点确定搜索主题：\n" + context
+                file_context = "\n".join(item["content"] for item in points)[:4000]
+                question += "\n请根据以下文件要点确定搜索主题：\n" + file_context
             web = await self._web.run(thread_id=f"material-web-{task_id}", question=question,
                                       target_count=state["target_count"], defer_user_question=True)
             return {"web": web}
@@ -189,37 +231,29 @@ class MaterialCollectionWorkflow:
             return {"status": "interrupted", "message": "文件提炼失败，请检查日志。", "file_content": None}
 
     async def _summarize(self, state: MaterialCollectionState) -> dict:
-        """仅完整阶段可进入汇总；故障与资料不足分开处理。"""
+        """合并跨轮要点并生成当轮大纲，来源目标与获取故障记入报告。"""
         web = state["web"]
         file = FileExtraction.model_validate(state["file"]) if state["file"] else None
-        # 先保留已成功提炼的要点；后续阶段失败不表示此前资料为空。
-        points = web_summary_points(extractions=web["page_extractions"]) if web else []
-        if file and file.status == "completed":
-            points.extend(file_summary_points(extraction=file, source_id="uploaded_file"))
+        points = self._collected_points(state, file)
         partial_inputs = [item.model_dump() for item in points]
-        if state["status"] == "interrupted":
-            return {"summary_inputs": partial_inputs}
-        if web and (web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]):
-            return {"status": "interrupted", "message": web["message"], "summary_inputs": partial_inputs}
-        if file and file.status != "completed":
-            return {"status": "interrupted", "message": "文件处理未完成；已有结果已保留。", "summary_inputs": partial_inputs}
         if not points:
+            if state["status"] == "interrupted":
+                return {"summary_inputs": []}
+            if web and (web["status"] == "interrupted" or web["stop_reason"] == "search_failed" or web["unreviewed"]):
+                return {"status": "interrupted", "message": web["message"], "summary_inputs": []}
+            if file and file.status != "completed":
+                return {"status": "interrupted", "message": "文件提炼未完成，暂时没有可编排的要点。", "summary_inputs": []}
             return {"summary_inputs": []}
-        # 指定资料按用户提供的来源判断。网页的可选跟进链接单独保留在报告中。
-        target = self._source_target(state)
-        source_count = len({(ref.kind, ref.source_id) for point in points for ref in point.references})
-        include_outline = state["use_current"] or (source_count >= target and self._requested_pages_read(state))
         notify_progress("summarize")
         try:
-            summary = await self._summary.summarize(question=state["question"], points=points,
-                final=True, target_count=target, use_current=state["use_current"],
-                include_outline=include_outline)
+            summary = await self._summary.summarize(question=self._turn_question(state), points=points,
+                final=True, target_count=self._source_target(state), use_current=state["use_current"])
         except Exception as error:
             logger.error("event=material_summary_failed error_location=%s", safe_error_location(error))
             code = ("model_timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else
                     "model_connection" if isinstance(error, OpenAIConnectionError) else
                     "output_too_long" if isinstance(error, LengthFinishReasonError) else "generation_failed")
-            if not include_outline or code == "generation_failed":
+            if code == "generation_failed" and not isinstance(error, MaterialSummaryOutputError):
                 return {"status": "interrupted", "message": "资料汇总和大纲生成未完成，已保留原始提炼要点。",
                         "outline_error": code, "summary_inputs": partial_inputs}
             summary = draft_from_material_points(points)
@@ -228,8 +262,38 @@ class MaterialCollectionWorkflow:
                         "outline_error": code, "summary_inputs": partial_inputs}
             return {"summary": summary.model_dump(exclude={"outline"}), "outline": summary.outline.model_dump(),
                     "outline_error": code, "summary_inputs": partial_inputs}
+        if summary.outline is None and summary.points:
+            # 模型确认了可用内容但没有分页时，从其选出的依据组织草稿，保留缺口。
+            selected = {point_id for point in summary.points for point_id in point.point_ids}
+            draft = draft_from_material_points([point for point in points if point.point_id in selected])
+            return {"summary": summary.model_dump(exclude={"outline"}), "outline": draft.outline.model_dump() if draft.outline else None,
+                    "outline_error": "generation_failed", "summary_inputs": partial_inputs}
         return {"summary": summary.model_dump(exclude={"outline"}), "outline": summary.outline.model_dump() if summary.outline else None,
                 "outline_error": None, "summary_inputs": partial_inputs}
+
+    @staticmethod
+    def _collected_points(state: MaterialCollectionState, file: FileExtraction | None) -> list[MaterialInputPoint]:
+        """沿用旧编号。同一网页跨轮重新提炼时追加新要点，保留不同内容。"""
+        points = [MaterialInputPoint.model_validate(item) for item in state["prior_inputs"]]
+        web = state["web"]
+        additions = web_summary_points(extractions=web["page_extractions"]) if web else []
+        if file and state["file_source_id"]:
+            additions.extend(file_summary_points(extraction=file, source_id=state["file_source_id"], allow_partial=True))
+        if not points:
+            return additions
+        used_ids = {point.point_id for point in points}
+        seen = {(ref.kind, ref.source_id, point.content) for point in points for ref in point.references}
+        for point in additions:
+            reference = point.references[0]
+            key = (reference.kind, reference.source_id, point.content)
+            if point.references[0].kind == "web" and key in seen:
+                continue
+            if point.point_id in used_ids:
+                point.point_id += f":{len(points) + 1}"
+            points.append(point)
+            used_ids.add(point.point_id)
+            seen.add(key)
+        return points
 
     @staticmethod
     def _source_target(state: MaterialCollectionState) -> int:
@@ -244,15 +308,21 @@ class MaterialCollectionWorkflow:
         return state["target_count"]
 
     @staticmethod
-    def _requested_pages_read(state: MaterialCollectionState) -> bool:
-        """明确指定的网址必须读取成功。跟进链接是补充资料，未读时只在报告提醒。"""
+    def _covers_requested_sources(state: MaterialCollectionState, sources: Set[tuple[str, str]]) -> bool:
+        """明确指定的文件及网址应各有引用，补充链接不能替代指定资料。"""
+        plan = (state["analysis"] or {}).get("plan") or {}
+        mode = plan.get("source_mode")
+        if mode in {"file", "both"} and state["file_source_id"] and ("file", state["file_source_id"]) not in sources:
+            return False
+        if mode == "both" and not any(kind == "web" for kind, _ in sources):
+            return False
         web = state["web"]
         if not web or not web.get("provided_urls_only"):
             return True
         requested = {item["url"] for item in provided_web_candidates(state["question"])}
-        read = {page["requested_url"] for page in web["pages"]}
-        read.update(page["final_url"] for page in web["pages"])
-        return requested <= read
+        cited_urls = {url for page in web["pages"] if ("web", page["candidate_id"]) in sources
+                      for url in (page["requested_url"], page["final_url"])}
+        return requested <= cited_urls
 
     @staticmethod
     def _finalize(state: MaterialCollectionState) -> dict:
@@ -262,49 +332,46 @@ class MaterialCollectionWorkflow:
         sources = {(ref["kind"], ref["source_id"]) for item in state["summary_inputs"]
                    if item["point_id"] in referenced for ref in item["references"]}
         issues = list((summary or {}).get("issues", []))
-        content_issues = issues.copy()
         target = MaterialCollectionWorkflow._source_target(state)
-        requested_pages_read = MaterialCollectionWorkflow._requested_pages_read(state)
         web = state["web"]
         file = state["file"]
         web_report = web.get("report") if web else None
         if web_report:
             issues.extend({"type": "content_gap", "message": issue["message"], "point_ids": []}
                           for issue in web_report["issues"]
-                          if web and web.get("provided_urls_only") and issue["type"] in {
-                              "followup_unread", "webpage_read_failed"})
+                          if issue["type"] in {"followup_unread", "webpage_read_failed", "search_failed",
+                                              "search_partially_failed", "workflow_failed", "review_timeout", "review_unfinished"})
+        if file and file.get("report") and file["status"] != "completed":
+            issues.append({"type": "content_gap", "message": file["report"]["message"], "point_ids": []})
+        if state["status"] == "interrupted" and state["outline"]:
+            issues.append({"type": "content_gap", "message": state["message"], "point_ids": []})
+        if state["outline"] and not MaterialCollectionWorkflow._covers_requested_sources(state, sources):
+            issues.append({"type": "source_requirement", "message": "本版大纲尚未覆盖全部指定资料。", "point_ids": []})
         report = {"web": web["report"] if web else None,
                   "file": file["report"] if file else None,
-                  "source_count": None if state["status"] == "interrupted" else len(sources),
+                  "source_count": len(sources) if state["outline"] or state["status"] != "interrupted" else None,
                   "target_source_count": target, "issues": issues}
+        if state["outline"]:
+            if state["outline_error"]:
+                reason = {"model_timeout": "超时", "model_connection": "连接失败",
+                          "output_too_long": "输出超限"}.get(state["outline_error"], "失败")
+                return {"status": "interrupted", "message": f"模型整理{reason}，已按提炼顺序生成带来源的草稿。",
+                        "report": report, "waiting_question": None}
+            message = ("已根据现有资料生成大纲，可继续补充完善。"
+                       if issues or len(sources) < target else "大纲已生成。")
+            return {"status": "completed", "message": message, "report": report, "waiting_question": None}
         if state["status"] == "interrupted":
             return {"report": report, "waiting_question": None}
-        enough = len(sources) >= target and requested_pages_read
-        if summary and summary["points"] and (enough or state["use_current"]):
-            if state["outline"]:
-                message = "大纲已生成。"
-                if state["outline_error"]:
-                    reason = {"model_timeout": "超时", "model_connection": "连接失败",
-                              "output_too_long": "输出超限"}.get(state["outline_error"], "失败")
-                    message = f"模型整理{reason}，已按提炼顺序生成带来源的草稿。"
-                elif issues or state["use_current"]:
-                    message = "已根据现有资料生成大纲。请查看报告中的覆盖范围和缺口。"
-                return {"status": "completed", "message": message, "report": report, "waiting_question": None}
-            if not content_issues:
-                return {"status": "interrupted", "message": "资料汇总已完成，模型未返回有效大纲。",
-                        "outline_error": "generation_failed", "report": report, "waiting_question": None}
         options = ["provide_materials"]
         if summary and summary["points"]:
             options.append("use_current")
         options.append("end_conversation")
-        details = [f"已引用{len(sources)}个来源，目标为{target}个。"]
+        details = ["本轮没有形成可用大纲。"]
         details.extend(item["message"] for item in issues[:3])
-        if summary and summary["points"]:
-            details.append("使用现有资料时PPT可能少于8–12页。")
-        question = {"question_id": uuid4().hex, "question": "资料不足，请选择补充资料或其他可用操作。",
+        question = {"question_id": uuid4().hex, "question": "本轮暂无可用大纲，可以继续补充资料。",
                     "reason": " ".join(details)[:1000],
                     "options": options, "allow_free_text": False}
-        return {"status": "awaiting_user", "message": "资料不足，等待用户决定。", "report": report, "question_kind": "materials", "outline": None,
+        return {"status": "awaiting_user", "message": "本轮暂无可用大纲，可在下一轮补充资料。", "report": report, "question_kind": "materials", "outline": None,
                 "waiting_question": question}
 
     @staticmethod

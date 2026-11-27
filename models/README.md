@@ -92,7 +92,7 @@ list_project_materials 执行查询 → MaterialPage
 用户问题＋附件 → HTTP接收并关闭表单句柄 → 需求分析 → 选择文件时校验、读取和提炼 → 汇总 → ChatReadResponse。
 不长期保存原文件，不创建项目/会话/资料目录Store，也不直接调用模型。DocumentBlock编号仅本次读取唯一。
 之前的项目目录/落盘设计已按用户最新要求延期；MaterialSummary/MaterialFragment等既有工具结构暂时保留，尚未接收当前附件数据，不能当作已接线。
-ChatAttachmentInput由接收层创建，包含原始bytes（禁止序列化/日志）；ChatSubmission仅内部使用，JSON客户端只能提交ChatRequest（message、可选template_key）。
+ChatAttachmentInput由接收层创建，包含原始bytes（禁止序列化/日志）；ChatSubmission仅内部使用，JSON客户端只能提交ChatRequest（message、可选template_key、可选previous_task_id）。
 各读取器创建DocumentBlock/DocumentContent；DocumentReadLimits由API宿主从Settings组装。ChatAttachmentResponse/ChatReadResponse由API创建并公开，读取数据模型不依赖API、SDK或执行层。
 
 ## 第二个工具：正文检索数据流（2026-11-02）
@@ -238,16 +238,18 @@ RequestAnalysisResult为需求分析调用的内部结果：status、plan、erro
 
 当前 `/chat/stream` 的 ChatReadResponse 是资料收集首轮SSE result：status、notice、analysis、summary、summary_inputs、sources、report、waiting_question、attachment_analyzed、attachment_file_name、template；尚未提供HTTP回答和上传补充资料后的恢复。旧版附件仅解析/网页专用结果描述属于历史。
 
-PresentationOutline、OutlineSlide、OutlineBullet 定义在 outlines/presentation_outline.py，由 MaterialSummaryAgent 在最终汇总时生成，资料工作流及 ChatReadResponse 使用。slides顺序即页序，role为cover/content/closing，bullet.point_ids通过summary_inputs关联真实网页或文件块；校验编号存在不等于核实事实。未生成时outline为null。
+PresentationOutline、OutlineSlide、OutlineBullet 定义在 outlines/presentation_outline.py，供资料工作流和 ChatReadResponse 使用。`slides` 顺序即页序，`role` 可为 `cover`、`content` 或 `closing`，大纲要点的 `point_ids` 通过 `summary_inputs` 关联实际网页或文件块。最终模型正常编排时由 MaterialSummaryAgent 构造大纲，模型整理失败且所需来源已就绪时可由程序按提炼顺序编排草稿。返回草稿时 `status=interrupted`，`outline_error` 保留故障分类。
 
 网页研究内部状态 ResearchState.provided_urls_only 表示本轮直接使用用户提供的网址及其同站相关链接；ResearchReport.stop_reason 的 provided_pages_exhausted 表示这些候选已处理完但仍不足，followup_unread 问题列出达到读取上限时未处理的候选编号。该状态由网页工作流创建，HTTP仅通过报告公开结果，不表示来源事实已核验。
 
-MaterialSummary.outline 在最终资料汇总中可包含 PresentationOutline，中间汇总为null；MaterialCollectionState.use_current记录用户是否选择使用现有资料。程序根据实际来源及问题确定是否对外返回大纲。
+MaterialSummary.outline 在最终资料汇总中可包含 PresentationOutline，中间汇总为 `null`。MaterialCollectionState.use_current 记录用户是否选择使用现有资料。聊天有可用要点即可交付当前大纲。覆盖范围和内容问题随报告返回。
 
-MaterialSummaryContent 是资料汇总的公开内容（points、issues），供聊天响应使用；MaterialSummary 扩展可选 outline，供汇总模型及工作流使用，避免聊天响应在 summary 内重复包含 outline。
+MaterialSummaryContent 包含 `points` 和 `issues`，供聊天响应的 `summary` 使用。MaterialSummary 增加可选的 `outline`，供汇总和工作流使用，聊天响应单独公开 `outline`。最终编排模型输出 materials/material_summary.py 中的 MaterialOutlineDraft。它提供 `title`、`sections` 和 `issues`，未编排时 `title` 为空、`sections` 为空，可在 `points` 中返回精简要点。每项 MaterialOutlineSection 有页标题 `title` 和按顺序引用的 `keys`，例如 `k1`。程序验证编号后从已提炼的资料填入正文，并把大纲引用还原为原始 `point_id`。
 
 ResearchState.summary_deferred 表示网页要点统一汇总留给上层；状态 collected 和停止原因 summary_deferred 仅表示单页提炼已结束，不是资料充分结论。ResearchReport.content_review_deferred 明确提示该边界；source_count在此表示有提炼要点的网页数。
 
 网页流程发生workflow_error且尚无汇总时，ResearchReport.source_count为已有非空单页提炼的网页数，has_usable_content仅表示已有要点；上层中断结果的summary_inputs保留成功提炼的要点。HTTP重试及使用部分资料继续尚未接线。
 
 搜索候选WebSearchCandidate与WebSearchItem的engines仅表示供应商提供的来源引擎；Tavily不提供时为空。WEB_SEARCH_PROVIDER和TAVILY_API_KEY由Settings读取，密钥不进入数据模型或工具输出。
+
+ChatRequest.previous_task_id 接受上一轮任务编号，ChatReadResponse 回显父轮并返回新的 task_id。ChatReadResponse.file_sources 将累计文件来源编号关联到文件名。MaterialCollectionState 通过 prior_topic、prior_inputs、prior_pages、file_sources 和 file_source_id 保留编排所需的上下文及来源。

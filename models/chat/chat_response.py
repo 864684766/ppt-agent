@@ -45,23 +45,25 @@ class ChatQuestion(BaseModel):
 
 
 class ChatReadResponse(BaseModel):
-    """首轮资料收集及可能生成的大纲；不表示已生成PPT文件。"""
+    """一轮资料收集与可选分页大纲。"""
 
-    task_id: str = Field(description="本次资料任务编号；暂停状态仅存在当前服务进程内。")
+    task_id: str = Field(description="本轮资料任务编号；可在当前服务进程内作为下一轮的previous_task_id使用。")
+    previous_task_id: str | None = Field(default=None, description="本轮继承的上一轮任务编号；首轮为null。")
     message: str = Field(description="用户提交的原始问题。")
     template_key: str | None = Field(default=None, description="本次选择的OSS模板对象标识；未选择时为null。")
     status: Literal["completed", "awaiting_user", "interrupted"] = Field(description="completed已生成大纲；awaiting_user等待用户；interrupted处理未完成。")
     notice: str = Field(description="资料工作流状态说明。")
     analysis: RequestAnalysisResult | None = Field(description="需求分析结果；图故障前未产生时为null。")
     summary: MaterialSummaryContent | None = Field(description="跨来源汇总要点和内容问题；未完成时为null。")
-    outline: PresentationOutline | None = Field(description="分页PPT大纲；尚未生成或失败时为null。")
-    outline_error: Literal["model_timeout", "model_connection", "output_too_long", "generation_failed"] | None = Field(description="最终汇总及大纲生成失败分类；未失败时为null。")
+    outline: PresentationOutline | None = Field(description="分页PPT大纲；中断时可能包含由已有要点编排的草稿，未产出时为null。")
+    outline_error: Literal["model_timeout", "model_connection", "output_too_long", "generation_failed"] | None = Field(description="模型汇总或大纲生成失败分类；返回程序编排的草稿时仍保留失败分类。")
     summary_inputs: list[MaterialInputPoint] = Field(description="汇总输入要点及网页或文件块来源，供point_ids反查。")
     sources: list[ChatResearchSource] = Field(description="已读取网页的标题、地址与截断状态；没有网页时为空。")
+    file_sources: dict[str, str] = Field(default_factory=dict, description="文件来源编号到文件名的映射，包含本轮与沿用的文件；用于结合block_ids定位引用。")
     report: dict | None = Field(description="网页、文件阶段报告及有效来源数量和内容问题；需求分析阶段结束时可能为null。")
     waiting_question: ChatQuestion | None = Field(description="需要澄清或补充资料时的问题；其他情况为null。")
     attachment_analyzed: bool = Field(description="文件提炼已完成时为true；存在附件不代表一定分析完成。")
-    attachment_file_name: str | None = Field(description="本次上传文件名；用于识别uploaded_file来源，未上传时为null。")
+    attachment_file_name: str | None = Field(description="本次上传文件名，未上传时为null；跨轮引用使用file_sources。")
     template: ChatTemplateResponse | None = Field(default=None, description="选中OSS模板的解析结果；未选择时为null。")
 
 

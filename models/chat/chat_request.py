@@ -10,6 +10,10 @@ class ChatRequest(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     message: str = Field(min_length=1, max_length=10000, description="用户问题，1–10000字符；用于需求分析和资料整理。")
+    previous_task_id: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{32}$",
+        description="上一轮 SSE result 的任务编号。提供时在当前服务进程内复用上一轮资料，生成新一轮任务。",
+    )
     template_key: Annotated[str, StringConstraints(strip_whitespace=False)] | None = Field(
         default=None, min_length=1, max_length=1024,
         description="从模板列表object_key原样回填，如公司模板.pptx或business/模板.pptx；不是URL，不做URL编码。默认null不读取模板；指定时从服务端配置桶下载并解析PPTX；模板内容暂不参与网页资料分析。",
@@ -28,4 +32,4 @@ class ChatAttachmentInput(BaseModel):
 class ChatSubmission(ChatRequest):
     """接收层内部结果：消息加可选附件；不是对外JSON请求契约。"""
 
-    attachment: ChatAttachmentInput | None = Field(default=None, description="接收层从multipart文件创建；JSON请求仅接受message/template_key，不能伪造附件对象。")
+    attachment: ChatAttachmentInput | None = Field(default=None, description="接收层从multipart文件创建；JSON不接受附件对象。")

@@ -7,9 +7,9 @@ from models.materials.file_extraction import FileExtraction
 from models.materials.material_summary import MaterialInputPoint, MaterialReference
 
 
-def file_summary_points(*, extraction: FileExtraction, source_id: str) -> list[MaterialInputPoint]:
-    """转换单份已完成文件；source_id由调用方保证本次唯一，块号只在该文件内有效。"""
-    if extraction.status != "completed":
+def file_summary_points(*, extraction: FileExtraction, source_id: str, allow_partial: bool = False) -> list[MaterialInputPoint]:
+    """转换文件已提炼要点；块号只在对应来源内有效。"""
+    if extraction.status != "completed" and not allow_partial:
         raise ValueError("文件提炼尚未完成，不能当作完整资料汇总。")
     if not source_id.strip():
         raise ValueError("文件来源编号不能为空。")

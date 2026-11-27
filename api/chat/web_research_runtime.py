@@ -20,6 +20,7 @@ from integrations.templates.pdfium_page_renderer import PdfiumPageRenderer
 from models.documents.document_content import DocumentReadLimits
 from workflows.materials.material_collection_workflow import MaterialCollectionWorkflow
 from integrations.llm.langchain_model_factory import create_langchain_model
+from integrations.llm.model_http_logging import log_model_headers, log_model_request
 from integrations.web.http_webpage_reader import HttpWebpageReader
 from integrations.web.browser_webpage_reader import BrowserWebpageReader
 from integrations.web.fallback_webpage_reader import FallbackWebpageReader
@@ -53,7 +54,8 @@ class WebResearchRuntime:
             if self._workflow is not None:
                 return self._workflow
             async with AsyncExitStack() as resources:
-                model_http = await resources.enter_async_context(httpx.AsyncClient())
+                model_http = await resources.enter_async_context(httpx.AsyncClient(
+                    event_hooks={"request": [log_model_request], "response": [log_model_headers]}))
                 # 本机SearXNG直连；Tavily允许使用系统代理以访问外部服务。
                 search_http = await resources.enter_async_context(httpx.AsyncClient(
                     trust_env=self._settings.web_search_provider == "tavily"))

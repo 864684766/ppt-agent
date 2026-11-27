@@ -14,8 +14,8 @@ def draft_from_material_points(points: list[MaterialInputPoint]) -> MaterialSumm
     if not grouped:
         return MaterialSummary(points=[], issues=[])
 
-    # 资料较多时增加每页条数，满足大纲模型最多50页的约束。
-    page_size = max(4, (len(grouped) + 49) // 50)
+    # 草稿优先每页四条。资料较多时合并到最多十二页，保留全部依据。
+    page_size = max(4, (len(grouped) + 11) // 12)
     bullets = [OutlineBullet(content=content, point_ids=ids) for content, ids in grouped.items()]
     slides = [OutlineSlide(role="content", title=f"资料要点 {index // page_size + 1}",
                            bullets=bullets[index:index + page_size])
