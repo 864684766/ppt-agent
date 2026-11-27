@@ -1,5 +1,6 @@
 """LangGraph调度查询和检查子Agent，累积候选直到达到目标或尝试次数耗尽。"""
 
+import asyncio
 import logging
 from hashlib import sha256
 from typing import Any, Literal, cast
@@ -55,7 +56,8 @@ class WebResearchWorkflow:
     def __init__(self, *, query_agent: ResearchQueryAgentContract, review_agent: ResearchReviewAgentContract,
                  fetch_tool: BaseTool, webpage_extraction_agent: WebpageExtractionAgent,
                  material_summary_agent: MaterialSummaryAgent,
-                 target_count: int = 5, max_attempts: int = 6, max_pages: int = 15) -> None:
+                 target_count: int = 5, max_attempts: int = 6, max_pages: int = 15,
+                 extraction_concurrency: int = 1) -> None:
         """创建图但不运行；调用run才会请求模型或搜索服务。
 
         Args:
@@ -64,7 +66,10 @@ class WebResearchWorkflow:
             fetch_tool: 已由宿主绑定网页读取器的工具；网络资源由宿主管理。
             webpage_extraction_agent: 根据单篇已读正文提炼要点的Agent。
             target_count、max_attempts、max_pages: 宿主注入的默认目标和上限；run传值可覆盖。
+            extraction_concurrency: 同一网页最多同时提炼的分段数，默认逐段处理。
         """
+        if not 1 <= extraction_concurrency <= 3:
+            raise ValueError("网页提炼并发数须为1至3。")
         self._query_agent = query_agent
         self._review_agent = review_agent
         self._fetch_tool = fetch_tool
@@ -73,6 +78,7 @@ class WebResearchWorkflow:
         self._target_count = target_count
         self._max_attempts = max_attempts
         self._max_pages = max_pages
+        self._extraction_concurrency = extraction_concurrency
         # StateGraph像一张执行路线图：State定义节点之间共享哪些字段。
         # add_node注册步骤，add_edge连接固定路线；条件边决定循环或结束。
         graph = StateGraph(ResearchState)
@@ -232,29 +238,41 @@ class WebResearchWorkflow:
                     "points": [point.model_dump() for point in extraction.points]}]}
 
     async def _extract_page_chunks(self, *, question: str, candidate_id: str, page: dict) -> WebPageExtraction:
-        """每3000字符单独提炼，汇总全部段落要点；只在首段选择链接。
-
-        每段保留同一网页编号，单段调用失败则该网页处理未完成，不将部分结果冒充全文。
-        读取上限仍为50000字符，超出时由网页报告注明截断。
-        """
+        """每3000字符提炼一段，限制并发并按原顺序收集，只有首段选择链接。"""
         points: list[WebSummaryPoint] = []
         links: list[WebFollowLink] = []
         text = page["text"]
         total_chunks = (len(text) + 2999) // 3000
-        for offset in range(0, len(text), 3000):
+
+        async def extract(offset: int) -> WebPageExtraction:
             part_text = text[offset:offset + 3000]
             chunk = {**page, "candidate_id": candidate_id, "text": part_text, "returned_chars": len(part_text),
                      "segment_index": offset // 3000 + 1, "segment_count": total_chunks,
                      "links": page["links"] if offset == 0 else []}
-            try:
-                part = await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
-            except (OpenAITimeoutError, OpenAIConnectionError, TimeoutError) as error:
+            return await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+
+        for start in range(0, total_chunks, self._extraction_concurrency):
+            stop = min(start + self._extraction_concurrency, total_chunks)
+            # 分组启动请求。当前组失败后保留已完成分段，后续组不再启动。
+            results = await asyncio.gather(*(extract(index * 3000) for index in range(start, stop)),
+                                           return_exceptions=True)
+            failure: tuple[int, BaseException] | None = None
+            for index, part in enumerate(results, start + 1):
+                if isinstance(part, (OpenAITimeoutError, OpenAIConnectionError, TimeoutError)):
+                    if failure is None:
+                        failure = (index, part)
+                elif isinstance(part, BaseException):
+                    raise part
+                else:
+                    points.extend(part.points)
+                    links.extend(part.follow_links)
+            if failure:
+                index, error = failure
                 kind = "model_connection" if isinstance(error, OpenAIConnectionError) else "model_timeout"
-                logger.warning("event=webpage_segment_incomplete segment=%d total=%d reason=%s",
-                               offset // 3000 + 1, total_chunks, kind)
-                raise PartialPageExtractionError(extraction=WebPageExtraction(points=points, follow_links=links), kind=kind) from error
-            points.extend(part.points)
-            links.extend(part.follow_links)
+                logger.warning("event=webpage_segment_incomplete segment=%d total=%d reason=%s", index, total_chunks, kind)
+                raise PartialPageExtractionError(
+                    extraction=WebPageExtraction(points=points, follow_links=links), kind=kind,
+                ) from error
         return WebPageExtraction(points=points, follow_links=links)
 
     @staticmethod

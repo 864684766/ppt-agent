@@ -62,3 +62,18 @@ class MaterialSummary(MaterialSummaryContent):
     """模型返回的汇总及可选大纲；中间汇总不生成大纲。"""
 
     outline: PresentationOutline | None = Field(default=None, description="最终汇总时生成的分页大纲；中间汇总或资料不足时为null。")
+
+
+class MaterialOutlineSection(BaseModel):
+    """模型为内容页选择标题和要点，程序从已提炼资料填入正文。"""
+
+    title: str = Field(min_length=1, description="概括这页要点的简短标题。")
+    keys: list[str] = Field(min_length=1, description="本页按顺序使用的条目编号，如k1。")
+
+
+class MaterialOutlineDraft(MaterialSummaryContent):
+    """最终模型输出。生成大纲时，公开汇总要点由程序从大纲构造。"""
+
+    points: list[MaterialMergedPoint] = Field(default_factory=list, description="仅在无法生成大纲时返回可用的精简要点。")
+    title: str = Field(default="", description="大纲标题，未生成时为空。")
+    sections: list[MaterialOutlineSection] = Field(default_factory=list, max_length=50, description="按展示顺序组织的内容页，未生成时为空。")

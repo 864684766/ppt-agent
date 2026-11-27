@@ -116,7 +116,7 @@ class WebResearchRuntime:
 
         # MaterialSummaryAgent 返回汇总 Agent 对象，调用时接收已提炼要点并按需生成大纲。
         # 普通提示词用于汇总；最终输出超长时使用单独的重试提示词。
-        # output_tokens 用于计算每批要点数量；timeout_seconds 是模型调用的超时配置。
+        # output_tokens 用于估算每批输入规模。timeout_seconds 是模型调用的超时配置。
         # 展示思考内容时逐批处理，减少不同批次内容交错；否则最多同时处理 3 批。
         # 并发数只影响中间批次，不保证供应商一定返回思考内容。
         summary = MaterialSummaryAgent(model=model, prompt=prompt("materials/material_summary.md"),
@@ -138,6 +138,7 @@ class WebResearchRuntime:
             material_summary_agent=summary,
             target_count=settings.research_target_source_count, max_attempts=settings.research_max_search_rounds,
             max_pages=settings.research_max_web_pages,
+            extraction_concurrency=1 if settings.llm_show_thinking else 3,
         )
         # 返回“文件格式 -> 读取器”的字典，供文件读取入口按扩展名选择解析方式。
         # PDF 页面需要时由 Pdfium 渲染、RapidOCR 识别；旧版 doc 可使用 Gotenberg 转换。
@@ -159,7 +160,7 @@ class WebResearchRuntime:
             # 文件提炼 Agent 先通过 file_reader 解析，再用模型提取相关要点。
             web_workflow=web, file_agent=FileExtractionAgent(model=model, file_reader=file_reader,
                 prompt=prompt("materials/file_extraction.md")), summary_agent=summary,
-            # 最终资料充分性检查使用配置中的目标来源数。
+            # 开放搜索使用配置中的来源目标，指定资料按用户给出的来源检查。
             target_count=settings.research_target_source_count)
         # 返回两个工作流对象的元组；调用方分别保存，之后才通过工作流方法启动任务。
         return web, material

@@ -18,6 +18,8 @@ from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeo
 from openai import LengthFinishReasonError
 from diagnostics.operation_logging import log_operation, safe_error_location
 from domain.materials.material_summary_inputs import file_summary_points, web_summary_points
+from domain.materials.material_outline_draft import draft_from_material_points
+from domain.web.provided_web_addresses import provided_web_candidates
 from models.interaction.user_question import UserQuestion
 from models.materials.file_extraction import FileExtraction
 from models.materials.material_collection_state import MaterialCollectionState
@@ -192,7 +194,7 @@ class MaterialCollectionWorkflow:
         file = FileExtraction.model_validate(state["file"]) if state["file"] else None
         # 先保留已成功提炼的要点；后续阶段失败不表示此前资料为空。
         points = web_summary_points(extractions=web["page_extractions"]) if web else []
-        if file:
+        if file and file.status == "completed":
             points.extend(file_summary_points(extraction=file, source_id="uploaded_file"))
         partial_inputs = [item.model_dump() for item in points]
         if state["status"] == "interrupted":
@@ -203,26 +205,54 @@ class MaterialCollectionWorkflow:
             return {"status": "interrupted", "message": "文件处理未完成；已有结果已保留。", "summary_inputs": partial_inputs}
         if not points:
             return {"summary_inputs": []}
-        # 已知未读链接或来源不足时不要求模型生成暂时无法使用的大纲。
+        # 指定资料按用户提供的来源判断。网页的可选跟进链接单独保留在报告中。
+        target = self._source_target(state)
         source_count = len({(ref.kind, ref.source_id) for point in points for ref in point.references})
-        web_issues = (web.get("report") or {}).get("issues", []) if web else []
-        incomplete_web = bool(web and web.get("provided_urls_only") and any(
-            issue["type"] in {"followup_unread", "webpage_read_failed"} for issue in web_issues))
-        include_outline = state["use_current"] or (source_count >= state["target_count"] and not incomplete_web)
+        include_outline = state["use_current"] or (source_count >= target and self._requested_pages_read(state))
         notify_progress("summarize")
         try:
             summary = await self._summary.summarize(question=state["question"], points=points,
-                final=True, target_count=state["target_count"], use_current=state["use_current"],
+                final=True, target_count=target, use_current=state["use_current"],
                 include_outline=include_outline)
         except Exception as error:
             logger.error("event=material_summary_failed error_location=%s", safe_error_location(error))
             code = ("model_timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else
                     "model_connection" if isinstance(error, OpenAIConnectionError) else
                     "output_too_long" if isinstance(error, LengthFinishReasonError) else "generation_failed")
-            return {"status": "interrupted", "message": "资料汇总和大纲生成未完成，请检查日志。", "outline_error": code,
-                    "summary_inputs": [item.model_dump() for item in points]}
+            if not include_outline or code == "generation_failed":
+                return {"status": "interrupted", "message": "资料汇总和大纲生成未完成，已保留原始提炼要点。",
+                        "outline_error": code, "summary_inputs": partial_inputs}
+            summary = draft_from_material_points(points)
+            if summary.outline is None:
+                return {"status": "interrupted", "message": "资料汇总未完成，暂无可编排的要点。",
+                        "outline_error": code, "summary_inputs": partial_inputs}
+            return {"summary": summary.model_dump(exclude={"outline"}), "outline": summary.outline.model_dump(),
+                    "outline_error": code, "summary_inputs": partial_inputs}
         return {"summary": summary.model_dump(exclude={"outline"}), "outline": summary.outline.model_dump() if summary.outline else None,
-                "outline_error": None, "summary_inputs": [item.model_dump() for item in points]}
+                "outline_error": None, "summary_inputs": partial_inputs}
+
+    @staticmethod
+    def _source_target(state: MaterialCollectionState) -> int:
+        """只使用指定文件或网页时，以请求提供的资料数为目标。"""
+        analysis = state["analysis"] or {}
+        plan = analysis.get("plan") or {}
+        if plan.get("source_mode") == "file":
+            return 1
+        if state["web"] and state["web"].get("provided_urls_only"):
+            supplied = provided_web_candidates(state["question"])
+            return max(1, len(supplied)) + int(plan.get("source_mode") == "both")
+        return state["target_count"]
+
+    @staticmethod
+    def _requested_pages_read(state: MaterialCollectionState) -> bool:
+        """明确指定的网址必须读取成功。跟进链接是补充资料，未读时只在报告提醒。"""
+        web = state["web"]
+        if not web or not web.get("provided_urls_only"):
+            return True
+        requested = {item["url"] for item in provided_web_candidates(state["question"])}
+        read = {page["requested_url"] for page in web["pages"]}
+        read.update(page["final_url"] for page in web["pages"])
+        return requested <= read
 
     @staticmethod
     def _finalize(state: MaterialCollectionState) -> dict:
@@ -232,6 +262,9 @@ class MaterialCollectionWorkflow:
         sources = {(ref["kind"], ref["source_id"]) for item in state["summary_inputs"]
                    if item["point_id"] in referenced for ref in item["references"]}
         issues = list((summary or {}).get("issues", []))
+        content_issues = issues.copy()
+        target = MaterialCollectionWorkflow._source_target(state)
+        requested_pages_read = MaterialCollectionWorkflow._requested_pages_read(state)
         web = state["web"]
         file = state["file"]
         web_report = web.get("report") if web else None
@@ -243,20 +276,28 @@ class MaterialCollectionWorkflow:
         report = {"web": web["report"] if web else None,
                   "file": file["report"] if file else None,
                   "source_count": None if state["status"] == "interrupted" else len(sources),
-                  "target_source_count": state["target_count"], "issues": issues}
+                  "target_source_count": target, "issues": issues}
         if state["status"] == "interrupted":
             return {"report": report, "waiting_question": None}
-        if summary and summary["points"] and ((len(sources) >= state["target_count"] and not issues) or state["use_current"]):
-            if not state["outline"]:
-                return {"status": "interrupted", "message": "资料汇总已完成，但模型未返回有效大纲。",
+        enough = len(sources) >= target and requested_pages_read
+        if summary and summary["points"] and (enough or state["use_current"]):
+            if state["outline"]:
+                message = "大纲已生成。"
+                if state["outline_error"]:
+                    reason = {"model_timeout": "超时", "model_connection": "连接失败",
+                              "output_too_long": "输出超限"}.get(state["outline_error"], "失败")
+                    message = f"模型整理{reason}，已按提炼顺序生成带来源的草稿。"
+                elif issues or state["use_current"]:
+                    message = "已根据现有资料生成大纲。请查看报告中的覆盖范围和缺口。"
+                return {"status": "completed", "message": message, "report": report, "waiting_question": None}
+            if not content_issues:
+                return {"status": "interrupted", "message": "资料汇总已完成，模型未返回有效大纲。",
                         "outline_error": "generation_failed", "report": report, "waiting_question": None}
-            message = "已按现有资料生成大纲，PPT可能少于8–12页。" if state["use_current"] else "大纲已生成。"
-            return {"status": "completed", "message": message, "report": report, "waiting_question": None}
         options = ["provide_materials"]
         if summary and summary["points"]:
             options.append("use_current")
         options.append("end_conversation")
-        details = [f"已引用{len(sources)}个来源，目标为{state['target_count']}个。"]
+        details = [f"已引用{len(sources)}个来源，目标为{target}个。"]
         details.extend(item["message"] for item in issues[:3])
         if summary and summary["points"]:
             details.append("使用现有资料时PPT可能少于8–12页。")
