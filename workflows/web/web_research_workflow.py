@@ -31,6 +31,7 @@ from domain.web.research_summary_mapping import to_web_research_summary
 from models.interaction.user_question import UserQuestion
 from workflows.interaction.ask_user import ask_user
 from workflows.web.research_progress import notify_progress
+from workflows.materials.outline_preview import outline_preview, publish_outline_preview
 
 
 logger = logging.getLogger(__name__)
@@ -245,13 +246,28 @@ class WebResearchWorkflow:
         links: list[WebFollowLink] = []
         text = page["text"]
         total_chunks = (len(text) + 2999) // 3000
+        preview_sent = False
 
         async def extract(offset: int) -> WebPageExtraction:
+            nonlocal preview_sent
             part_text = text[offset:offset + 3000]
             chunk = {**page, "candidate_id": candidate_id, "text": part_text, "returned_chars": len(part_text),
                      "segment_index": offset // 3000 + 1, "segment_count": total_chunks,
                      "links": page["links"] if offset == 0 else []}
-            return await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+            part = await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+            # 分段返回即可发送，后续 gather 仍按原文顺序收集最终要点。
+            # 从检查到发布之间没有 await，同页并发分段只会发出一次预览。
+            if part.points and not preview_sent and outline_preview.get() is not None:
+                items = web_summary_points(extractions=[{"candidate_id": candidate_id,
+                    "points": [p.model_dump() for p in part.points[:8]]}])
+                # 单段临时编号与全页最终编号区分，避免乱序完成时错误引用。
+                for item in items:
+                    item.point_id = f"preview:{chunk['segment_index']}:{item.point_id}"
+                publish_outline_preview(items)
+                preview_sent = True
+                logger.info("event=web_segment_preview segment=%d total=%d point_count=%d",
+                            chunk["segment_index"], total_chunks, len(items))
+            return part
 
         for start in range(0, total_chunks, self._extraction_concurrency):
             stop = min(start + self._extraction_concurrency, total_chunks)

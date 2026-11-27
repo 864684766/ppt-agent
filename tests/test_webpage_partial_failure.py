@@ -1,5 +1,6 @@
 """网页分段发生模型服务故障时，验证重试及已完成资料的交付。"""
 
+import asyncio
 from unittest.mock import Mock
 
 import httpx2
@@ -18,6 +19,7 @@ from models.materials.request_analysis import RequestAnalysis, RequestAnalysisRe
 from models.outlines.presentation_outline import OutlineBullet, OutlineSlide, PresentationOutline
 from models.web.web_research_summary import WebPageExtraction, WebSummaryPoint
 from workflows.materials.material_collection_workflow import MaterialCollectionWorkflow
+from workflows.materials.outline_preview import outline_preview
 from workflows.web.web_research_workflow import WebResearchWorkflow
 
 
@@ -53,8 +55,11 @@ async def test_server_error_preserves_completed_segments_for_outline() -> None:
         "text": "甲" * 6001, "returned_chars": 6001, "extracted_chars": 6001,
         "truncated": False, "fetched_at": "2026-11-27T00:00:00Z", "links": []}
     extraction = Mock(spec=WebpageExtractionAgent)
+    release_first = asyncio.Event()
 
     async def extract(*, question: str, page: dict) -> WebPageExtraction:
+        if page["segment_index"] == 1:
+            await release_first.wait()
         if page["segment_index"] == 2:
             raise server_error()
         return WebPageExtraction(points=[WebSummaryPoint(content=f"第{page['segment_index']}段事实",
@@ -79,7 +84,20 @@ async def test_server_error_preserves_completed_segments_for_outline() -> None:
     summary.summarize.side_effect = summarize
     workflow = MaterialCollectionWorkflow(request_agent=request, web_workflow=web,
         file_agent=Mock(spec=FileExtractionAgent), summary_agent=summary)
-    result = await workflow.run(thread_id="partial-server-error", question=f"介绍{url}")
+    previews = asyncio.Queue()
+    token = outline_preview.set(lambda outline, points: previews.put_nowait((outline, points)))
+    task = asyncio.create_task(workflow.run(thread_id="partial-server-error", question=f"介绍{url}"))
+    try:
+        draft, points = await asyncio.wait_for(previews.get(), timeout=5)
+        assert not task.done()
+        assert points[0].content == "第3段事实"
+        assert draft.slides[0].bullets[0].point_ids == [points[0].point_id]
+        assert points[0].point_id.startswith("preview:3:")
+        assert points[0].references[0].source_id.startswith("web_")
+    finally:
+        outline_preview.reset(token)
+        release_first.set()
+        result = await task
 
     assert [point["content"] for point in result["summary_inputs"]] == ["第1段事实", "第3段事实"]
     assert result["outline"] is not None

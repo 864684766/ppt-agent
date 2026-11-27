@@ -1,15 +1,24 @@
-import { useState } from 'react'
-import { templates } from './data/demo'
+import { useEffect, useState } from 'react'
+import { listTemplates } from './api/client'
+import type { Template } from './api/contracts'
 import { TemplateSidebar } from './components/TemplateSidebar'
 import { ChatWorkspace } from './components/ChatWorkspace'
 
 export default function App() {
-  const [selected, setSelected] = useState(templates[0])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selected, setSelected] = useState<Template | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
   const [session, setSession] = useState(0)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  function newSession() {
-    setSelected(templates[0])
-    setSession((current) => current + 1)
-  }
-  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}><TemplateSidebar selected={selected} onSelect={setSelected} onNewSession={newSession} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((current) => !current)} /><ChatWorkspace key={session} selected={selected} isNewSession={session > 0} /></div>
+  const [collapsed, setCollapsed] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true); setError('')
+    listTemplates(controller.signal).then(setTemplates).catch((reason: unknown) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '模板加载失败。')
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [reload])
+  return <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}><TemplateSidebar templates={templates} selected={selected} onSelect={setSelected} loading={loading} error={error} onRetry={() => setReload((value) => value + 1)} onNewSession={() => { setSelected(null); setSession((value) => value + 1) }} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} /><ChatWorkspace key={session} selected={selected} /></div>
 }

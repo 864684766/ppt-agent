@@ -14,6 +14,9 @@ from api.transport.sse_encoder import encode_event
 from diagnostics.operation_logging import operation_scope, safe_error_location
 from models.chat.chat_request import ChatSubmission
 from workflows.materials.material_collection_workflow import PreviousMaterialTaskNotFound
+from workflows.materials.outline_preview import outline_preview
+from models.materials.material_summary import MaterialInputPoint
+from models.outlines.presentation_outline import PresentationOutline
 from integrations.llm.reasoning_stream_handler import ReasoningStreamHandler
 from workflows.web.research_progress import research_progress
 
@@ -35,8 +38,14 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
         # 仅由业务选择固定阶段，不向客户端泄露模型正文或内部反馈。
         queue.put_nowait(("progress", {"task_id": task_id, "stage": stage, "message": _MESSAGES[stage]}))
 
+    def publish_preview(outline: PresentationOutline, points: list[MaterialInputPoint]) -> None:
+        queue.put_nowait(("outline_draft", {"task_id": task_id, "outline": outline.model_dump(mode="json"),
+                                            "summary_inputs": [point.model_dump(mode="json") for point in points]}))
+        logger.info("event=outline_draft_queued task_id=%s point_count=%d", task_id, len(points))
+
     async def execute() -> None:
         token = research_progress.set(progress)
+        preview_token = outline_preview.set(publish_preview)
         try:
             if submission.template_key:
                 progress("template")
@@ -66,6 +75,7 @@ async def stream_chat(request: Request, submission: ChatSubmission) -> AsyncIter
             logger.error("event=chat_stream_failed error_location=%s", safe_error_location(error))
             await queue.put(("error", {"task_id": task_id, "code": "research_failed", "message": "资料研究执行失败，请检查服务日志。"}))
         finally:
+            outline_preview.reset(preview_token)
             research_progress.reset(token)
 
     with operation_scope(logger, "chat.stream"):

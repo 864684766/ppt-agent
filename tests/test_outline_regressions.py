@@ -1,6 +1,8 @@
 """离线验证大纲引用还原与模型故障后的资料草稿。"""
 
+import asyncio
 import json
+from contextlib import aclosing
 from unittest.mock import Mock
 
 from langchain_core.language_models import BaseChatModel
@@ -11,6 +13,10 @@ from agents.materials.file_extraction_agent import FileExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
 from agents.materials.request_analysis_agent import RequestAnalysisAgent
 from api.chat.chat_response_builder import build_chat_response
+from api.chat.chat_stream import stream_chat
+from api.chat.web_research_runtime import WebResearchRuntime
+from fastapi import Request
+from models.chat.chat_response import ChatReadResponse
 from config.settings import PROJECT_ROOT
 from domain.web.provided_web_addresses import provided_web_candidates
 from models.chat.chat_request import ChatAttachmentInput, ChatSubmission
@@ -82,7 +88,13 @@ async def test_summarization_timeout_keeps_the_cited_file_draft_in_the_response(
         warnings=[], pages_without_text=[], status="completed", processed_characters=7, total_characters=7,
     )
     summary_agent = Mock(spec=MaterialSummaryAgent)
-    summary_agent.summarize.side_effect = TimeoutError
+    release_summary = asyncio.Event()
+
+    async def slow_summary(**kwargs):
+        await release_summary.wait()
+        raise TimeoutError
+
+    summary_agent.summarize.side_effect = slow_summary
     web_workflow = Mock(spec=WebResearchWorkflow)
     workflow = MaterialCollectionWorkflow(request_agent=request_agent, web_workflow=web_workflow,
                                           file_agent=file_agent, summary_agent=summary_agent, target_count=2)
@@ -91,9 +103,23 @@ async def test_summarization_timeout_keeps_the_cited_file_draft_in_the_response(
     ))
     attachment = submission.attachment
     assert attachment is not None
-    state = await workflow.run(thread_id="file-draft", question=submission.message,
-                               file_name=attachment.file_name, file_content=attachment.content)
-    response = build_chat_response(submission=submission, task_id="file-draft", result=state, template=None)
+    request = Mock(spec=Request)
+    runtime = Mock(spec=WebResearchRuntime)
+    runtime.get_material_workflow.return_value = workflow
+    runtime.show_thinking = False
+    request.app.state.web_research_runtime = runtime
+    async with asyncio.timeout(5), aclosing(stream_chat(request, submission)) as stream:
+        async for frame in stream:
+            if frame.startswith("event: outline_draft"):
+                preview = json.loads(frame.split("data: ", 1)[1])
+                assert preview["outline"]["slides"][0]["bullets"][0]["point_ids"] == [preview["summary_inputs"][0]["point_id"]]
+                assert preview["summary_inputs"][0]["references"][0]["block_ids"] == ["b000001"]
+                release_summary.set()
+            if frame.startswith("event: result"):
+                response = ChatReadResponse.model_validate_json(frame.split("data: ", 1)[1])
+                break
+        else:
+            pytest.fail("缺少最终 SSE 结果")
 
     web_workflow.run.assert_not_awaited()
     summary_agent.summarize.assert_awaited_once()

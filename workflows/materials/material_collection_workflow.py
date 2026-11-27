@@ -25,11 +25,13 @@ from models.interaction.user_question import UserQuestion
 from models.materials.file_extraction import FileExtraction
 from models.materials.material_collection_state import MaterialCollectionState
 from models.materials.material_summary import MaterialInputPoint
+from workflows.materials.outline_preview import publish_outline_preview
 from workflows.interaction.ask_user import ask_user
 from workflows.web.web_research_workflow import WebResearchWorkflow
 from workflows.web.research_progress import notify_progress
 
 logger = logging.getLogger(__name__)
+
 
 
 class PreviousMaterialTaskNotFound(ValueError):
@@ -245,6 +247,7 @@ class MaterialCollectionWorkflow:
                 return {"status": "interrupted", "message": "文件提炼未完成，暂时没有可编排的要点。", "summary_inputs": []}
             return {"summary_inputs": []}
         notify_progress("summarize")
+        publish_outline_preview(points)
         try:
             summary = await self._summary.summarize(question=self._turn_question(state), points=points,
                 final=True, target_count=self._source_target(state), use_current=state["use_current"])

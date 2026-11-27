@@ -2,7 +2,7 @@
 
 一个用于学习 Python Agent 技术栈的 PPT 生成项目。目标是让用户通过对话提供主题和资料、确认大纲及模板，最终生成可编辑的 PPTX。
 
-项目仍在开发中。目前已实现部分文件处理和 PPT 工具，完整的对话大纲编辑和 PPT 自动制作流程尚未接通。`frontend/` 提供独立静态界面演示，尚未接入后端；启动方式见 [前端说明](frontend/README.md)。
+项目仍在开发中。目前已实现部分文件处理和 PPT 工具，完整的对话大纲编辑和 PPT 自动制作流程尚未接通。`frontend/` 已接入聊天流及模板列表；启动方式和当前限制见 [前端说明](frontend/README.md)。
 
 ## 产品目标
 
@@ -66,7 +66,7 @@ uv run --locked --no-sync python main.py
 
 ```text
 api/           HTTP 路由与传输
-frontend/      React 静态界面演示（未接入后端）
+frontend/      React 对话工作台
 config/        应用配置与日志配置
 diagnostics/   运行日志和诊断
 domain/        业务操作与协议

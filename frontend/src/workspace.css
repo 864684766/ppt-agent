@@ -23,6 +23,17 @@
 .outline-message-notice{max-width:720px;width:100%;margin:0 auto 8px;padding:0 32px;color:#94899b;font-size:10px;text-align:right}
 /* 用网格居中图标，避免浏览器默认按钮内边距造成箭头偏移。 */
 .answer-form button{display:grid;place-items:center;padding:0;flex:none}
+.template-status{margin:0 22px 12px;color:#8e878c;font-size:11px;line-height:1.6}
+.template-status button{display:block;margin-top:6px;border:0;background:transparent;padding:0;color:#795e96;text-decoration:underline}
+.template-preview strong,.template-meta strong{overflow-wrap:anywhere;overflow:hidden}
+.thinking{border-top:1px solid #f2f0ed;padding:10px 14px;color:#77716f;font-size:11px}
+.thinking summary{cursor:pointer;color:#826e9f}
+.thinking p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;max-height:260px;overflow:auto}
+.working-indicator{display:flex;color:#937eaf;animation:working-pulse 1.2s ease-in-out infinite}
+.result-warning{color:#a35f47!important;white-space:pre-wrap}
+.question-hint{color:#9b929e!important;font-size:10px!important;line-height:1.6}
+@keyframes working-pulse{50%{opacity:.35;transform:scale(.8)}}
+@media(prefers-reduced-motion:reduce){.working-indicator{animation:none}}
 .new-session{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 20px;padding:10px;border:1px solid #e4dfe8;border-radius:9px;background:#fff;color:#61546c;font-size:12px;font-weight:600}
 .new-session:hover{background:#f5f1f8}
 .sidebar-content{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;overflow:hidden;opacity:1;visibility:visible;transition:opacity 180ms ease,visibility 0s linear}
