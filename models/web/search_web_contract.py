@@ -32,7 +32,7 @@ class WebSearchItem(TypedDict):
     url: str
     # 搜索摘要，可能为空；不代表已抓取或核实原网页。
     snippet: str
-    # SearXNG报告的实际来源引擎列表；无信息时为空列表，不是指定的搜索策略。
+    # 供应商报告的实际来源引擎列表；Tavily无此信息时为空，不是搜索策略。
     engines: list[str]
 
 

@@ -37,7 +37,7 @@ async def test_real_material_collection() -> None:
         limits=DocumentReadLimits(max_characters=settings.document_max_characters,
             max_blocks=settings.document_max_blocks, max_cells=settings.document_max_cells),
         max_file_bytes=settings.upload_max_file_bytes, max_uncompressed_bytes=settings.upload_max_uncompressed_bytes)
-    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=False) as search_http, \
+    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=settings.web_search_provider == "tavily") as search_http, \
             create_webpage_http_client(verify_tls=settings.webpage_tls_verify) as webpage_http:
         model = create_langchain_model(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             model_name=settings.get_model("outline"), timeout_seconds=settings.llm_timeout_seconds,

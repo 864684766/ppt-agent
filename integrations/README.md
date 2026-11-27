@@ -6,7 +6,7 @@
 | 目录 | 职责 | 当前文件 |
 | --- | --- | --- |
 | llm/ | 共用模型构造及聊天SDK适配 | langchain_model_factory.py、langchain_chat_client.py |
-| web/ | 搜索引擎、HTTP网页读取和HTML提取 | searxng_search_client.py、webpage_http_client.py、http_webpage_reader.py、html_text_extractor.py |
+| web/ | 搜索引擎、HTTP网页读取和HTML提取 | searxng/searxng_search_client.py、tavily/tavily_search_client.py、webpage_http_client.py、http_webpage_reader.py、browser_webpage_reader.py、fallback_webpage_reader.py、html_text_extractor.py |
 | skills/ | 本地技能介绍扫描、头部解析和完整读取 | local_skill_catalog.py、local_skill_reader.py、skill_header_reader.py、skill_metadata_parser.py |
 | storage/ | RustFS/S3只读模板目录及字节下载 | s3_template_catalog.py、s3_template_file_reader.py |
 | ocr/ | 公共单张图片本地OCR，与PDF/Word/PPT解耦 | rapidocr_text_recognizer.py、ocr_image_decoder.py |
@@ -98,3 +98,11 @@ LocalPresentationChecker放templates/以复用现有PPT接入分组；协议位�
 `llm/reasoning_stream_handler.py` 从LangChain模型流回调的标准reasoning内容块提取文本；不处理供应商私有字段，不记录推理内容；reasoning_compatible_chat.py负责将兼容代理的reasoning_content转换为标准块，依赖锁定版LangChain内部转换钩子，升级时需真实验证。是否向SSE展示由宿主配置。
 
 DOC读取通过DocDocumentReader调用注入的Gotenberg服务转为PDF，再复用PDF解析器；转换页码可能变化，服务及HTTP资源各调用独立管理。
+
+## 浏览器网页备用读取（2026-11-27）
+
+HTTP返回401、403或正文为空时，FallbackWebpageReader可调用BrowserWebpageReader；采用Playwright 1.65.2与本机Microsoft Edge，无界面独立会话，不读取用户Cookie。浏览器每次读取后关闭，运行于独立线程；等待取消后线程可继续至超时。浏览器渲染HTML完成后才检查大小，无法限制页面加载期间的网络流量。普通HTTP成功但正文质量差、验证码或登录页面可能无法自动识别；返回内容仍需核对。需本机安装Edge；不可用时返回读取错误。
+
+## 网页搜索供应商（2026-11-27）
+
+Tavily与SearXNG分别位于web/tavily和web/searxng，均实现WebSearchClient；宿主按配置选择一个，不自动切换。Tavily使用现有httpx访问官方search接口，basic搜索，不请求answer或raw_content；密钥仅由外层注入并置于请求头。返回的content仅作为候选摘要，正文仍由网页读取器获取。

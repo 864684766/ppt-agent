@@ -13,6 +13,7 @@ from agents.materials.file_extraction_agent import FileExtractionAgent
 from agents.materials.request_analysis_agent import RequestAnalysisAgent
 from config.settings import PROJECT_ROOT, Settings
 from domain.documents.document_file_reader import DocumentFileReader
+from domain.web.web_search_contract import WebSearchClient
 from integrations.documents.document_reader_registry import create_document_readers
 from integrations.ocr.rapidocr_text_recognizer import RapidOcrTextRecognizer
 from integrations.templates.pdfium_page_renderer import PdfiumPageRenderer
@@ -20,7 +21,10 @@ from models.documents.document_content import DocumentReadLimits
 from workflows.materials.material_collection_workflow import MaterialCollectionWorkflow
 from integrations.llm.langchain_model_factory import create_langchain_model
 from integrations.web.http_webpage_reader import HttpWebpageReader
-from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.browser_webpage_reader import BrowserWebpageReader
+from integrations.web.fallback_webpage_reader import FallbackWebpageReader
+from integrations.web.searxng.searxng_search_client import SearxngSearchClient
+from integrations.web.tavily.tavily_search_client import TavilySearchClient
 from integrations.web.webpage_http_client import create_webpage_http_client
 from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
 from tools.web.search_web_tool import create_search_web_tool
@@ -50,7 +54,9 @@ class WebResearchRuntime:
                 return self._workflow
             async with AsyncExitStack() as resources:
                 model_http = await resources.enter_async_context(httpx.AsyncClient())
-                search_http = await resources.enter_async_context(httpx.AsyncClient(trust_env=False))
+                # 本机SearXNG直连；Tavily允许使用系统代理以访问外部服务。
+                search_http = await resources.enter_async_context(httpx.AsyncClient(
+                    trust_env=self._settings.web_search_provider == "tavily"))
                 page_http = await resources.enter_async_context(
                     create_webpage_http_client(verify_tls=self._settings.webpage_tls_verify))
                 workflow, material_workflow = self._create_workflow(model_http, search_http, page_http)
@@ -88,18 +94,25 @@ class WebResearchRuntime:
         def prompt(name: str) -> str:
             return (prompts / name).read_text(encoding="utf-8")
 
-        # SearxngSearchClient 创建搜索服务适配器；create_search_web_tool 返回绑定了它的工具。
-        # 工具调用时提交搜索词并返回候选结果，不读取网页正文。
-        # engines 为空时使用服务端普通网页分类的默认引擎；超时单位为秒。
-        search = create_search_web_tool(client=SearxngSearchClient(
-            client=search_http, base_url=settings.searxng_base_url, engines="",
-            timeout_seconds=settings.web_search_timeout_seconds))
+        # 宿主按配置选择供应商，工具接口不变；SearXNG使用其服务端默认引擎。
+        search_client: WebSearchClient
+        if settings.web_search_provider == "tavily":
+            search_client = TavilySearchClient(client=search_http, api_key=settings.tavily_api_key,
+                                               timeout_seconds=settings.web_search_timeout_seconds)
+        else:
+            search_client = SearxngSearchClient(client=search_http, base_url=settings.searxng_base_url,
+                                                timeout_seconds=settings.web_search_timeout_seconds)
+        search = create_search_web_tool(client=search_client)
 
         # HttpWebpageReader 返回网页读取器对象；调用时访问地址并提取内容。
         # 下载字节数和等待时间均受配置限制。
         # search_http、page_http 由上层管理和关闭，此处只借用连接。
         reader = HttpWebpageReader(client=page_http, timeout_seconds=settings.webpage_timeout_seconds,
                                    max_download_bytes=settings.webpage_max_download_bytes)
+        # HTTP被拒绝或没有正文时，可用本机Edge执行脚本后读取；不使用用户浏览器的登录会话。
+        webpage_reader = (FallbackWebpageReader(primary=reader, browser=BrowserWebpageReader(
+            timeout_seconds=settings.webpage_timeout_seconds, max_download_bytes=settings.webpage_max_download_bytes))
+            if settings.webpage_browser_fallback else reader)
 
         # MaterialSummaryAgent 返回汇总 Agent 对象，调用时接收已提炼要点并按需生成大纲。
         # 普通提示词用于汇总；最终输出超长时使用单独的重试提示词。
@@ -116,7 +129,7 @@ class WebResearchRuntime:
             query_agent=ResearchQueryAgent(model=model, tool=search, prompt=prompt("web/research_query.md")),
             review_agent=ResearchReviewAgent(model=model, prompt=prompt("web/research_review.md")),
             # 把前面创建的读取器包装为网页读取工具，供网页工作流调用。
-            fetch_tool=create_fetch_webpage_tool(reader=reader),
+            fetch_tool=create_fetch_webpage_tool(reader=webpage_reader),
             # 单页提炼 Agent 根据已读取的正文提取相关要点；超长输出使用重试提示词。
             webpage_extraction_agent=WebpageExtractionAgent(
                 model=model, prompt=prompt("web/web_research_page.md"),

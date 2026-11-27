@@ -14,7 +14,7 @@ class FetchWebpageInput(BaseModel):
     url: str = Field(min_length=1, max_length=4096, description=(
         "必填，要读取的公开HTTP/HTTPS网页完整地址，通常取自search_web的items[].url。"
         "例如https://dg.cnsoc.org/；不能填candidate_id、本地文件路径或搜索词。"
-        "只读取静态HTML，不执行JavaScript、不登录、不处理PDF附件。"
+        "读取HTML；宿主可启用浏览器备用读取并执行JavaScript，不登录、不处理PDF附件。"
     ))
     max_chars: int = Field(default=12000, ge=100, le=50000, description=(
         "返回正文最多包含的Unicode字符数，范围100至50000，默认12000。"

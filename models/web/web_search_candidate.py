@@ -19,5 +19,5 @@ class WebSearchCandidate:
     url: str
     # 供应商返回的搜索摘要，可为空；不是完整网页正文。
     snippet: str
-    # SearXNG报告的实际来源引擎名称，可能多个；未提供时为空元组，不猜测。
+    # SearXNG报告的实际来源引擎名称；Tavily不提供时为空元组，不猜测。
     engines: tuple[str, ...] = ()

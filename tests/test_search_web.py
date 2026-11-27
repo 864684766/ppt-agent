@@ -12,7 +12,7 @@ import pytest
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from config.settings import Settings
-from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.searxng.searxng_search_client import SearxngSearchClient
 from tools.web import create_search_web_tool
 
 # 测试时修改这里：None读取.env；""使用服务器general默认引擎；

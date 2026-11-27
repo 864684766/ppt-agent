@@ -9,6 +9,10 @@ class WebpageReadError(RuntimeError):
     """无法取得可用网页文本；不得携带响应原文、凭据或请求头。"""
 
 
+class BrowserFallbackError(WebpageReadError):
+    """HTTP访问被拒绝或未提取到正文，可尝试浏览器读取。"""
+
+
 class WebpageReader(Protocol):
     """连接生命周期属于外层；实现可替换为其他读取后端。"""
 

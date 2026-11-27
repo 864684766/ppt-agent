@@ -60,7 +60,7 @@ Copy-Item .env.example .env
 uv run --locked --no-sync python main.py
 ```
 
-默认监听 `127.0.0.1:8000`，可在 `.env` 中设置 `APP_HOST` 和 `APP_PORT`。启动后访问 `http://127.0.0.1:8000/docs` 查看接口说明。联网搜索、RustFS 模板和文档转换等能力需要分别配置对应服务；未配置相关服务不等于这些功能可用。
+默认监听 `127.0.0.1:8000`，可在 `.env` 中设置 `APP_HOST` 和 `APP_PORT`。启动后访问 `http://127.0.0.1:8000/docs` 查看接口说明。联网搜索默认使用Tavily，可在 `.env` 通过 `WEB_SEARCH_PROVIDER=searxng` 切换；联网搜索、RustFS 模板和文档转换等能力需要分别配置对应服务；未配置相关服务不等于这些功能可用。网页浏览器备用读取需要本机安装 Microsoft Edge，通过 `WEBPAGE_BROWSER_FALLBACK` 控制，详见接口调试说明。
 
 ## 项目目录
 

@@ -9,7 +9,7 @@ import ssl
 import httpx
 
 from diagnostics.operation_logging import log_operation
-from domain.web.webpage_reader_contract import WebpageReadError
+from domain.web.webpage_reader_contract import BrowserFallbackError, WebpageReadError
 from integrations.web.html_text_extractor import HtmlTextExtractor, HtmlLinkExtractor
 from models.web.webpage_content import WebpageContent
 
@@ -46,6 +46,8 @@ class HttpWebpageReader:
             raise WebpageReadError("网页读取超时，请稍后重试或选择其他来源。") from None
         except httpx.HTTPStatusError as error:
             logger.warning("event=upstream_status service=webpage http_status=%s", error.response.status_code)
+            if error.response.status_code in {401, 403}:
+                raise BrowserFallbackError(f"网页返回HTTP {error.response.status_code}，无法读取。") from None
             raise WebpageReadError(f"网页返回HTTP {error.response.status_code}，无法读取。") from None
         except httpx.TooManyRedirects:
             raise WebpageReadError("网页重定向次数过多，无法读取。") from None
@@ -69,7 +71,7 @@ class HttpWebpageReader:
         link_parser.feed(html)
         link_parser.close()
         if not text:
-            raise WebpageReadError("网页没有可提取文本，可能需要JavaScript、登录或其他读取方式。")
+            raise BrowserFallbackError("网页没有可提取文本，可能需要JavaScript、登录或其他读取方式。")
         logger.info("event=webpage_result downloaded_bytes=%s text_chars=%s", len(body), len(text))
         return WebpageContent(
             final_url=final_url, title=title, text=text,

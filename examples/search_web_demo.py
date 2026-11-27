@@ -10,7 +10,7 @@ import httpx
 
 from config.settings import PROJECT_ROOT, Settings
 from config.logging_config import configure_logging
-from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.searxng.searxng_search_client import SearxngSearchClient
 from tools.web import create_search_web_tool
 
 

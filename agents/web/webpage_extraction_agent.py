@@ -4,6 +4,7 @@ import json
 import logging
 
 from langchain_core.language_models import BaseChatModel
+from langchain_openai.chat_models.base import OpenAIConnectionError, OpenAITimeoutError
 from openai import LengthFinishReasonError
 
 from diagnostics.operation_logging import log_operation
@@ -27,11 +28,11 @@ class WebpageExtractionAgent:
         # 动态数据单独追加，不参与提示词模板替换。
         prompt = self._prompt + "\n用户要求：" + question + "\n网页数据：" + json.dumps(page, ensure_ascii=False)
         try:
-            result = await self._page_model.ainvoke(prompt)
+            result = await self._invoke_with_retry(prompt)
         except LengthFinishReasonError:
             # 限制为一次重试；不把输出超限误记为网页没有相关内容。
             logger.warning("event=research_page_extraction_length_retry")
-            result = await self._page_model.ainvoke(prompt + "\n" + self._retry_prompt)
+            result = await self._invoke_with_retry(prompt + "\n" + self._retry_prompt)
         if not isinstance(result, WebPageExtraction):
             raise ValueError("模型未返回有效的单页提炼结果。")
         page_id = page["candidate_id"]
@@ -41,4 +42,13 @@ class WebpageExtractionAgent:
         result.follow_links = [item for item in result.follow_links
                                if item.candidate_id == page_id and item.url in links][:10]
         return result
+
+    async def _invoke_with_retry(self, prompt: str) -> object:
+        """模型连接或读取超时只重试当前分段一次；其他错误和取消继续传播。"""
+        try:
+            return await self._page_model.ainvoke(prompt)
+        except (OpenAITimeoutError, OpenAIConnectionError, TimeoutError) as error:
+            kind = "timeout" if isinstance(error, (OpenAITimeoutError, TimeoutError)) else "connection"
+            logger.warning("event=webpage_extraction_retry reason=%s max_retries=1", kind)
+            return await self._page_model.ainvoke(prompt)
 

@@ -15,7 +15,9 @@ from agents.web.webpage_extraction_agent import WebpageExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
 from config.settings import PROJECT_ROOT, Settings
 from integrations.llm.langchain_model_factory import create_langchain_model
-from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.searxng.searxng_search_client import SearxngSearchClient
+from integrations.web.tavily.tavily_search_client import TavilySearchClient
+from domain.web.web_search_contract import WebSearchClient
 from integrations.web.http_webpage_reader import HttpWebpageReader
 from integrations.web.webpage_http_client import create_webpage_http_client
 from tools.web.fetch_webpage_tool import create_fetch_webpage_tool
@@ -31,7 +33,7 @@ class DisplayQueryAgent(ResearchQueryAgent):
     """仅用于测试：显示每轮实际搜索词、策略和原始候选。"""
 
     async def search(self, *, question: str, feedback: str) -> tuple[str, list[WebSearchItem]]:
-        print("\n【本轮搜索策略】服务器默认（不指定引擎）", flush=True)
+        print("\n【本轮搜索】使用测试配置的供应商", flush=True)
         try:
             query, candidates = await super().search(question=question, feedback=feedback)
         except ToolException:
@@ -56,11 +58,15 @@ class DisplayReviewAgent(ResearchReviewAgent):
 def _create_workflow(*, settings: Settings, model: BaseChatModel, search_http: httpx.AsyncClient,
                      webpage_http: httpx.AsyncClient) -> WebResearchWorkflow:
     """为真实验证装配工具和子Agent；HTTP连接由调用方关闭。"""
-    # 显式使用空引擎配置；所有轮次不发送engines参数，由服务器决定。
-    default_tool = create_search_web_tool(client=SearxngSearchClient(
-        client=search_http, base_url=settings.searxng_base_url, engines="",
-        timeout_seconds=settings.web_search_timeout_seconds,
-    ))
+    # 与聊天工作流一致，选择Tavily或使用SearXNG服务端默认引擎。
+    search_client: WebSearchClient
+    if settings.web_search_provider == "tavily":
+        search_client = TavilySearchClient(client=search_http, api_key=settings.tavily_api_key,
+                                          timeout_seconds=settings.web_search_timeout_seconds)
+    else:
+        search_client = SearxngSearchClient(client=search_http, base_url=settings.searxng_base_url,
+                                           timeout_seconds=settings.web_search_timeout_seconds)
+    default_tool = create_search_web_tool(client=search_client)
     # 读取提示词文字后注入Agent；这里不把文件路径直接传给模型。
     query_prompt = (PROJECT_ROOT / "prompts" / "web" / "research_query.md").read_text(encoding="utf-8")
     review_prompt = (PROJECT_ROOT / "prompts" / "web" / "research_review.md").read_text(encoding="utf-8")
@@ -112,8 +118,8 @@ async def test_real_research(question: str, defer_user_question: bool) -> None:
     """
     settings = Settings()
     # async with负责在测试结束或异常时关闭连接。模型沿用系统代理；
-    # 本测试的搜索连接不读取系统代理，以直接访问配置的SearXNG服务。
-    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=False) as search_http, \
+    # Tavily允许系统代理；SearXNG使用本机服务直连。
+    async with httpx.AsyncClient() as model_http, httpx.AsyncClient(trust_env=settings.web_search_provider == "tavily") as search_http, \
             create_webpage_http_client(verify_tls=settings.webpage_tls_verify) as webpage_http:
         model = create_langchain_model(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,

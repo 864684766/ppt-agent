@@ -13,7 +13,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from config.settings import Settings
 from integrations.web.http_webpage_reader import HttpWebpageReader
 from integrations.web.webpage_http_client import create_webpage_http_client
-from integrations.web.searxng_search_client import SearxngSearchClient
+from integrations.web.searxng.searxng_search_client import SearxngSearchClient
 from tools.web import create_fetch_webpage_tool, create_search_web_tool
 
 

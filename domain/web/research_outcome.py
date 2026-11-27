@@ -31,6 +31,8 @@ def _set_result_status(result: ResearchState) -> None:
         stage = {"fetch": "网页读取或内容提炼阶段", "query": "搜索阶段", "review": "候选检查阶段",
                  "summarize": "网页汇总阶段"}.get(result["workflow_error_stage"] or "", "网页处理阶段")
         result["message"] = f"{stage}{reason}，网页资料处理未完成；已保留完成的结果，请检查服务日志或重试。"
+        if result["workflow_error_stage"] == "fetch":
+            result["message"] += " 当前网页可能仅完成部分分段，不代表全文已处理。"
     elif result["summary_length_exceeded"]:
         result["status"] = "interrupted"
         result["stop_reason"] = "summary_length_exceeded"

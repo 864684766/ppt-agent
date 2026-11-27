@@ -22,7 +22,7 @@ from domain.web.research_decision import apply_research_decision
 from domain.web.research_follow_links import select_followup_candidates
 from domain.web.provided_web_addresses import provided_web_candidates
 from models.web.research_contract import ResearchState
-from models.web.web_research_summary import WebPageExtraction, WebResearchSummary, WebSummaryPoint
+from models.web.web_research_summary import WebFollowLink, WebPageExtraction, WebResearchSummary, WebSummaryPoint
 from agents.web.webpage_extraction_agent import WebpageExtractionAgent
 from agents.materials.material_summary_agent import MaterialSummaryAgent
 from domain.materials.material_summary_inputs import web_summary_points
@@ -33,6 +33,15 @@ from workflows.web.research_progress import notify_progress
 
 
 logger = logging.getLogger(__name__)
+
+
+class PartialPageExtractionError(Exception):
+    """网页某分段失败时携带已完成要点；不把部分内容视为整页完成。"""
+
+    def __init__(self, *, extraction: WebPageExtraction, kind: str) -> None:
+        super().__init__("网页分段提炼未完成。")
+        self.extraction = extraction
+        self.kind = kind
 
 
 class WebResearchWorkflow:
@@ -197,10 +206,17 @@ class WebResearchWorkflow:
             return {"read_index": state["read_index"] + 1, "needs_summary": False}
         # 此模型调用只接收当前网页；成功后只保存提炼要点和必要的网页元数据。
         notify_progress("extract")
-        extraction = await self._extract_page_chunks(question=state["question"], candidate_id=candidate["candidate_id"], page=page)
         metadata = {key: page[key] for key in ("requested_url", "final_url", "title", "truncated",
                     "returned_chars", "extracted_chars", "fetched_at")}
         metadata.update(candidate_id=candidate["candidate_id"], text_hash=digest)
+        try:
+            extraction = await self._extract_page_chunks(question=state["question"], candidate_id=candidate["candidate_id"], page=page)
+        except PartialPageExtractionError as error:
+            # 保存已完成分段并标记中断，后续不能将它们当成完整网页汇总。
+            return {"pages": [*state["pages"], metadata], "page_extractions": [*state["page_extractions"], {
+                "candidate_id": candidate["candidate_id"], "title": page["title"], "url": page["final_url"],
+                "truncated": page["truncated"], "points": [point.model_dump() for point in error.extraction.points]}],
+                "workflow_error_stage": "fetch", "workflow_error_kind": error.kind, "needs_summary": False}
         extra = select_followup_candidates(page=page, follow_links=extraction.follow_links,
                                            accepted=state["accepted"])
         logger.info("event=research_page_read count=%d truncated=%s points=%d", state["read_index"] + 1,
@@ -221,7 +237,8 @@ class WebResearchWorkflow:
         每段保留同一网页编号，单段调用失败则该网页处理未完成，不将部分结果冒充全文。
         读取上限仍为50000字符，超出时由网页报告注明截断。
         """
-        points, links = [], []
+        points: list[WebSummaryPoint] = []
+        links: list[WebFollowLink] = []
         text = page["text"]
         total_chunks = (len(text) + 2999) // 3000
         for offset in range(0, len(text), 3000):
@@ -229,7 +246,13 @@ class WebResearchWorkflow:
             chunk = {**page, "candidate_id": candidate_id, "text": part_text, "returned_chars": len(part_text),
                      "segment_index": offset // 3000 + 1, "segment_count": total_chunks,
                      "links": page["links"] if offset == 0 else []}
-            part = await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+            try:
+                part = await self._webpage_extraction_agent.extract_page(question=question, page=chunk)
+            except (OpenAITimeoutError, OpenAIConnectionError, TimeoutError) as error:
+                kind = "model_connection" if isinstance(error, OpenAIConnectionError) else "model_timeout"
+                logger.warning("event=webpage_segment_incomplete segment=%d total=%d reason=%s",
+                               offset // 3000 + 1, total_chunks, kind)
+                raise PartialPageExtractionError(extraction=WebPageExtraction(points=points, follow_links=links), kind=kind) from error
             points.extend(part.points)
             links.extend(part.follow_links)
         return WebPageExtraction(points=points, follow_links=links)
@@ -237,18 +260,27 @@ class WebResearchWorkflow:
     @staticmethod
     def _after_fetch(state: ResearchState) -> Literal["query", "fetch", "summarize", "finalize"]:
         """仅有新要点时汇总；空要点、读取失败后继续处理其他候选。"""
+        if state["workflow_error_kind"]:
+            return "finalize"
         if state["provided_urls_only"]:
             # 用户指定的栏目先读取已选文章，避免每读一篇都重复汇总；上限内按队列顺序处理。
             if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
                 return "fetch"
+            if state["defer_user_question"]:
+                return "finalize"
             # 最后一页即使失败或没有要点，前面已经提炼的内容仍需汇总。
             if any(item["points"] for item in state["page_extractions"]):
                 return "summarize"
             return "finalize"
-        # 当前网页产生了新要点：先进入summarize，避免还未汇总就判断资料是否充足。
-        if state["needs_summary"]:
+        if state["defer_user_question"]:
+            # 聊天工作流将在上层统一汇总，网页阶段按有要点的独立来源数控制收集。
+            source_ids = {item["candidate_id"] for item in state["page_extractions"] if item["points"]}
+            if len(source_ids) >= state["target_count"]:
+                return "finalize"
+        elif state["needs_summary"]:
+            # 独立网页研究仍由模型评估内容是否充分，反馈可用于下一轮搜索。
             return "summarize"
-        # 没有新要点，但仍有候选且读取次数未达上限：继续进入fetch。
+        # 未达到收集条件且仍有候选时，优先读取已有候选。
         if state["read_index"] < len(state["accepted"]) and state["read_index"] < state["max_pages"]:
             return "fetch"
         # 无待读候选：仍可搜索且仍可读取时回query，否则进入finalize。
@@ -256,14 +288,6 @@ class WebResearchWorkflow:
 
     async def _summarize(self, state: ResearchState) -> dict[str, Any]:
         """根据累计单页要点判断充分性；绝不再次发送原网页正文。"""
-        if state["provided_urls_only"] and state["defer_user_question"]:
-            # 上层将汇总相同的单页要点；这里仅汇集原始提炼结果，不重复调用模型。
-            extracted = [WebSummaryPoint.model_validate(point) for page in state["page_extractions"] for point in page["points"]]
-            summary = WebResearchSummary(points=extracted, gaps=[], issues=[], follow_links=[])
-            used = {source for point in extracted for source in point.candidate_ids}
-            logger.info("event=research_summary_deferred pages=%d points=%d", len(state["page_extractions"]), len(extracted))
-            return {"summary": summary.model_dump(), "effective_count": len(used),
-                    "needs_summary": False, "summary_deferred": True}
         notify_progress("summarize")
         try:
             points = web_summary_points(extractions=state["page_extractions"])
@@ -312,11 +336,11 @@ class WebResearchWorkflow:
             max_attempts: 搜索总轮数，范围1至20，默认6；每轮使用服务器默认搜索。
             max_pages: 最多读取网页次数（包含失败），范围1至50，默认15。
             callbacks: 本次任务的LangChain回调，可用于接收模型流；默认不注册。
-            defer_user_question: 默认False，资料不足时调用ask_user；True时返回insufficient及报告，由上层决定是否询问。
+            defer_user_question: 默认False，由本图汇总并在资料不足时询问。True时交出单页要点，由上层汇总和判断。
 
         Returns:
             ResearchState。accepted和alternatives分别为去重后的正式与备用候选，status为completed、awaiting_user
-            、insufficient（仅延后询问）或interrupted，message解释结果；attempt为总次数，failed_attempts
+            、collected（上层汇总）、insufficient（上层判断且没有要点）或interrupted，message解释结果；attempt为总次数，failed_attempts
             为搜索工具失败次数。completed只代表数量达标，不代表网页内容可信。
 
         Raises:
@@ -441,6 +465,21 @@ class WebResearchWorkflow:
     @staticmethod
     def _finalize(state: ResearchState) -> ResearchState:
         """图节点分配问题编号，结束规则和报告由领域模块负责。"""
+        if (state["defer_user_question"] and not state["workflow_error_kind"]
+                and not state["review_timeout_candidates"] and not state["summary_length_exceeded"]):
+            # 只在确实收集到要点时标记上层汇总，保留无结果或搜索失败时的停止原因。
+            extracted = [WebSummaryPoint.model_validate(point)
+                         for page in state["page_extractions"] for point in page["points"]]
+            if extracted:
+                summary = WebResearchSummary(points=extracted, gaps=[], issues=[], follow_links=[])
+                source_ids = {source for point in extracted for source in point.candidate_ids}
+                state = state.copy()
+                state["summary"] = summary.model_dump()
+                state["effective_count"] = len(source_ids)
+                state["needs_summary"] = False
+                state["summary_deferred"] = True
+                logger.info("event=research_summary_deferred pages=%d points=%d",
+                            len(state["page_extractions"]), len(extracted))
         return finalize_research(state, question_id=uuid4().hex)
 
     # 保持已有Python调用入口；实现与工作流编排分离。

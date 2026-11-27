@@ -111,6 +111,9 @@ class Settings(BaseSettings):
         description="Gotenberg转换HTTP等待超时秒数，默认120，范围(0,600]；不是整体转换时限。",
     )
 
+    # 由宿主选择一个搜索供应商；不由模型选择，也不自动回退。
+    web_search_provider: Literal["tavily", "searxng"] = Field(default="tavily", description="网页搜索供应商，默认tavily；可选tavily或searxng。")
+    tavily_api_key: SecretStr = Field(default=SecretStr(""), description="Tavily密钥；仅在选择tavily时需要。")
     # SearXNG根地址，空值表示未配置；仅在外层创建搜索适配器时使用。
     searxng_base_url: str = Field(default="", description="SearXNG服务根地址，留空不启用。")
     # 普通网页默认引擎name，英文逗号分隔；空值使用服务器默认引擎。
@@ -130,6 +133,7 @@ class Settings(BaseSettings):
     # 网页HTTPS证书校验开关：默认True；False跳过全部目标的证书身份校验。
     # 只控制外层连接策略，模型不能通过工具参数修改，不保证所有网站均可读。
     webpage_tls_verify: bool = Field(default=True, description="是否校验网页HTTPS证书，默认开启。")
+    webpage_browser_fallback: bool = Field(default=True, description="HTTP被拒绝或无正文时是否使用本机Edge作为备用读取，默认开启。")
 
     def get_model(self, task: ModelTask) -> str:
         """返回任务专用模型，未配置时退回默认模型。

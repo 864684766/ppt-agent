@@ -2,7 +2,7 @@
 
 状态（2026-11-17）：搜索工具已供独立网页资料研究图调用；正文读取和整理已接入该图；chat与正文充分性核验尚未接入。资料收集测试仅保留tests/test_research_workflow.py中的test_real_research，运行会访问真实模型与搜索服务。
 
-资料收集每轮均不传engines，由SearXNG的general分类选择引擎；结果不足时根据检查反馈调整搜索词。`max_attempts`是包含首轮的总搜索次数，达到有效来源目标且无明确缺口，或搜索及读取上限耗尽时停止。当前测试入口需要读取真实模型和SearXNG。
+资料收集按WEB_SEARCH_PROVIDER选择Tavily或SearXNG；选择SearXNG时不传engines，由服务端general分类选择引擎；结果不足时根据检查反馈调整搜索词。`max_attempts`是包含首轮的总搜索次数，达到有效来源目标且无明确缺口，或搜索及读取上限耗尽时停止。真实研究测试入口需要真实模型和所选搜索服务。
 
 资料不足时返回`awaiting_user`及`user_options`：有候选时可选`provide_materials`（补充资料）或`use_current`（使用当前候选）；有备用时还可选`use_alternatives`并传入选中的候选编号；所有不足场景均可选`end_conversation`（结束）。`apply_user_decision`接收实际选择并返回状态；当前没有chat接口接线、前端交互、资料上传后的自动恢复或持久化。搜索全部失败会在消息中明确说明；候选仍需读取正文核对。
 
@@ -84,7 +84,7 @@ uv run --locked python -m pytest tests/test_search_web.py -s -q
 | models/web/web_search_candidate.py | 内部候选网页实体 |
 | domain/web/web_search_contract.py | 可替换搜索接口与安全错误 |
 | domain/web/web_search.py | 查询参数校验及一次业务调用 |
-| integrations/web/searxng_search_client.py | HTTP请求、响应结构检查、SearXNG字段转换 |
+| integrations/web/searxng/searxng_search_client.py | HTTP请求、响应结构检查、SearXNG字段转换 |
 | tools/web/search_web_tool.py | LangChain入口及公开输出组装 |
 | config/settings.py | 环境变量读取 |
 | examples/search_web_demo.py | 独立真实调用与资源组装，适合断点 |
@@ -151,3 +151,5 @@ SearchReview的alternatives包含候选编号及不满足要求原因，unmet_re
 2026-11-24真实验证：临时设置搜索1轮、最多读取1页，执行 `pytest tests/test_research_workflow.py -k 4ecb -x -q -s`，真实模型与搜索服务返回候选，网页读取为403，工作流进入ask_user暂停；测试用相同任务编号和问题编号回答end_conversation，得到cancelled并验证状态保留，1 passed。临时配置不修改.env。有少量可用资料后选择use_current、模型中断与备用候选选择未在该次验证中覆盖。
 
 2026-11-24职责整理后，使用真实模型和SearXNG运行 `pytest tests/test_research_workflow.py -k 4ecb -x -q --capture=sys`（临时搜索1轮、最多1页），结果1 passed；`tests/test_search_web.py` 和 `tests/test_fetch_webpage.py` 共5 passed。其余模块回归及本地测试数据限制见技术文档。
+
+2026-11-27：默认Tavily使用basic搜索；测试命令 `uv run --locked python -m pytest tests/test_tavily_search.py -s`。SearXNG专用测试仍保留，须单独配置可用服务。
