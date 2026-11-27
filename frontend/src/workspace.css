@@ -6,6 +6,9 @@
 .chat-scroll[hidden]{display:none}
 .outline-panel{flex:1;min-height:0;border:0;background:#fff;padding:42px max(32px,calc((100% - 760px)/2)) 28px}
 .outline-panel .panel-top h2{font-size:24px}
+.outline-actions{display:flex;align-items:center;gap:12px}
+.outline-actions>div{display:flex;flex-direction:column;align-items:center;gap:5px}
+.build-availability{font-size:10px;color:#9b9690}
 .outline-panel .panel-description{font-size:13px;margin-bottom:25px}
 .outline-panel .outline-summary{padding:17px;background:#faf9f7}
 .outline-panel .outline-summary strong{font-size:14px}
@@ -37,9 +40,13 @@
 .template-status{margin:0 22px 12px;color:#8e878c;font-size:11px;line-height:1.6}
 .template-status button{display:block;margin-top:6px;border:0;background:transparent;padding:0;color:#795e96;text-decoration:underline}
 .template-preview strong,.template-meta strong{overflow-wrap:anywhere;overflow:hidden}
-.thinking{border-top:1px solid #f2f0ed;padding:10px 14px;color:#77716f;font-size:11px}
-.thinking summary{cursor:pointer;color:#826e9f}
-.thinking p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;max-height:260px;overflow:auto}
+.thinking{margin:8px 14px 14px;padding:12px 14px;border:1px solid #eae4ef;border-radius:9px;background:#faf8fc;color:#716b76;font-size:11px}
+.thinking summary{cursor:pointer;color:#78668d;font-weight:600}
+.thinking summary span{margin-left:7px;color:#aea3b8;font-size:10px;font-weight:400}
+.thinking-content{margin-top:10px;padding-top:10px;border-top:1px solid #eae4ef;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;max-height:260px;overflow:auto}
+.retry-button{padding:7px 14px;border:1px solid #ddd3e3;border-radius:7px;background:#faf8fc;color:#765e88;font-size:11px}
+.retry-button:hover:not(:disabled){background:#f1ebf5}
+.retry-button:disabled{opacity:.5}
 .process-steps .progress-current{color:#806d91;background:linear-gradient(100deg,#806d91 15%,#c5b6cf 50%,#806d91 85%);background-size:220% 100%;background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:progress-shimmer 3s ease-in-out infinite}
 .progress-character{animation:progress-reveal 1ms both}
 .thinking-chunk{animation:thinking-appear 350ms ease-out both}

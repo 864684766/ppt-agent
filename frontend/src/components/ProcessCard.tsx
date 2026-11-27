@@ -18,6 +18,6 @@ export function ProcessCard({ progress, thinking, running, incomplete }: Props) 
         {Array.from(step, (character, characterIndex) => <span key={characterIndex} aria-hidden="true" className={active ? 'progress-character' : undefined} style={active ? { animationDelay: `${characterIndex * 24}ms` } : undefined}>{character}</span>)}
       </span></div>
     })}</div>}
-    {thinking.length > 0 && <details className="thinking" open><summary>思考过程</summary><p>{thinking.map((chunk, index) => <span key={index} className={running ? 'thinking-chunk' : undefined}>{chunk}</span>)}</p></details>}
+    {thinking.length > 0 && <details className="thinking" open><summary>思考过程 <span>模型推理</span></summary><div className="thinking-content">{thinking.map((chunk, index) => <span key={index} className={running ? 'thinking-chunk' : undefined}>{chunk}</span>)}</div></details>}
   </div>
 }
